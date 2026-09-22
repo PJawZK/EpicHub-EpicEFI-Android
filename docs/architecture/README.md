@@ -6,9 +6,11 @@ Phase 1 builds the repository-backed architecture before production Android/Rust
 
 - `PHASE1_SCOPE.md` — Phase 1 purpose, exclusions and completion gate.
 - `PHASE1_PROGRESS.md` — current completed/current source-review tranches.
+- `PHASE1_GATE_ASSESSMENT.md` — current closure assessment and allowed post-Phase-1 open work.
+- `REVIEW_CHECKLIST.md` — explicit Phase 1 closure checklist; final user-acceptance item remains the scaffold gate.
 - `DECISIONS.md` — durable architectural decisions.
 - `DEVELOPMENT_WORKFLOW.md` — repository and chat/handoff workflow.
-- `REVIEW_CHECKLIST.md` — explicit Phase 1 closure gate.
+- `ANDROID_BUILD_BASELINE.md` — initial package/API/ABI/device support contract.
 
 ## Evidence and responsibility mapping
 
@@ -17,7 +19,7 @@ Phase 1 builds the repository-backed architecture before production Android/Rust
 - `RESPONSIBILITY_DESTINATIONS.md` — where retained/redesigned responsibilities belong in EpicHub.
 - `ANALYSIS_RESPONSIBILITY_MAP.md` — permanent owners/boundaries for plugin-derived analysis/autotune responsibilities.
 - `PROTOCOL_AUTHORITIES.md` — source of truth for important wire/profile/file-format contracts.
-- `GAP_ANALYSIS.md` — new EpicHub responsibilities and unresolved technical decisions.
+- `GAP_ANALYSIS.md` — current unresolved implementation/fixture/benchmark/product work, classified by when it becomes required.
 
 Deep-dive evidence:
 
