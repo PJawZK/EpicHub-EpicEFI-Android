@@ -69,16 +69,19 @@ Status: `PROPOSED`.
 
 ## Compose application shell
 
+Responsibility ownership is now substantially resolved by the UI interaction archaeology, but the actual clean Compose implementation remains Phase 2 work.
+
 Still required:
 
 - one responsive navigation shell;
-- phone/tablet/portrait/landscape behavior;
+- phone/tablet/portrait/landscape implementation;
 - Dashboard and editor;
 - Tuner parameters/curves/tables/3D visualization;
 - Logger/Analyzer/Diagnostics/Settings;
-- frame-rate-aware telemetry consumption.
+- frame-rate-aware telemetry consumption;
+- physical interaction/performance qualification.
 
-Status: `PROPOSED`.
+Status: `PROPOSED IMPLEMENTATION`, not an ownership-discovery gap.
 
 ## Unified structured diagnostics
 
@@ -230,20 +233,13 @@ These are no longer responsibility-discovery gaps.
 
 ### Internal project container/layout
 
-Need final clean-slate internal schema/path strategy for:
+Need final clean-slate internal schema/path strategy for exact source profile, complete verified TuneSnapshot, metadata/checksums and atomic generation commit.
 
-- exact source profile;
-- complete verified TuneSnapshot;
-- metadata/version/checksums;
-- atomic project generation commit.
-
-Preference: Rust owns serialization/integrity and app-private files after Kotlin supplies a base directory; Kotlin SAF is only user document transport. Validate this during Phase 2 platform PoC.
+Preference: Rust owns serialization/integrity and app-private files after Kotlin supplies a base directory; Kotlin SAF is only user document transport.
 
 Status: `OPEN IMPLEMENTATION DESIGN`.
 
 ### Portable backup format
-
-Do not inherit continuously mirrored huge JSON merely for compatibility with the old app.
 
 Need a compact versioned archive/container preserving only project authority plus necessary metadata, with deterministic integrity checks and user-driven export/import.
 
@@ -251,28 +247,76 @@ Status: `OPEN FORMAT DESIGN`.
 
 ### Final generic operation-journal schema
 
-Historical T3/T6 markers are scalar/proof-workflow specific. The clean product needs a batch-capable journal with operation kind/phase, exact ECU/profile/session identity, baseline/expected tune fingerprints, write-plan identity/affected pages and Burn evidence identity where relevant.
+Need a batch-capable journal with operation kind/phase, exact ECU/profile/session identity, baseline/expected tune fingerprints, write-plan identity/affected pages and Burn evidence identity where relevant.
 
 Status: `OPEN IMPLEMENTATION DESIGN`, authority/lifecycle already resolved.
 
 ### Offline draft/reconciliation semantics
 
-Need product behavior for:
-
-- editing a saved project offline;
-- reconnecting to a same/different ECU/tune;
-- conflict presentation/reconciliation;
-- separating software draft dirty state from verified ECU dirty pages/Burn state.
-
-`docs/FUTURE_TUNER_WORK.md` already identified this as a useful follow-up; clean-slate EpicHub should design it explicitly rather than infer it from WebView state.
+Need product behavior for offline saved-project editing, reconnect conflict/reconciliation, and separation of software-draft dirty state from verified ECU dirty pages/Burn state.
 
 Status: `OPEN PRODUCT/TUNING DESIGN`.
 
 ### Persistence fault-injection corpus
 
-Need tests for interrupted project commit, stale cache candidate, corrupt/foreign backup, journal persistence/clear failure, crash before/after possible transmission, profile/session mismatch on recovery and fresh complete-read reclassification.
+Need interrupted commit/cache/backup/journal/process-death/profile-mismatch recovery tests.
 
 Status: `OPEN TEST GAP`.
+
+---
+
+# Dashboard / Tuner UI interaction: responsibility archaeology completed
+
+Evidence document: `UI_INTERACTION_EVIDENCE.md`.
+
+Resolved ownership/principles:
+
+- accepted EpicDash-JZ tablet/phone references remain visual/layout authority;
+- UXUI contributes only feature/interaction/responsive/performance evidence, not its visual language;
+- one semantic/component model reflows by geometry; no separate phone/tablet application implementations;
+- Rust owns tune/runtime semantic truth while Compose owns interaction/presentation state;
+- responsive changes may alter rails, panel placement, viewport and density but must preserve semantic selection/drafts/authority;
+- only active presentation surfaces should consume high-rate display updates where practical;
+- static gauge/editor geometry should be cached/constructed once and dynamic layers updated minimally;
+- table semantic selection is separate from pointer-gesture state;
+- pinch/range selection conflicts need explicit gesture arbitration/rollback;
+- X/Y reversal changes display order only, never tune array order;
+- zoom/pan/heat-map/panel folds/3D camera are presentation state;
+- 3D table inspection remains view-only unless a future accepted edit contract is introduced;
+- modal/fullscreen surfaces own their pointer streams and cannot trigger underlying actions;
+- haptics do not signal hardware success before verified domain results;
+- undo/redo is local semantic edit history, not automatic ECU rollback;
+- saved-project/live/draft/RAM-dirty/Burn/uncertain states need explicit distinctions in presentation.
+
+## Remaining UI product/physical decisions
+
+### Rich table-edit feature scope
+
+UXUI proves feasibility for arithmetic/fill/flatten, smoothing, interpolation, copy/paste, undo/redo, baseline revert and CSV text import/export. These are candidates, not automatically locked scope.
+
+Status: `OPEN PRODUCT-SCOPE DECISION`.
+
+### Dashboard presentation customization scope
+
+Per-gauge display limits/precision, favorites/Quick Tuning and logging presets are useful interaction candidates but remain product-scope decisions.
+
+Status: `OPEN PRODUCT-SCOPE DECISION`.
+
+### Compose renderer/performance qualification
+
+Need real device benchmarks for:
+
+- high-rate dashboard custom drawing;
+- 32×32 table scrolling/selection/heat map;
+- pinch/long-press gesture arbitration;
+- orientation state preservation;
+- view-only 3D rotation;
+- inactive-page render suppression;
+- p50/p95/p99 frame time and jank on low/mid hardware.
+
+The UXUI ~90% synthetic SVG update reduction is a transferable invalidation lesson, not a Compose speed forecast.
+
+Status: `OPEN PHYSICAL/PERFORMANCE GAP`.
 
 ---
 
@@ -284,7 +328,8 @@ Stable responsibility-level decomposition now exists for:
 - generated-INI parser/compiler/condition authority;
 - firmware request/response framing and `S/Q/O/R/C/B` paths;
 - original ESP32 BLE↔CAN bridge and evolved Android BLE lifecycle;
-- tuning project authority, derived caches, portable recovery and operation uncertainty journals.
+- tuning project authority, derived caches, portable recovery and operation uncertainty journals;
+- Dashboard/Tuner interaction, responsive and rendering responsibility boundaries.
 
 This means ownership is known, not that Phase 2 implementation/qualification is complete.
 
@@ -294,8 +339,7 @@ This means ownership is known, not that Phase 2 implementation/qualification is 
 
 Next-highest-value Phase 1 reviews:
 
-1. dashboard/editor/tuner UI interaction/responsive/performance lessons, including Epic-DashTune-UXUI without importing its visual language;
-2. logging/playback/MLG investigations and transition path toward MDF4;
-3. diagnostics-core/reusable diagnostics schemas;
-4. Tune Viewer parsing/visualization lessons;
-5. AE/PID/TCharge/Injection Angle plugin repositories for future analyzer/autotune responsibilities.
+1. logging/playback/MLG investigations and transition path toward MDF4;
+2. diagnostics-core/reusable diagnostics schemas;
+3. Tune Viewer parsing/visualization lessons;
+4. AE/PID/TCharge/Injection Angle plugin repositories for future analyzer/autotune responsibilities.
