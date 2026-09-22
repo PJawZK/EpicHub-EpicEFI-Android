@@ -53,7 +53,7 @@ Future owner: Compose navigation layer.
 
 ---
 
-## USB and ECU connection
+## Android USB platform responsibilities
 
 ### `android.usb.discovery`
 
@@ -71,9 +71,9 @@ Future owner: Kotlin Android USB platform layer.
 
 ### `android.usb.permission`
 
-Purpose: Android USB permission request/lifecycle tracking.
+Purpose: Android USB permission request/result lifecycle, duplicate request protection and stale-result rejection.
 
-Historical evidence: `UsbPermissionRequestTracker`, `UsbEcuManager`.
+Historical evidence: `UsbPermissionRequestTracker`, manager permission receiver/coordinator.
 
 Classification: `PRESERVE` behaviour / `SPLIT` implementation.
 
@@ -81,23 +81,53 @@ Evidence: `SUPPORTED`.
 
 Future owner: Kotlin Android USB platform layer.
 
+### `android.usb.cdc-topology`
+
+Purpose: resolve the actual CDC communications/data interface relationship and bulk IN/OUT pipe from descriptors rather than hardcoded interface numbers.
+
+Historical evidence: `UsbEcuManager` CDC Union and Call Management parsing, endpoint enumeration/scoring; firmware `usbcfg.cpp` with optional MSD changing CDC interface numbers.
+
+Invariant: interface IDs/endpoints are discovered facts, not ECU-model constants.
+
+Classification: `PRESERVE` behaviour / `SPLIT` implementation.
+
+Evidence: `PROVEN`/firmware-supported.
+
+Future owner: Kotlin `CdcTopologyResolver`-type component.
+
+### `android.usb.cdc-control`
+
+Purpose: perform host-side CDC interface claiming/control setup such as `SET_LINE_CODING` and `SET_CONTROL_LINE_STATE` independently of ECU command framing.
+
+Historical evidence: `UsbEcuManager` open/probe path; proven DTR and DTR+RTS compatibility attempts.
+
+Classification: `PRESERVE` compatibility behaviour / `SPLIT`.
+
+Evidence: `SUPPORTED` by physically exercised current path.
+
+Future owner: Kotlin Android CDC control component.
+
 ### `android.usb.connection-open`
 
-Purpose: open/close the Android USB connection and expose a bounded transport resource to the engine.
+Purpose: open/close `UsbDeviceConnection`, claim/release interfaces and expose a bounded transport resource to the engine.
 
 Historical evidence: EpicDash-JZ shared USB owner.
 
-Future investigation: compare Kotlin-owned I/O with Android-opened native-FD handoff to Rust; do not assume FD/native ownership until bench/device evidence proves lifecycle/reconnect parity.
+Future investigation: compare Kotlin-owned sustained bulk I/O with Android-opened native-FD handoff to Rust; do not assume FD/native ownership until bench/device evidence proves lifecycle/reconnect parity.
 
-Classification: `REDESIGN`
+Classification: `REDESIGN` boundary, with current behaviour to preserve.
 
 Evidence: existing Kotlin path `PROVEN`; Rust-FD alternative `PROPOSED`.
 
-Future owner: Kotlin setup boundary; runtime I/O owner intentionally unresolved pending benchmark.
+Future owner: Kotlin setup/resource boundary; sustained runtime I/O owner intentionally unresolved pending PoC.
+
+---
+
+## ECU transport/session/protocol
 
 ### `ecu.transport.session`
 
-Purpose: one authoritative ECU communication session, including connection generation/session identity, exclusivity and clean disconnect invalidation.
+Purpose: one authoritative ECU communication session, including connection/session identity, protocol state, exclusivity and clean disconnect invalidation.
 
 Historical evidence: `UsbEcuManager`, `UsbGenerationAuthority`, tuning exclusive-operation behaviour.
 
@@ -109,17 +139,99 @@ Evidence: `PROVEN`.
 
 Future owner: Rust engine after transport decision, coordinated by Kotlin Android connection layer.
 
-### `ecu.protocol.framing`
+### `ecu.transport.generation`
 
-Purpose: implement the TunerStudio-compatible firmware command envelope/framing/CRC and command-response handling.
+Purpose: make attach/detach/reconnect/permission/probe results generation-bound so obsolete asynchronous work cannot revive a dead session.
 
-Historical evidence: EpicDash-JZ USB implementation, `EcuCommandResponseCodec`, firmware common TunerStudio path.
+Historical evidence: `UsbGenerationAuthority`, permission generation coordinator and immediate detach invalidation.
 
-Classification: `PRESERVE` protocol semantics / `REDESIGN` implementation.
+Classification: `PRESERVE` semantics / `REDESIGN` placement.
 
-Evidence: `PROVEN` + firmware authority.
+Evidence: `PROVEN` need.
 
-Future owner: Rust ECU protocol crate.
+Future owner: Kotlin for permission/open attempt tokens before native session creation; Rust for active ECU session generation thereafter.
+
+### `ecu.transport.retry-policy`
+
+Purpose: bound reconnect attempts and distinguish retryable transport loss from compatibility/protocol/profile failure that must stop and require deliberate user action.
+
+Historical evidence: manager retry wait/failure cap and no-retry first-output/profile mismatch behaviour.
+
+Classification: `PRESERVE` intent / `REDESIGN` pure policy.
+
+Evidence: `SUPPORTED`.
+
+Future owner: ECU session policy, not UI.
+
+### `ecu.protocol.request-framing`
+
+Purpose: encode CRC-framed TunerStudio requests.
+
+Firmware authority: `tunerstudio.cpp::tsProcessOne()`.
+
+Contract: two-byte big-endian body length, then `command + request data`, then big-endian CRC32 over `command + request data` only.
+
+Classification: `PRESERVE` protocol / `REDESIGN` implementation.
+
+Evidence: `PROVEN` by direct firmware source plus qualified Android behaviour.
+
+Future owner: Rust ECU request codec.
+
+### `ecu.protocol.response-framing`
+
+Purpose: accumulate/decode CRC responses and keep response status distinct from payload.
+
+Firmware authority: `tunerstudio_io.cpp` / `tunerstudio_io.h`.
+
+Contract: two-byte big-endian body length where body is `status + payload`, followed by status, payload, and big-endian CRC32 over `status + payload`.
+
+Finding: request and response envelopes are deliberately asymmetric; a single generic symmetric `envelope()` abstraction is rejected for the new architecture.
+
+Classification: `PRESERVE` protocol / `REDESIGN` implementation.
+
+Evidence: `PROVEN`.
+
+Future owner: Rust ECU response codec + typed protocol response model.
+
+### `ecu.protocol.status-errors`
+
+Purpose: represent OK/Burn-OK and firmware error responses as typed protocol status rather than ad-hoc stripped leading bytes.
+
+Historical evidence: manager response helpers; firmware `sendErrorCode`, `writeCrcResponse` and command handlers.
+
+Classification: `PRESERVE` semantics / `REDESIGN`.
+
+Evidence: `PROVEN` firmware-side.
+
+Future owner: Rust `protocol_response` layer.
+
+### `ecu.protocol.sync-probe`
+
+Purpose: establish/verify protocol synchronization using bounded read-only operations before runtime streaming.
+
+Historical evidence: plain/framed `S/Q` compatibility sequence, framed `S` CRC sync, bounded `O` probes.
+
+Firmware evidence: `TsChannelBase::in_sync` and `tsProcessOne` synchronization rules.
+
+Invariant: profileless recognition stops after signature identity and closes before output/TuneSnapshot/mutation authority.
+
+Classification: `PRESERVE` safety intent / `REDESIGN` session state machine.
+
+Evidence: `SUPPORTED` by qualified current implementation and firmware source.
+
+Future owner: Rust ECU session/probe policy.
+
+### `ecu.protocol.command-operations`
+
+Purpose: expose typed supported firmware operations rather than raw arbitrary command frames to higher domains.
+
+Current audited operations: signature `S/Q`, output `O`, tune read `R`, RAM write `C`, Burn `B`.
+
+Classification: `PRESERVE` protocol vocabulary / `REDESIGN` API.
+
+Evidence: `PROVEN` by direct firmware command dispatch.
+
+Future owner: Rust ECU protocol operation layer.
 
 ### `ecu.identity.signature-query`
 
@@ -157,19 +269,139 @@ Evidence: `PROVEN`.
 
 Future owner: Rust ECU profile/session authority.
 
-### `ecu.profile.parse-generated-ini`
+---
 
-Purpose: parse the exact generated TunerStudio INI for runtime-channel and calibration/tuner structure.
+## Generated INI/profile responsibilities
 
-Historical evidence: `UsbTunerStudioProfile`, `TuningIniDefinition`, `IniConditionEvaluator`, generated-INI compatibility tests.
+### `profile.ini.syntax-parse`
 
-Invariant: do not hardcode geometry by board name; generated INI remains structural/schema authority.
+Purpose: parse the exact generated TunerStudio INI text into typed source facts: sections, assignments, escaped strings, top-level comma fields, dimensions, defines and conditions.
 
-Classification: `PRESERVE` requirement / `SPLIT` and `REDESIGN` implementation.
+Historical evidence: `UsbTunerStudioProfile.kt` one-pass parser and helpers.
 
-Evidence: `PROVEN` for current path.
+Classification: `PRESERVE` required behaviour / `SPLIT` + `REDESIGN` implementation.
 
-Future owner: Rust profile crate, separated into parser/model/condition evaluation/fingerprint responsibilities.
+Evidence: `PROVEN` for current supported profiles.
+
+Future owner: Rust profile parser/model.
+
+### `profile.support-policy`
+
+Purpose: explicitly decide whether a parsed generated INI is within EpicHub's supported protocol/schema subset.
+
+Current evidence: current path requires `msEnvelope_1.0`, little-endian primitive interpretation, non-empty query, `O` output command, valid output block and parsed output channels.
+
+Invariant: unsupported constructs fail explicitly; parser success alone does not grant compatibility authority.
+
+Classification: `ADD FORMAL OWNER` from previously embedded parser checks.
+
+Evidence: `PROVEN` that checks exist; clean separation `PROPOSED`.
+
+Future owner: Rust profile support policy/compiler gate.
+
+### `profile.runtime-schema`
+
+Purpose: compile output-channel offsets/types/scales/bits and output command/block geometry from the exact generated INI.
+
+Classification: `PRESERVE` semantics / `SPLIT`.
+
+Evidence: `PROVEN`.
+
+Future owner: Rust profile runtime schema.
+
+### `profile.tune-storage-schema`
+
+Purpose: compile calibration pages, identifiers, sizes, read/Burn commands, scalar/array/bit storage metadata, bounds and scale/translate.
+
+Classification: `PRESERVE` / `SPLIT`.
+
+Evidence: `PROVEN`.
+
+Future owner: Rust profile tune schema.
+
+### `profile.tuner-surface-schema`
+
+Purpose: compile table/curve/menu/dialog structure from INI without inventing values.
+
+Historical evidence: `UsbTunerStudioProfile.kt` + `TuningIniDefinition.kt`.
+
+Classification: `PRESERVE` structural authority / `MERGE` + `REDESIGN` implementation.
+
+Evidence: `SUPPORTED`/regression tested.
+
+Future owner: Rust profile compiler/tuner schema; Compose consumes typed projection.
+
+### `profile.schema-canonicalization`
+
+Purpose: detect duplicate/ambiguous definitions, verify page bounds and table/curve dimensional compatibility, and produce a deterministic usable semantic schema.
+
+Historical evidence: `TuningIniDefinitionBuilder` canonical scalar/array/table/curve/bit logic.
+
+Classification: `PRESERVE` behaviour / `SPLIT` from presentation JSON generation.
+
+Evidence: `SUPPORTED`.
+
+Future owner: Rust profile compiler.
+
+### `profile.primitive-decode`
+
+Purpose: decode profile-defined little-endian raw scalar/bit/array primitives independent of presentation.
+
+Historical evidence: primitive methods embedded in `UsbOutputChannel`, `UsbTuneScalar`, `UsbTuneArray`, `UsbTuneBitField`.
+
+Classification: `MERGE` + `REDESIGN`.
+
+Evidence: `PROVEN` current path.
+
+Future owner: Rust profile primitive module; tuning mutation conversion uses tuning value codec built on the same type metadata.
+
+### `profile.condition-parse`
+
+Purpose: parse the generated-INI condition expression grammar used by menu/dialog enable/visibility rules.
+
+Classification: `PRESERVE` capability / `SPLIT`.
+
+Evidence: `SUPPORTED` by current parser/tests.
+
+Future owner: Rust profile condition parser.
+
+### `profile.condition-evaluate`
+
+Purpose: evaluate supported condition expressions against explicitly decoded values from a complete verified TuneSnapshot.
+
+Invariant: unsupported/unresolved expressions fail closed for affected controls/targets.
+
+Classification: `PRESERVE` safety semantics / `SPLIT`.
+
+Evidence: `SUPPORTED`.
+
+Future owner: Rust profile condition evaluator.
+
+### `profile.condition-target-authority`
+
+Purpose: traverse menu/dialog/table/curve routing to determine whether a semantic tuning target is currently unconstrained/active/hidden/disabled/unsupported and therefore whether a write is allowed.
+
+Historical evidence: `IniConditionAuthority`.
+
+Finding: INI conditions are not presentation-only metadata; they participate in write authorization.
+
+Classification: `PRESERVE` safety behaviour / `REDESIGN` API.
+
+Evidence: `SUPPORTED`/tested.
+
+Future owner: Rust profile condition authority consumed by tuning safety policy.
+
+### `profile.fingerprint`
+
+Purpose: exact identity binding for compiled/cached profile state.
+
+Classification: `PRESERVE`.
+
+Evidence: `PROVEN` current architecture.
+
+Future owner: Rust profile crate.
+
+Invariant across all profile responsibilities: do not hardcode geometry by board name; exact generated INI remains structural/schema authority.
 
 ---
 
@@ -179,7 +411,7 @@ Future owner: Rust profile crate, separated into parser/model/condition evaluati
 
 Purpose: request/receive live ECU output blocks under the current exact profile/session authority.
 
-Historical evidence: EpicDash-JZ USB runtime path.
+Firmware evidence: `cmdOutputChannels()` validates offset/count against current generated output size and returns requested live-data fragments.
 
 Classification: `PRESERVE` behaviour / `REDESIGN` implementation.
 
@@ -393,9 +625,23 @@ Future owner: Kotlin location + accessory protocol domains, not generic BLE code
 
 ## Tuning authority and persistence
 
+### `tuning.operation.exclusive-owner`
+
+Purpose: serialize tune Read/RAM-write/Burn against ordinary output polling on the one ECU session.
+
+Historical evidence: current manager's exclusive TUNER operation owner and deliberate poll pause/resume.
+
+Invariant: UI does not create a second transport owner; deliberate exclusive operation is reflected in freshness state so stale warnings do not misreport it as a failed stream.
+
+Classification: `PRESERVE` semantics / `REDESIGN` implementation.
+
+Evidence: `PROVEN` by prior physical correction.
+
+Future owner: Rust ECU/tuning session transaction gate.
+
 ### `tuning.snapshot.read-complete`
 
-Purpose: read a complete bounded TuneSnapshot using current exact profile/session authority.
+Purpose: read a complete bounded TuneSnapshot using current exact profile/session authority and INI-derived `R` plan.
 
 Classification: `PRESERVE`.
 
@@ -441,7 +687,19 @@ Classification: `PRESERVE` semantics / `REDESIGN` implementation.
 
 Evidence: `PROVEN`/regression tested.
 
-Future owner: Rust tuning codec.
+Future owner: Rust tuning codec, reusing profile primitive type metadata without duplicating profile parsing.
+
+### `tuning.write.condition-authority`
+
+Purpose: require the current profile condition authority to allow a semantic target before a write plan can include it.
+
+Historical evidence: `IniConditionAuthority.requireWriteAllowed`.
+
+Classification: `PRESERVE` safety semantic.
+
+Evidence: `SUPPORTED`/tested.
+
+Future owner: Rust tuning safety policy consuming profile condition state.
 
 ### `tuning.write.plan`
 
@@ -453,9 +711,19 @@ Evidence: `PROVEN`.
 
 Future owner: Rust tuning planner.
 
+### `tuning.write.baseline-reread`
+
+Purpose: immediately before any possible `C` transmission, reread the complete tune and require its fingerprint to match the edit plan's baseline.
+
+Classification: `PRESERVE`.
+
+Evidence: `PROVEN` physically in normal tuning workflow.
+
+Future owner: Rust write transaction preflight.
+
 ### `tuning.write.transaction`
 
-Purpose: bounded RAM-write transaction with baseline reread, `C` write ACK, range read-back, complete TuneSnapshot verification and dirty-page update.
+Purpose: bounded RAM-write transaction with `C` write ACK, exact `R` range read-back, complete TuneSnapshot verification and dirty-page update.
 
 Classification: `PRESERVE` safety semantics / `REDESIGN` implementation.
 
@@ -465,7 +733,7 @@ Future owner: Rust tuning transaction, using sole ECU transport session.
 
 ### `tuning.write.uncertainty`
 
-Purpose: enter fail-closed uncertain state after possible transmission with incomplete verification; prohibit automatic retry/replay until deliberate resynchronization.
+Purpose: enter fail-closed uncertain state after possible transmission with incomplete verification; prohibit automatic retry/replay until deliberate complete resynchronization.
 
 Classification: `PRESERVE`.
 
@@ -475,13 +743,13 @@ Future owner: Rust tuning transaction/session state.
 
 ### `tuning.burn.transaction`
 
-Purpose: explicit separate Burn using current INI burn-page authority, flash readiness/progression evidence, complete post-burn reread and dirty-page clearing.
+Purpose: explicit separate `B` Burn using current INI Burn-page authority, flash readiness/progression evidence, complete post-Burn reread and dirty-page clearing.
 
 Classification: `PRESERVE`.
 
 Evidence: `PROVEN` physically.
 
-Future owner: Rust tuning/burn module.
+Future owner: Rust tuning/Burn module.
 
 ### `tuning.ui.semantic-editing`
 
@@ -587,6 +855,36 @@ Future owner: Kotlin Compose initially.
 
 ## Diagnostics and performance
 
+### `diagnostics.android-usb`
+
+Purpose: record Android-owned permission/device/interface/endpoint/open/claim/control-transfer facts without absorbing ECU protocol state.
+
+Classification: `SPLIT` from historical manager diagnostics.
+
+Evidence: `SUPPORTED`.
+
+Future owner: Kotlin platform USB diagnostics.
+
+### `diagnostics.ecu-protocol-session`
+
+Purpose: record protocol sync, command/status/CRC/request-rate/timeout/session-generation facts in the engine domain.
+
+Classification: `SPLIT` + `REDESIGN`.
+
+Evidence: existing instrumentation need `PROVEN`.
+
+Future owner: Rust diagnostics.
+
+### `diagnostics.tuning-transaction`
+
+Purpose: expose bounded semantic tune Read/Write/Burn state/results, uncertainty, fingerprints and verification evidence without exposing raw mutation authority.
+
+Classification: `SPLIT` from `UsbEcuManager` diagnostic JSON.
+
+Evidence: `PROVEN` useful in current physical validation.
+
+Future owner: Rust tuning events/diagnostic snapshot.
+
 ### `diagnostics.structured-events`
 
 Purpose: maintain bounded structured diagnostic events across Android/platform/Rust-engine domains and expose/export them without random ad-hoc logs as the sole evidence.
@@ -630,6 +928,22 @@ Historical purpose: dashboard-centric hub/store owns runtime data.
 Classification: `REMOVE` as an ownership model.
 
 Replacement: domain-neutral Rust ChannelStore consumed by Dashboard/Logger/Analyzer/etc.
+
+### `usb-manager-monolith`
+
+Historical purpose: one large Android class owns platform USB, protocol, session, runtime, tuning and diagnostics.
+
+Classification: `REMOVE` as an ownership model.
+
+Replacement: Android CDC platform pieces + one ECU session + typed protocol/runtime/tuning/diagnostic owners.
+
+### `profile-parser-monolith`
+
+Historical purpose: one compiled profile object/parser also owns raw codecs, surface compilation and condition semantics.
+
+Classification: `REMOVE` as a future structure.
+
+Replacement: separate parser/model/support policy/schema compiler/primitive/condition responsibilities under one exact profile identity.
 
 ### `development-stage-production-names`
 
