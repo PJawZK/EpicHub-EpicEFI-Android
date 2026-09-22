@@ -5,6 +5,7 @@ Phase 1 builds the repository-backed architecture before production Android/Rust
 ## Start here
 
 - `PHASE1_SCOPE.md` — Phase 1 purpose, exclusions and completion gate.
+- `PHASE1_PROGRESS.md` — current completed/current source-review tranches.
 - `DECISIONS.md` — durable architectural decisions.
 - `DEVELOPMENT_WORKFLOW.md` — repository and chat/handoff workflow.
 
@@ -15,6 +16,15 @@ Phase 1 builds the repository-backed architecture before production Android/Rust
 - `RESPONSIBILITY_DESTINATIONS.md` — where retained/redesigned responsibilities belong in EpicHub.
 - `PROTOCOL_AUTHORITIES.md` — source of truth for important wire/profile/file-format contracts.
 - `GAP_ANALYSIS.md` — new EpicHub responsibilities and unresolved technical decisions.
+
+Deep-dive evidence:
+
+- `ESP32_ACCESSORY_EVIDENCE.md` — original/evolved BLE↔CAN bridge and accessory boundaries.
+- `TUNING_PERSISTENCE_RECOVERY_EVIDENCE.md` — project authority, recovery, journals and derived caches.
+- `UI_INTERACTION_EVIDENCE.md` — Dashboard/Tuner interaction, responsive behavior and rendering lessons.
+- `LOGGING_INTEROP_EVIDENCE.md` — live logging, MSL/MLG/MDF interoperability and analyzer-facing storage lessons.
+- `DIAGNOSTICS_EVIDENCE.md` — structured diagnostics, performance and lifecycle tracing evidence.
+- `TUNE_VIEWER_EVIDENCE.md` — tune/profile parsing, exact-identity comparison, definition-diff and visualization lessons.
 
 ## Target architecture contracts
 
