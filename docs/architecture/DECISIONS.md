@@ -122,3 +122,23 @@ When profile identities differ, any comparison is explicitly informational and c
 If table axes differ, direct positional cell deltas are considered ambiguous by default. Any future regridding/interpolation comparison is derived analysis with explicit transform policy and cannot silently become source tune data or migration/write authority.
 
 Compact compiled-profile projections and comparison reports are derived acceleration/evidence only. They remain exact-identity-bound, versioned/rebuildable where appropriate, and never replace the source profile, TuneSnapshot, project authority or live ECU verification.
+
+## D-019 — Observation, analysis, recommendation and ECU mutation are separate authority levels
+
+An analyzer consumes identity-bound evidence and may produce derived measurements/models, confidence/identifiability state and an optional semantic recommendation. None of those stages implicitly grants ECU mutation authority.
+
+Missing/stale/unsupported evidence remains unknown rather than numerical zero. Rejected/contaminated samples and non-comparable events remain explicit. Direct observations, values derived from observations, interpolated guidance, model predictions and reference-only evidence retain distinct provenance; interpolation or prediction may guide collection but cannot silently create observed evidence or raise mutation eligibility.
+
+Completed analysis results bind to their immutable source/live-session identity, exact profile identity, relevant calibration fingerprint, channel/schema binding and analysis-profile version. A domain profile defines which upstream tune/configuration state is causally relevant; changing that state invalidates dependent evidence rather than silently pooling it.
+
+Any candidate test that changes ECU RAM is handed to the single semantic tuning authority. The analyzer never owns raw page/offset/byte writes and never owns Burn. Current live identity, stale baseline, target resolution/quantization, exact verification and Restore/uncertainty semantics remain tuning-domain responsibilities.
+
+## D-020 — One shared analysis platform, multiple domain analysis profiles
+
+EpicHub does not port AE, PID, TCharge and Injection Angle as independent plugin architectures. They become domain profiles/models on common Rust analysis infrastructure.
+
+Shared infrastructure owns source/provenance handling, semantic channel requirements, validity/rejection accounting, event/segment/visit blocks, grouped statistics, comparability, coverage, blocked validation, generic bounded search helpers, replay and report structures. Each domain profile retains its own causal prerequisites, event semantics, contamination rules, metrics/model equations, comparability policy, safety gates and recommendation policy.
+
+A profile's maturity is explicit: observing or measuring correctly does not imply that a numerical recommendation is qualified. Live passive capture, guided capture, existing-log analysis and bounded active experiment are distinct acquisition capabilities over the same analysis contract.
+
+A qualifying immutable recorded session may be reused by multiple compatible analyses rather than forcing a new drive/capture for every task. New evidence is required only when required channels/events/coverage are absent, the relevant calibration fingerprint changed, causal prerequisites differ, or a deliberate candidate change creates a new physical state whose outcome must be measured.
