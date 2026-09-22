@@ -142,3 +142,15 @@ Shared infrastructure owns source/provenance handling, semantic channel requirem
 A profile's maturity is explicit: observing or measuring correctly does not imply that a numerical recommendation is qualified. Live passive capture, guided capture, existing-log analysis and bounded active experiment are distinct acquisition capabilities over the same analysis contract.
 
 A qualifying immutable recorded session may be reused by multiple compatible analyses rather than forcing a new drive/capture for every task. New evidence is required only when required channels/events/coverage are absent, the relevant calibration fingerprint changed, causal prerequisites differ, or a deliberate candidate change creates a new physical state whose outcome must be measured.
+
+## D-021 — Initial Android identity/support baseline is dual-ARM and API 26+
+
+The clean EpicHub Android application starts with application ID and namespace `com.epicefi.epichub`.
+
+The initial support contract is `minSdk 26`, `targetSdk 36` and `compileSdk 37`, with target/compile SDK expected to advance as Android distribution/platform requirements evolve.
+
+Production native support includes both `armeabi-v7a` and `arm64-v8a`. Arm64-only is explicitly rejected for the initial product because the existing SM-A137F reference phone may run a 32-bit Android userspace even though its SoC is 64-bit-capable. The first physical scaffold must record `Build.SUPPORTED_ABIS` on every reference device and qualify JNI/native behavior on both ARM ABIs.
+
+Prefer ABI-split artifacts: App Bundle splitting for store distribution and ABI-specific APKs for direct distribution. A universal dual-ABI APK is a bench convenience, not the preferred size-efficient user artifact.
+
+Exact AGP/NDK/Rust/Compose patch versions are reproducibly pinned when Phase 2 scaffolds the build. Toolchain patch/version maintenance does not reopen this architecture decision unless it changes the supported API/ABI/product contract.
