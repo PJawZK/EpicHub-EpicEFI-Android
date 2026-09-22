@@ -2,503 +2,498 @@
 
 ## Purpose
 
-This document separates architecture/responsibility questions already resolved by evidence from work that still requires design, fixtures, benchmarking or physical qualification.
+This document lists **current unresolved implementation, fixture, benchmark, compatibility and product-scope work** after Phase 1 architecture archaeology.
 
-A gap does not necessarily mean a missing product feature. It may be the remaining proof needed before a known responsibility can be implemented safely.
+Resolved responsibility archaeology is intentionally not repeated here. See the evidence documents and `PHASE1_GATE_ASSESSMENT.md` for closure rationale.
+
+A remaining gap does not necessarily block Phase 2 scaffolding. Each item is classified by when it becomes required.
 
 ---
 
-# Major clean-slate implementation gaps
+# Phase 1 closure status
+
+Broad cross-repository archaeology is complete enough to stop by default.
+
+Resolved before the Phase 2 gate:
+
+- Android-only Kotlin/Compose + Rust architecture;
+- one ECU session and one runtime ChannelStore;
+- exact generated-profile authority;
+- complete verified TuneSnapshot / semantic Write / separate Burn authority;
+- one connection-wide Android BLE/GATT scheduler;
+- legacy ESP32 bridge vs future direct-output separation;
+- format-neutral live measurement path;
+- MLG-first then MDF4 evaluation sequence;
+- diagnostics as observational state only;
+- exact-profile tune-comparison authority;
+- shared analyzer infrastructure + domain profiles;
+- permanent application ID/namespace `com.epicefi.epichub`;
+- initial Android API baseline `minSdk 26`, `targetSdk 36`, `compileSdk 37`;
+- production native ABIs `armeabi-v7a` + `arm64-v8a`.
+
+See D-001 through D-021 and `ANDROID_BUILD_BASELINE.md`.
+
+The only Phase 1 review-checklist item still intentionally open is explicit user acceptance before production scaffolding.
+
+---
+
+# Early Phase 2 foundation work
+
+These are implementation tasks, not unresolved architecture ownership.
 
 ## Kotlin/Rust engine boundary
 
 Still required:
 
+- lifecycle-safe opaque engine handle;
 - small semantic JNI API;
-- lifecycle-safe engine handle;
-- packed/shared runtime snapshot buffer;
-- bounded structured event transfer;
-- stable error mapping;
-- no per-channel/per-sample JNI calls;
-- explicit ownership/lifetime rules for any native USB handle handoff.
+- versioned packed/shared RuntimeSnapshot buffer;
+- bounded event drain;
+- stable error projection;
+- JNI metrics/counters;
+- no per-channel/per-sample JNI traffic;
+- explicit lifetime contract for any future native USB resource handoff.
 
-Status: `PROPOSED`.
+Status: `PHASE 2 FOUNDATION IMPLEMENTATION`.
 
-## Rust runtime ChannelStore
+## Rust ChannelStore
 
 Still required:
 
-- stable channel IDs/schema;
-- typed raw/physical values;
-- timestamps/revisions/source/validity;
+- stable semantic ChannelId/schema;
+- typed raw/physical values where appropriate;
+- timestamp/revision/source/validity;
 - live/file-backed source abstraction;
-- bounded cache/history ownership;
-- GPS/legacy bridge ingestion.
+- bounded history/cache rules;
+- coarse GPS/legacy bridge ingestion.
 
-Status: `PROPOSED`.
+Diagnostics-Core contributes naming/adapter/validity/test-vector evidence but is not a second runtime authority.
 
-## Logging / measurement writers
+Status: `PHASE 2 FOUNDATION IMPLEMENTATION`.
 
-Responsibility ownership is now resolved by `LOGGING_INTEROP_EVIDENCE.md`; implementation/proof remains.
-
-Still required:
-
-- format-neutral bounded sample frame/batch path;
-- live acquisition benchmark before writer coupling;
-- production MLG writer/reader with executable compatibility corpus;
-- MDF4 streaming writer/reader;
-- metadata/channel mapping;
-- block sizing/buffering;
-- crash/power-loss recovery/finalization;
-- independent interoperability qualification;
-- identical-workload Android file-size/CPU/storage/read/write benchmarks.
-
-Status: `PROPOSED IMPLEMENTATION`, not an ownership-discovery gap.
-
-## Native analyzer / plot-resolution engine
+## Compose shell
 
 Still required:
 
-- bounded time/channel queries;
-- statistics/search/events;
-- histogram/scatter/heatmap;
-- derived channels;
-- tuning analysis reuse;
-- spike-preserving multires min/max data;
-- viewport-sized plot packets/cache;
-- Compose rendering first, specialized GPU only if measured need.
+- one application/Activity/Compose host;
+- typed navigation/state;
+- responsive phone/tablet/portrait/landscape behavior;
+- frame-rate-aware snapshot consumption;
+- physical frame/jank/lifecycle qualification.
 
-Status: `PROPOSED`.
+No WebView/JSON hot path returns in the clean architecture.
 
-## Compose application shell
-
-Responsibility ownership is substantially resolved by the UI interaction archaeology, but the actual clean Compose implementation remains Phase 2 work.
-
-Still required:
-
-- one responsive navigation shell;
-- phone/tablet/portrait/landscape implementation;
-- Dashboard and editor;
-- Tuner parameters/curves/tables/3D visualization;
-- Logger/Analyzer/Diagnostics/Settings;
-- frame-rate-aware telemetry consumption;
-- physical interaction/performance qualification.
-
-Status: `PROPOSED IMPLEMENTATION`, not an ownership-discovery gap.
-
-## Structured diagnostics implementation
-
-Responsibility ownership is now resolved by `DIAGNOSTICS_EVIDENCE.md`.
-
-Still required:
-
-- typed event schema;
-- typed metric descriptors/units/kinds;
-- cross-domain correlation/session IDs;
-- Kotlin platform adapter;
-- Rust bounded event ring/metric windows;
-- warning-incident persistence model;
-- report snapshot/export schema;
-- machine-readable qualification output.
-
-Status: `PROPOSED IMPLEMENTATION`, not an ownership-discovery gap.
+Status: `PHASE 2 FOUNDATION IMPLEMENTATION`.
 
 ---
 
-# Important unresolved technical decisions
+# Measured architecture PoCs
+
+These are deliberately unresolved until measurement. They do **not** reopen Phase 1 ownership.
 
 ## ECU sustained runtime I/O after Android open
 
 Candidates:
 
-1. Kotlin bulk I/O with coarse batches into Rust;
-2. Android open/claim then proven native FD/handle to Rust sustained I/O.
+```text
+A. Kotlin bulk I/O worker → coarse Rust batches
+B. Android open/claim → proven native FD/handle → Rust sustained I/O
+```
 
-Decision criteria: attach/open latency, detach/replug correctness, ownership/close semantics, sustained rate/CPU/allocation, JNI crossings/bytes, failure recovery and low/mid Android hardware behavior.
+Measure on identical ECU/profile/device workload:
 
-Status: `OPEN BENCHMARK DECISION`.
+- connect/signature/preflight latency;
+- sustained bytes/frames per second;
+- application CPU;
+- allocations/GC;
+- JNI calls/bytes;
+- dropped/corrupt frames;
+- unplug/replug/reconnect;
+- lifecycle/background/foreground behavior;
+- ownership/close correctness;
+- extended logging temperature/battery.
 
-## MDF4 version/compression baseline
+Status: `EARLY PHASE 2 BENCHMARK DECISION`.
 
-Candidates:
+## Compose renderer/runtime snapshot performance
 
-- MDF 4.2 + Deflate for compatibility;
-- MDF 4.3 + LZ4 for live performance;
-- MDF 4.3 + Zstd for storage/archive.
+Need physical measurements for:
 
-Must be compared on the same acquisition/channel workload, with mobile file size as the first decision metric and CPU/thermal/read/write/interoperability costs measured directly.
+- high-rate dashboard drawing;
+- inactive-page update suppression;
+- 32×32 table interaction/heat map;
+- pinch/long-press arbitration;
+- orientation state preservation;
+- view-only 3D rotation;
+- plot pan/zoom;
+- p50/p95/p99 frame time and jank under live engine/logging load.
 
-Status: `OPEN BENCHMARK/INTEROP DECISION`.
+Specialized OpenGL/Vulkan rendering is not introduced unless these measurements justify it.
 
-## Minimum Android/API/ABI/device target
+Status: `PHASE 2 PERFORMANCE GATE`.
 
-Lock before Phase 2: minimum API, ABI set, low/mid hardware target, resolution/orientation matrix.
+## Dual-ABI native qualification
 
-Status: `OPEN PRODUCT/BUILD DECISION`.
+Need physical `Build.SUPPORTED_ABIS` capture plus JNI smoke/performance checks on at least:
 
-## New Android package/application ID
+- SM-A137F;
+- SM-T500.
 
-No continuity requirement. `com.epicefi.epichub` is provisional/preferred but not yet formally locked.
+Both `armeabi-v7a` and `arm64-v8a` remain production-supported until evidence deliberately removes a requirement.
 
-Status: `OPEN NAMING/BUILD DECISION`.
+Status: `PHASE 2 BUILD/PHYSICAL GATE`.
 
 ---
 
-# Evidence/fixture gaps after completed ECU/profile archaeology
-
-## Generated-INI compatibility corpus breadth
-
-Need genuine generated INIs across representative boards/firmware generations, actual construct inventory, explicit supported/unsupported list, malformed/ambiguous fail-closed cases and a trustworthy complete epicECU fixture when available.
-
-Status: `OPEN FIXTURE GAP`.
+# ECU / generated-profile fixture gaps
 
 ## ECU protocol golden vectors
 
-Need executable fixtures for plain/framed signature, `O`, `R`, `C`, `B`, status/error and boundary-size cases.
+Need executable vectors for:
 
-Status: `OPEN FIXTURE GAP`.
+- plain/framed signature/query;
+- runtime `O`;
+- tune read `R`;
+- chunk write `C`;
+- Burn `B`;
+- typed status/errors;
+- malformed CRC/length;
+- boundary page/range cases.
+
+Current firmware behavior has been directly verified in `ECU_PROTOCOL_DIRECT_VERIFICATION.md`; this gap is executable regression evidence, not protocol discovery.
+
+Status: `FEATURE-ENTRY FIXTURE GAP`.
+
+## Generated-INI compatibility corpus
+
+Need representative genuine generated INIs across supported boards/firmware generations, including:
+
+- exact signatures;
+- differing runtime/output geometry;
+- tune pages/primitives;
+- tables/curves/dialogs/menus;
+- condition constructs;
+- malformed/unsupported fail-closed cases;
+- provenance/redistribution status.
+
+Status: `PROFILE/TUNER FEATURE-ENTRY FIXTURE GAP`.
 
 ---
 
-# ESP32 legacy bridge: responsibility archaeology completed
+# Tuning / project persistence implementation gaps
 
-Resolved:
+Authority is already resolved; concrete formats/behavior remain.
 
-- bridge with local inputs, not a direct relay controller;
-- generic variable-set characteristic, not GPS-only;
-- legacy wire formats documented;
-- evolved Android reconnect/GATT lifecycle captured;
-- one global GATT operation owner selected for target architecture;
-- no invented downstream confirmation;
-- disconnect does not provide proven zero/release behavior;
-- task watchdog is liveness only;
-- direct relay/GPIO output is a separate future versioned capability.
+## Internal project store
 
-## Remaining bridge decisions/evidence
+Need a versioned schema/layout for:
 
-### Legacy compatibility product scope
+```text
+exact source profile
++ complete verified TuneSnapshot
++ identity/checksum/generation metadata
+```
 
-Decide which remain requirements: button bridge, CAN variable request/response, generic variable-set, virtual ADC, local ESP32 inputs.
+with transactional commit/rollback.
 
-Status: `OPEN PRODUCT-SCOPE DECISION`.
+Status: `TUNER FEATURE-ENTRY IMPLEMENTATION DESIGN`.
 
-### Button disconnect/release semantics
+## Portable backup format
 
-Verify downstream ECU/button-box consumer behavior before changing disconnect/reconnect behavior.
+Need a compact versioned archive preserving project authority and required integrity/provenance metadata.
 
-Status: `OPEN COMPATIBILITY/PHYSICAL GAP`.
+Kotlin owns SAF/document transport; Rust owns schema/integrity/validation.
 
-### BLE/CAN golden vectors
+Status: `TUNER FEATURE-ENTRY FORMAT DESIGN`.
 
-Need fixtures for button, variable request/response, partial timeout, variable-set and malformed cases.
+## Operation uncertainty journal
 
-Status: `OPEN FIXTURE GAP`.
+Need the final batch-capable schema for operation kind/phase, exact ECU/profile/session identity, baseline/expected tune fingerprints, write-plan/affected-page identity and Burn evidence where relevant.
 
-### Versioned direct-output extension
+Lifecycle/authority are already locked: durable before possible mutation, present/corrupt blocks mutation, no automatic replay.
 
-Only if product requires direct ESP32 relay/GPIO control. Requires capabilities/versioning, semantic IDs, application ACK/state/fault feedback and firmware-owned interlocks/failsafe.
+Status: `TUNER FEATURE-ENTRY IMPLEMENTATION DESIGN`.
+
+## Offline draft/reconciliation
+
+Need product behavior for:
+
+- saved-project edits while ECU is offline;
+- reconnect comparison/conflict handling;
+- software draft dirty state vs verified ECU RAM dirty pages vs Burn state.
+
+Status: `TUNER PRODUCT DESIGN`.
+
+## Persistence fault corpus
+
+Need interrupted commit/cache/backup/journal/process-death/profile-mismatch tests.
+
+Status: `TUNER FEATURE-ENTRY TEST GAP`.
+
+---
+
+# Tune comparison / profile projection gaps
+
+## Exact persisted comparison identity
+
+Define the tuple used to prove same semantic profile/project context, including source/compiled profile fingerprints and tune/project generation needed to invalidate stale derived results.
+
+Status: `COMPARE FEATURE-ENTRY IMPLEMENTATION DESIGN`.
+
+## Same-profile / cross-profile goldens
+
+Need executable fixtures proving:
+
+- scalar/bits/arrays/curves/table comparison for exact-profile cases;
+- different scale/unit/storage/options/dimensions fail conservatively cross-profile.
+
+Status: `COMPARE FEATURE-ENTRY FIXTURE GAP`.
+
+## Changed-axis table regridding
+
+Default remains `NON_COMPARABLE/AMBIGUOUS` when X/Y axes differ.
+
+If transformed comparison is later implemented, it needs explicit interpolation/extrapolation/order/unit/tolerance/provenance rules. Transformed values remain derived analysis, never implicit tune/write data.
+
+Status: `DEFERRED ANALYSIS FEATURE`.
+
+## Compact compiled-profile projection
+
+Only persist a compact hashed compiled-profile cache if Android startup/search/project-open measurements justify it.
+
+If used: versioned, exact-source-bound, integrity-checked, rebuildable and never alternate authority.
+
+Status: `DEFERRED PERFORMANCE/FORMAT DECISION`.
+
+---
+
+# Logging / measurement gaps
+
+## Format-neutral writer path
+
+Need bounded sample/event batches, explicit pressure/drop metrics and independent writer lifecycle.
+
+Status: `LOGGER IMPLEMENTATION`.
+
+## MLG executable compatibility corpus
+
+Need authoritative/genuine fixtures for:
+
+- structure/metadata;
+- channel definitions;
+- record/timestamp behavior;
+- finalization;
+- truncation/recovery behavior where applicable;
+- TunerStudio/MegaLogViewer compatibility.
+
+Do not derive the writer from one log file or repeated-block appearance alone.
+
+Status: `MLG FEATURE-ENTRY FIXTURE/INTEROP GAP`.
+
+## Android hot recording storage policy
+
+Need app-controlled sequential hot-storage path, retention/quota behavior and user export/share policy. SAF stays outside the hot writer loop.
+
+Status: `LOGGER PRODUCT/PLATFORM DESIGN`.
+
+## Writer power-loss recovery
+
+Need actual checkpoint/finalization/recovery implementation and fault-injection tests.
+
+Status: `LOGGER IMPLEMENTATION/TEST GAP`.
+
+## MDF4 version/compression baseline
+
+Candidates remain measurement-driven:
+
+- MDF 4.2 + Deflate;
+- MDF 4.3 + LZ4;
+- MDF 4.3 + Zstd.
+
+Evaluate on the exact same sample/channel workload after the live path and MLG writer are proven.
+
+Primary metric: practical mobile file size. Then sustained write/read rate, CPU/thermal/battery, recovery and independent interoperability.
+
+Status: `DELIBERATELY DEFERRED BENCHMARK/INTEROP DECISION`.
+
+---
+
+# Analyzer / autotune gaps
+
+Responsibility architecture is resolved by D-019/D-020, `ANALYZER_AUTOTUNE_PLUGIN_EVIDENCE.md` and `ANALYSIS_RESPONSIBILITY_MAP.md`.
+
+## AnalysisSession schema
+
+Need concrete versioned representation of:
+
+- immutable source/live session identity;
+- exact profile identity;
+- relevant calibration fingerprint;
+- semantic channel bindings;
+- algorithm/profile version;
+- query/capture window;
+- accepted/rejected evidence summaries;
+- derived results/model state.
+
+Status: `ANALYZER FEATURE-ENTRY IMPLEMENTATION DESIGN`.
+
+## Domain-profile interface
+
+Need the concrete trait/API for:
+
+- required/optional channels;
+- causal prerequisites;
+- validity/rejection;
+- segment/event extraction;
+- comparability;
+- metrics/model;
+- confidence/identifiability;
+- optional recommendation/experiment proposal.
+
+Status: `ANALYZER FEATURE-ENTRY IMPLEMENTATION DESIGN`.
+
+## Typed analysis status vocabulary
+
+Need a stable common subset without flattening domain-specific semantics. Candidate concepts include:
+
+- evidence readiness;
+- comparability;
+- identifiability;
+- validation support;
+- recommendation eligibility;
+- improved/similar/regressed/insufficient/not-comparable.
+
+Status: `ANALYZER FEATURE-ENTRY MODEL DESIGN`.
+
+## Analysis-session persistence/indexing
+
+Decide whether/how completed immutable analysis sessions are stored beside source logs versus rebuilt deterministically.
+
+Status: `ANALYZER PRODUCT/PERSISTENCE DESIGN`.
+
+## ExperimentProposal contract
+
+Need the semantic handoff from analysis to sole tuning authority. Analyzer never receives raw page/offset/byte or Burn authority.
+
+Status: `ACTIVE-EXPERIMENT FEATURE-ENTRY DESIGN`.
+
+## Deterministic replay corpus
+
+Build replay/golden fixtures from validated historical logs/evidence where provenance/storage permits.
+
+Include missing/stale/contaminated, non-comparable, boundary-limited, quantized/unreachable, timeout and regression/Restore cases.
+
+Status: `ANALYZER FIXTURE GAP`.
+
+## Profile rollout priority
+
+Choose which AE/PID/TCharge/Injection Angle analyses enter early product releases only after generic log/analyzer foundations are proven.
+
+Status: `DEFERRED PRODUCT PRIORITIZATION`.
+
+---
+
+# Diagnostics gaps
+
+## Event/metric schema
+
+Need stable event codes, typed fields, metric IDs/units/kinds, correlation/session identity and ABI/export representation.
+
+Status: `DIAGNOSTICS IMPLEMENTATION DESIGN`.
+
+## Retention/persistence
+
+Need exact event-ring/metric-window sizes, warning/incident persistence scope and previous-run crash/uncertainty summary policy.
+
+Status: `DIAGNOSTICS PRODUCT/IMPLEMENTATION DESIGN`.
+
+## Report/export schema
+
+Need versioned machine-readable snapshot/export plus human-readable rendering and Android export flow.
+
+Status: `DIAGNOSTICS FORMAT/IMPLEMENTATION DESIGN`.
+
+Diagnostics-Core may seed semantic IDs/warning vectors after deliberate review; it never becomes runtime/control authority.
+
+---
+
+# ESP32 legacy bridge gaps
+
+## Legacy compatibility product scope
+
+Decide which compatibility features remain user-facing requirements:
+
+- button bridge;
+- CAN variable request/response;
+- generic variable-set;
+- virtual ADC;
+- local ESP32 inputs.
+
+Status: `DEFERRED PRODUCT-SCOPE DECISION` unless needed by an early target build.
+
+## Button disconnect/release semantics
+
+Verify downstream ECU/button-box consumer behavior before changing the legacy disconnect behavior.
+
+Status: `COMPATIBILITY/PHYSICAL GAP`.
+
+## BLE/CAN golden vectors
+
+Need vectors for button, variable request/response, partial timeout, variable-set and malformed cases.
+
+Status: `ACCESSORY FEATURE-ENTRY FIXTURE GAP`.
+
+## Direct GPIO/relay control
+
+Not inherited from the legacy bridge.
+
+If ever added, requires a separate versioned capability, semantic IDs, application ACK/state/fault feedback and firmware-owned boot/interlock/watchdog/disconnect failsafe.
 
 Status: `DEFERRED NEW CAPABILITY`.
 
 ---
 
-# Tuning persistence/recovery: responsibility archaeology completed
+# UI product-scope decisions
 
-The current source establishes stable permanent categories:
+These do not block the core Compose architecture.
 
-```text
-project authority
-= exact generated profile source + last complete verified TuneSnapshot
+## Rich table-edit operations
 
-derived acceleration
-= compiled profile/schema/projection caches, exact-identity-bound and rebuildable
+Candidates include arithmetic/fill/flatten, smoothing, interpolation, copy/paste, undo/redo, baseline revert and CSV import/export.
 
-portable backup
-= validated transport/archive representation of project authority, not new authority
+Status: `DEFERRED PRODUCT-SCOPE DECISION`.
 
-operation uncertainty journal
-= tiny durable evidence written before possible C/B transmission
+## Dashboard customization
 
-UI draft
-= local unverified requested/edit state
-```
+Candidates include per-gauge display limits/precision, favorites/Quick Tuning and logging presets.
 
-Resolved architectural rules:
-
-- no semantic-values sidecar becomes alternate tune authority;
-- derived caches are disposable and exact source/profile identity-bound;
-- project authority updates are transactional generations, with rollback on incomplete commit/verification;
-- saved/offline project state is read-only relative to ECU hardware until a new live verified session exists;
-- portable backup import validates exact profile + optional complete TuneSnapshot before local commit;
-- user document/SAF transport is Kotlin-owned, while backup/project schema/integrity remains tuning-domain authority;
-- operation journals are fsynced and reread **before** a command may cross the point of possible hardware mutation;
-- present/corrupt journal blocks mutation and requires deliberate resynchronization;
-- recovery metadata never proves ECU state and never authorizes automatic replay;
-- pilot-specific candidate-restore/power-cycle proof flows are qualification history, not ordinary product UX.
-
-These are no longer responsibility-discovery gaps.
-
-## Remaining project-persistence design decisions/evidence
-
-### Internal project container/layout
-
-Need final clean-slate internal schema/path strategy for exact source profile, complete verified TuneSnapshot, metadata/checksums and atomic generation commit.
-
-Preference: Rust owns serialization/integrity and app-private files after Kotlin supplies a base directory; Kotlin SAF is only user document transport.
-
-Status: `OPEN IMPLEMENTATION DESIGN`.
-
-### Portable backup format
-
-Need a compact versioned archive/container preserving only project authority plus necessary metadata, with deterministic integrity checks and user-driven export/import.
-
-Status: `OPEN FORMAT DESIGN`.
-
-### Final generic operation-journal schema
-
-Need a batch-capable journal with operation kind/phase, exact ECU/profile/session identity, baseline/expected tune fingerprints, write-plan identity/affected pages and Burn evidence identity where relevant.
-
-Status: `OPEN IMPLEMENTATION DESIGN`, authority/lifecycle already resolved.
-
-### Offline draft/reconciliation semantics
-
-Need product behavior for offline saved-project editing, reconnect conflict/reconciliation, and separation of software-draft dirty state from verified ECU dirty pages/Burn state.
-
-Status: `OPEN PRODUCT/TUNING DESIGN`.
-
-### Persistence fault-injection corpus
-
-Need interrupted commit/cache/backup/journal/process-death/profile-mismatch recovery tests.
-
-Status: `OPEN TEST GAP`.
+Status: `DEFERRED PRODUCT-SCOPE DECISION`.
 
 ---
 
-# Dashboard / Tuner UI interaction: responsibility archaeology completed
-
-Evidence document: `UI_INTERACTION_EVIDENCE.md`.
-
-Resolved ownership/principles:
-
-- accepted EpicDash-JZ tablet/phone references remain visual/layout authority;
-- UXUI contributes only feature/interaction/responsive/performance evidence, not its visual language;
-- one semantic/component model reflows by geometry; no separate phone/tablet application implementations;
-- Rust owns tune/runtime semantic truth while Compose owns interaction/presentation state;
-- responsive changes may alter rails, panel placement, viewport and density but must preserve semantic selection/drafts/authority;
-- only active presentation surfaces should consume high-rate display updates where practical;
-- static gauge/editor geometry should be cached/constructed once and dynamic layers updated minimally;
-- table semantic selection is separate from pointer-gesture state;
-- pinch/range selection conflicts need explicit gesture arbitration/rollback;
-- X/Y reversal changes display order only, never tune array order;
-- zoom/pan/heat-map/panel folds/3D camera are presentation state;
-- 3D table inspection remains view-only unless a future accepted edit contract is introduced;
-- modal/fullscreen surfaces own their pointer streams and cannot trigger underlying actions;
-- haptics do not signal hardware success before verified domain results;
-- undo/redo is local semantic edit history, not automatic ECU rollback;
-- saved-project/live/draft/RAM-dirty/Burn/uncertain states need explicit distinctions in presentation.
-
-## Remaining UI product/physical decisions
-
-### Rich table-edit feature scope
-
-UXUI proves feasibility for arithmetic/fill/flatten, smoothing, interpolation, copy/paste, undo/redo, baseline revert and CSV text import/export. These are candidates, not automatically locked scope.
-
-Status: `OPEN PRODUCT-SCOPE DECISION`.
-
-### Dashboard presentation customization scope
-
-Per-gauge display limits/precision, favorites/Quick Tuning and logging presets are useful interaction candidates but remain product-scope decisions.
-
-Status: `OPEN PRODUCT-SCOPE DECISION`.
-
-### Compose renderer/performance qualification
-
-Need real device benchmarks for:
-
-- high-rate dashboard custom drawing;
-- 32×32 table scrolling/selection/heat map;
-- pinch/long-press gesture arbitration;
-- orientation state preservation;
-- view-only 3D rotation;
-- inactive-page render suppression;
-- p50/p95/p99 frame time and jank on low/mid hardware.
-
-The UXUI ~90% synthetic SVG update reduction is a transferable invalidation lesson, not a Compose speed forecast.
-
-Status: `OPEN PHYSICAL/PERFORMANCE GAP`.
-
----
-
-# Logging / playback / interoperability: responsibility archaeology completed
-
-Evidence document: `LOGGING_INTEROP_EVIDENCE.md`.
-
-Resolved rules:
-
-- live acquisition/channel authority is format-neutral;
-- live path is proven/optimized before writer implementation becomes the focus;
-- MLG is the first writer for ecosystem interoperability, not the internal data model;
-- MDF4 remains the long-term native-format candidate behind EpicHub's own measurement abstraction;
-- file size is the primary mobile format metric, followed by sustained I/O/CPU/thermal/recovery behavior;
-- MSL/CSV/MLG/MDF are isolated readers/writers feeding common channel/source semantics;
-- playback clock/state is separate from measurement data;
-- current MSL primitive columnar parsing/generation cancellation/binary-search playback are useful techniques, while hardcoded alias/JSON/full-memory design is not;
-- writer/UI/analyzer threads are independent and communicate through bounded batches/queries;
-- large-log analysis is lazy/range-based with rebuildable indexes/caches;
-- plot reduction preserves spikes and is viewport-driven;
-- writer recovery metadata never fabricates measurement data.
-
-## Remaining logging/format evidence and implementation
-
-### MLG executable compatibility corpus
-
-Need authoritative/genuine fixtures for real MLG structure, metadata, records, timestamps, finalization/truncation and MegaLogViewer/TunerStudio compatibility.
-
-Do not derive the production writer from one log file or repeated-block appearance alone.
-
-Status: `OPEN FIXTURE/INTEROP GAP`.
-
-### MDF interoperability/version/compression
-
-Need independent-reader cross-checks, version/compression corpus and identical-workload Android measurements.
-
-Status: `OPEN BENCHMARK/INTEROP GAP`.
-
-### Android recording storage policy
-
-Need app-controlled hot sequential recording location, retention/quota behavior and user export/share policy. SAF remains outside the hot writer loop.
-
-Status: `OPEN PRODUCT/PLATFORM DESIGN`.
-
-### Writer power-loss recovery
-
-Need actual checkpoint/finalization/recovery implementation and fault-injection qualification.
-
-Status: `OPEN IMPLEMENTATION/TEST GAP`.
-
----
-
-# Diagnostics / performance: responsibility archaeology completed
-
-Evidence document: `DIAGNOSTICS_EVIDENCE.md`.
-
-Resolved rules:
-
-- diagnostics are observational and never become hidden subsystem control authority;
-- structured events, warning incidents, performance metrics and lifecycle/owner traces are separate types;
-- event/metric/history storage is bounded;
-- metric hot paths record cheap primitive samples/counters and aggregate on reads;
-- metric descriptors own explicit units/kinds/stable IDs;
-- p50/p95/p99/max are first-class for latency/jank/queue qualification;
-- monotonic and wall clocks have distinct responsibilities;
-- warning acknowledgement does not mutate channel/rule truth;
-- correlation/session/generation IDs span Kotlin/Rust evidence without merging ownership;
-- Kotlin owns Android/platform diagnostics while Rust owns engine diagnostics;
-- diagnostics cross JNI in bounded snapshots/batches;
-- measurement logging and diagnostics remain distinct;
-- support/qualification export should have a stable machine-readable form in addition to human text.
-
-## Remaining diagnostics implementation decisions
-
-### Event/metric schema
-
-Need final stable event codes, typed fields, metric IDs/units/kinds and ABI/export representation.
-
-Status: `OPEN IMPLEMENTATION DESIGN`.
-
-### Retention/persistence policy
-
-Need exact in-memory ring sizes, warning/incident persistence scope and previous-run crash/uncertainty summaries.
-
-Status: `OPEN PRODUCT/IMPLEMENTATION DESIGN`.
-
-### Report/export schema
-
-Need versioned structured diagnostic snapshot/export plus human-readable rendering and Android user export path.
-
-Status: `OPEN FORMAT/IMPLEMENTATION DESIGN`.
-
----
-
-# Tune Viewer parsing/comparison: responsibility archaeology completed
-
-Evidence document: `TUNE_VIEWER_EVIDENCE.md`.
-
-Resolved rules:
-
-- semantic tune interpretation requires exact authoritative profile identity; similar firmware, board name or matching parameter names are not sufficient;
-- full scalar/array/table/curve comparison is same-profile behavior only;
-- cross-profile comparison, if exposed, is conservative informational evidence and never edit/migration/write authority;
-- semantic target kinds are explicit; presentation must not guess a scalar/table/curve editor from value shape;
-- compact compiled-profile projections may exist only as exact-identity-bound derived acceleration;
-- asynchronous profile/project/comparison loads require stale-result rejection through request/session/generation identity;
-- definition evolution diffing is diagnostic evidence, not migration authorization;
-- comparison reports are derived evidence rather than tune/project/ECU authority;
-- Tune Viewer's React/browser parser/rendering architecture does not migrate as EpicHub's profile authority or Compose renderer;
-- the reviewed Tune Viewer has 2D calibration grids and SVG curves, not a reusable 3D engine.
-
-## Remaining tune-comparison/profile-projection decisions
-
-### Exact comparison identity contract
-
-Define the persisted identity tuple used to prove two saved projects/tunes share one authoritative semantic profile. It should include source/compiled profile fingerprints and enough tune/project-generation identity to invalidate stale derived comparison results.
-
-Status: `OPEN IMPLEMENTATION DESIGN`.
-
-### Same-profile comparison golden corpus
-
-Need executable fixtures for scalar, bits, string where relevant, arrays, curves, table axes/cells and missing/incomplete structures against representative genuine profiles/tunes.
-
-Status: `OPEN FIXTURE GAP`.
-
-### Cross-profile compatibility corpus
-
-Need fixtures proving that different scales, units, storage types, option semantics, dimensions and surface definitions fail conservatively rather than being treated as equal because names match.
-
-Status: `OPEN FIXTURE GAP`.
-
-### Changed-axis table comparison/regridding
-
-Default semantic state is **non-comparable/ambiguous** when X or Y axes differ. If a future transformed comparison is useful, specify interpolation, extrapolation, ordering, units, tolerances and provenance separately. Transformed values remain derived analysis and cannot become implicit tune/migration/write data.
-
-Status: `OPEN ANALYSIS DESIGN`.
-
-### Compact compiled-profile projection
-
-Decide from Android startup/search/project-open measurements whether persisting a compact hashed compiled-profile projection is worthwhile. If used, it must be schema-versioned, exact-source-identity-bound, integrity-checked and safely rebuildable.
-
-Status: `OPEN PERFORMANCE/FORMAT DECISION`.
-
-### Comparison report schema
-
-If project/tune compare is product scope, define a versioned derived report with sufficient source/profile/tune fingerprints to reproduce or invalidate its interpretation without embedding a second project authority.
-
-Status: `OPEN FORMAT/PRODUCT DECISION`.
-
----
-
-# Phase 1 archaeology completed enough to leave deferred list
-
-Stable responsibility-level decomposition now exists for:
-
-- EpicDash-JZ USB/session/framing/runtime/tuning manager;
-- generated-INI parser/compiler/condition authority;
-- firmware request/response framing and `S/Q/O/R/C/B` paths;
-- original ESP32 BLE↔CAN bridge and evolved Android BLE lifecycle;
-- tuning project authority, derived caches, portable recovery and operation uncertainty journals;
-- Dashboard/Tuner interaction, responsive and rendering responsibility boundaries;
-- logging/playback/MLG/MDF transition responsibilities;
-- diagnostics/performance/lifecycle tracing responsibilities;
-- Tune Viewer profile interpretation, semantic comparison, definition-diff and derived-projection lessons.
-
-This means ownership is known, not that Phase 2 implementation/qualification is complete.
-
----
-
-# Deferred deeper source inventories
-
-Next-highest-value Phase 1 review:
-
-1. AE/PID/TCharge/Injection Angle plugin repositories for future analyzer/autotune responsibilities.
-
-After that review, Phase 1 should primarily close the explicit design, fixture and benchmark gaps above rather than continue broad archaeology indefinitely.
+# What no longer counts as a Phase 1 gap
+
+The following are deliberately closed and must not be reopened without new contradictory evidence:
+
+- whether Kotlin/Compose or Rust owns Android APIs;
+- whether UI may own raw tune memory;
+- whether board name/VID/PID may replace exact profile authority;
+- whether dashboard owns telemetry;
+- whether request/response framing is symmetric;
+- whether Burn is an ordinary edit side effect;
+- whether the legacy ESP32 is already a direct relay controller;
+- whether GATT completion proves downstream action;
+- whether diagnostics can silently control transport/tuning;
+- whether Tune Viewer supplies a 3D engine;
+- whether cross-profile same-name tables/curves are automatically comparable;
+- whether AE/PID/TCharge/Injection Angle should be ported as independent mini-app/plugin architectures;
+- whether guided capture is required when an existing immutable log already contains qualifying evidence;
+- whether interpolated/model guidance may count as direct observation;
+- whether arm64-only is a safe initial build assumption for the existing device matrix;
+- whether application ID/API/ABI support is still an unmade pre-Phase-2 decision.
+
+## Current Phase 1 gate
+
+See `PHASE1_GATE_ASSESSMENT.md` and `REVIEW_CHECKLIST.md`.
+
+Architecture/source/test review is ready for explicit user acceptance. Production scaffolding remains blocked until that final acceptance is recorded.
