@@ -14,6 +14,16 @@ Evidence is consumed by domain and normalized into `RESPONSIBILITY_INVENTORY.md`
 - **Interaction/design reference** — useful for UX/interaction behaviour only.
 - **Future-feature reference** — useful algorithms/workflows that may later enter EpicHub.
 
+## Provenance / licence handling rule
+
+Phase 1 records protocol/behaviour semantics and tested evidence. Reference-source code is **not** presumed transplantable merely because it can be read.
+
+- private/user-controlled `PJawZK` repositories are treated as project evidence, while actual copied/dependency code still needs licence review at adoption time;
+- `AKCore/EpicEFIVirtualDash` currently exposes no declared repository licence in the reviewed GitHub metadata, so use is limited to behavioural/protocol evidence unless permission/licensing is established separately;
+- directly reviewed firmware files contain upstream licence headers, including GPL-licensed TunerStudio protocol implementation and Apache-licensed ChibiOS-derived USB descriptor source; EpicHub uses them to verify protocol reality, not as clean-slate source to transplant;
+- external specifications/libraries retain their own licence/usage terms and are reviewed when selected;
+- fixture provenance must identify its source and redistribution constraints before committing third-party or private captured artifacts.
+
 ## `PJawZK/EpicHub-EpicEFI-Android`
 
 Role: **new authoritative EpicHub implementation repository**.
@@ -105,6 +115,8 @@ Role: **firmware/protocol reality** for the EpicEFI/rusEFI side used by EpicHub.
 
 Default branch: `master`.
 
+Direct Phase 1 verification head: `6a300295650ed131e57d8881afb2f00fd5291d47`. Detailed verification: `ECU_PROTOCOL_DIRECT_VERIFICATION.md`.
+
 Highest-value authority areas:
 
 - shared STM32 serial-over-USB descriptors and CDC topology;
@@ -116,15 +128,22 @@ Highest-value authority areas:
 - board/build identity;
 - CAN variable/button support where applicable.
 
-Already-established firmware evidence from the EpicDash-JZ audit:
+Directly verified during Phase 1:
 
-- VID/PID `0483:5740` identifies a shared STM32 firmware transport candidate, not a Mega144H7 model;
+- VID/PID `0483:5740` and the CDC descriptor/Union/Call-Management topology, including optional-MSD interface-number shift;
+- generated `TS_SIGNATURE` returned by `getTsSignature()` and query handling;
+- plain and CRC-framed query behavior;
+- request framing and CRC over body excluding length;
+- response framing as `length(status+payload) + status + payload + CRC(status+payload)`;
+- typed read/chunk-write/Burn dispatch, bounded page/range handling and distinct Burn acknowledgement.
+
+Authority conclusions:
+
+- `0483:5740` identifies a shared STM32 firmware transport candidate, not a Mega144H7 model;
 - live complete TunerStudio signature is firmware identity evidence;
 - exact complete live signature equality with the imported generated-INI signature is the compatibility/tuning authority gate;
-- representative current STM32 families use the common TunerStudio command path (`S/Q`, `O`, `R`, `C`, `B`) and materially different generated runtime/page geometry;
+- representative current STM32 families use the common TunerStudio command path (`S/Q`, `O`, `R`, `C`, `B`) while generated runtime/page geometry remains profile-specific;
 - board name alone must not own runtime/tune geometry.
-
-Direct Phase 1 firmware traversal remains in progress because the repository is large and code search is not indexed. Existing EpicDash-JZ firmware-evidence audits provide known source paths that will be verified directly.
 
 Classification: **protocol authority**.
 
@@ -178,24 +197,60 @@ Classification: **qualified read-only behaviour evidence + reference implementat
 
 ## Tuning plugin repositories
 
-Known relevant repositories include:
+Reviewed sources and heads:
 
-- `PJawZK/AE-Tuner-EPICEFI-` / public counterpart;
-- `PJawZK/epicefi-pid-autotune-plugin_Private` / public counterpart;
-- `PJawZK/epicefi-tcharge-autotune-plugin`;
-- `PJawZK/Injection-Angle-TS-Plugin_Private`.
+- `PJawZK/AE-Tuner-EPICEFI-` — `9ac4f5be9508972bb6c2be6396dc9527ca16842b`;
+- `PJawZK/epicefi-pid-autotune-plugin_Private` — `a224e75aeb10f36939b34f33db244daab56cc7bf`;
+- `PJawZK/epicefi-tcharge-autotune-plugin` — `79777ff4318027f2a874a365cfc78a3ee9bf3dc5`;
+- `PJawZK/Injection-Angle-TS-Plugin_Private` — `bedee364528bfa5fe87afe4584d0ddaf9c4cc1f3`.
 
-Role: **future-feature references** for analyzer/autotune workflows and algorithms.
+Detailed evidence: `ANALYZER_AUTOTUNE_PLUGIN_EVIDENCE.md`.
 
-They are not base architecture authority. Their useful algorithms should later be translated into the common EpicHub channel/log-analysis model rather than embedded as independent mini-app architectures.
+Role: **future-feature references** for analysis/autotune algorithms, evidence qualification and bounded experimental workflows.
+
+Transferred architecture lessons include:
+
+- evidence/recommendation/mutation authority separation;
+- exact source/profile/relevant-calibration provenance;
+- direct vs derived/interpolated evidence;
+- rejection accounting and unknown-vs-zero semantics;
+- independent visit/event blocks and blocked validation;
+- segmentation/settling/comparability;
+- confidence/identifiability beyond a single score;
+- quantization-aware bounded experiments;
+- immutable reusable analysis sessions;
+- one shared analysis foundation with domain profiles;
+- one existing semantic tuning authority for any candidate Apply/Restore.
+
+They are not base application architecture and are not ported as independent plugin mini-apps.
+
+Classification: **future-feature evidence + qualified algorithm/workflow reference at repository-specific maturity levels**.
 
 ## `PJawZK/Diagnostics-Core`
 
-Role: potential **diagnostics architecture/reference** source.
+Role: **cross-project diagnostic/channel/warning-definition reference**.
 
-Status: not yet inventoried in Phase 1.
+Reviewed `main`: `8b497461ebcdef70e9cc0a406e7b987988df7aa3`. Detailed evidence: `DIAGNOSTICS_CORE_EVIDENCE.md`.
 
-Classification: **reference implementation** pending review.
+Useful lessons:
+
+- stable canonical semantic channel IDs;
+- consumer/source alias adapters;
+- explicit units/type/freshness/missing validity;
+- declarative warning rules with debounce/latching;
+- versioned machine-readable schemas;
+- executable diagnostic test vectors;
+- consumer/report provenance identity.
+
+Limits:
+
+- it is not a second EpicHub runtime ChannelStore;
+- generic validity ranges/stale timings are not automatically authoritative for every ECU/vehicle;
+- warning definitions remain observational and do not gain hidden reconnect/write/shutdown authority;
+- exact generated profile remains the authority for live ECU channel geometry/scaling;
+- its KiCad/container tooling is outside the EpicHub Android runtime architecture.
+
+Classification: **reference implementation + definition/test-vector evidence**.
 
 ## External specifications/libraries
 
@@ -206,4 +261,4 @@ The following categories require their own authoritative external sources rather
 - Rust crate documentation for selected dependencies;
 - any third-party library licences.
 
-These sources will be added to protocol/file-format authority documentation as implementation choices become concrete.
+These sources are reviewed when implementation choices become concrete; Phase 1 does not lock a third-party Rust MDF/JNI/etc. library merely to close architecture ownership.
