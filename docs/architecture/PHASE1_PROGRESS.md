@@ -96,23 +96,73 @@ Remaining work: rich table-edit/customization product scope and real Compose int
 
 ---
 
+# Completed deep-dive: logging / playback / MLG interoperability / MDF transition
+
+Evidence: `LOGGING_INTEROP_EVIDENCE.md`.
+
+Permanent findings:
+
+- live acquisition, decode, timestamping and ChannelStore publication are format-neutral;
+- the implementation order is deliberately **live path first → MLG writer → MLG optimization → MDF4 comparison/implementation → large analyzer**;
+- MLG is the first writer because it gives fast TunerStudio/MegaLogViewer interoperability, not because it becomes EpicHub's runtime model;
+- MDF4 remains the long-term native measurement-format candidate behind EpicHub's own measurement abstraction;
+- MSL/CSV/MLG/MDF readers feed common file-backed channel/source semantics rather than Dashboard-specific JSON;
+- the current MSL player contributes useful techniques: primitive columnar arrays, background parse, generation cancellation, binary-search playback and decoupled UI cadence;
+- the current MSL player's hardcoded channel aliases, full selected-log materialization and JSON callback model do **not** transfer as architecture;
+- writer/UI/analyzer paths remain independent and communicate through bounded sample/query contracts;
+- mobile writer decisions prioritize file size first, then sustained read/write efficiency, CPU/thermal cost and recoverability;
+- large-log analysis is lazy/range-based with rebuildable indexes/caches and viewport-sized spike-preserving min/max results;
+- recovery/journal metadata never fabricates missing measurement data.
+
+Remaining work:
+
+- genuine executable MLG format/golden-vector corpus and compatibility qualification;
+- MDF version/compression interoperability benchmarks;
+- Android storage-path policy;
+- writer power-loss/recovery implementation proof;
+- identical-workload file-size/CPU/read/write benchmarking on target devices.
+
+---
+
+# Completed deep-dive: diagnostics / performance / lifecycle tracing
+
+Evidence: `DIAGNOSTICS_EVIDENCE.md`.
+
+Permanent findings:
+
+- diagnostics are **observational**; production domains remain decision/action authority;
+- structured events, warning incidents, performance metrics and lifecycle-owner traces are separate data types;
+- event/metric histories are bounded;
+- hot-path metric recording stays cheap/primitive while percentile aggregation/serialization is out-of-band;
+- explicit units/kinds/stable metric IDs replace name-based unit inference;
+- monotonic time owns durations/order; wall clock owns human chronology;
+- p50/p95/p99/max matter for latency/jank/transport/analyzer qualification;
+- warning acknowledgement never alters underlying rule/channel truth;
+- correlation/session/generation IDs link Kotlin and Rust evidence without merging subsystem ownership;
+- Kotlin owns Android/platform diagnostics, Rust owns engine diagnostics;
+- Rust diagnostics cross JNI in bounded snapshots/batches rather than callbacks per event/sample;
+- measurement logging and diagnostics remain distinct, with only explicit event integration;
+- support export should offer both human-readable and stable machine-readable forms.
+
+Remaining work: final typed event/metric schema, retention/persistence policy and export schema/format.
+
+---
+
 # Current inventory tranche
 
-Primary next target: **logging/playback/MLG interoperability and the transition architecture toward MDF4**.
+Primary next target: **Tune Viewer parsing/visualization architecture lessons**.
 
 Review goals:
 
-- inventory current EpicDash-JZ MSL playback/CSV/logging state and ownership;
-- incorporate existing project decisions that live acquisition path is optimized first, then MLG writer, then MDF4 evaluation;
-- separate live acquisition/session/channel storage from concrete file format;
-- preserve MLG/MegaLogViewer interoperability without making MLG the internal measurement model;
-- define how live and file playback use the same `ChannelSource`/measurement query path;
-- inventory file-size/performance/recovery requirements for Android phones/tablets;
-- establish the writer/read/index/recovery responsibility split before implementation;
-- avoid making UI or a format parser the measurement authority.
+- inspect the qualified EpicEFI Tune Viewer repository rather than assuming its data model;
+- identify reusable parsing, tune-diff, table/curve/scalar classification and visualization techniques;
+- separate viewer-only convenience state from authoritative tuning/profile state;
+- determine whether its navigation/search/compare/export features belong in EpicHub Tuner, project comparison or Analyzer;
+- preserve useful visualization and large-tune performance lessons without importing duplicate parsers or alternate tune authority;
+- identify any reusable tests/fixtures for profile/tune interpretation.
 
-## Subsequent tranches
+## Subsequent tranche
 
-- diagnostics/performance architecture;
-- Tune Viewer visualization/parsing lessons;
-- tuning plugin algorithms for future analyzer/autotune responsibilities.
+- AE/PID/TCharge/Injection Angle plugin repositories for future analyzer/autotune responsibilities.
+
+After those source reviews, Phase 1 should pivot from broad archaeology to closing the remaining explicit design/fixture/benchmark decisions and deciding whether the review gate is satisfied for Phase 2 scaffolding.
