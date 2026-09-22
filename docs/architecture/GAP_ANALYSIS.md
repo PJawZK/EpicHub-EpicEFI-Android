@@ -37,20 +37,23 @@ Still required:
 
 Status: `PROPOSED`.
 
-## MDF4 writer / reader / recovery
+## Logging / measurement writers
+
+Responsibility ownership is now resolved by `LOGGING_INTEROP_EVIDENCE.md`; implementation/proof remains.
 
 Still required:
 
-- streaming writer;
+- format-neutral bounded sample frame/batch path;
+- live acquisition benchmark before writer coupling;
+- production MLG writer/reader with executable compatibility corpus;
+- MDF4 streaming writer/reader;
 - metadata/channel mapping;
 - block sizing/buffering;
-- version/compression decision;
 - crash/power-loss recovery/finalization;
-- lazy reads/indexing;
-- independent interoperability corpus;
-- Android file-size/CPU/storage benchmarks.
+- independent interoperability qualification;
+- identical-workload Android file-size/CPU/storage/read/write benchmarks.
 
-Status: `PROPOSED`.
+Status: `PROPOSED IMPLEMENTATION`, not an ownership-discovery gap.
 
 ## Native analyzer / plot-resolution engine
 
@@ -69,7 +72,7 @@ Status: `PROPOSED`.
 
 ## Compose application shell
 
-Responsibility ownership is now substantially resolved by the UI interaction archaeology, but the actual clean Compose implementation remains Phase 2 work.
+Responsibility ownership is substantially resolved by the UI interaction archaeology, but the actual clean Compose implementation remains Phase 2 work.
 
 Still required:
 
@@ -83,18 +86,22 @@ Still required:
 
 Status: `PROPOSED IMPLEMENTATION`, not an ownership-discovery gap.
 
-## Unified structured diagnostics
+## Structured diagnostics implementation
+
+Responsibility ownership is now resolved by `DIAGNOSTICS_EVIDENCE.md`.
 
 Still required:
 
-- common event schema/correlation/session IDs;
+- typed event schema;
+- typed metric descriptors/units/kinds;
+- cross-domain correlation/session IDs;
 - Kotlin platform adapter;
-- Rust event ring;
-- bounded history;
-- performance counters;
-- report/export model.
+- Rust bounded event ring/metric windows;
+- warning-incident persistence model;
+- report snapshot/export schema;
+- machine-readable qualification output.
 
-Status: `PROPOSED` from a `PROVEN` diagnostic need.
+Status: `PROPOSED IMPLEMENTATION`, not an ownership-discovery gap.
 
 ---
 
@@ -118,6 +125,8 @@ Candidates:
 - MDF 4.2 + Deflate for compatibility;
 - MDF 4.3 + LZ4 for live performance;
 - MDF 4.3 + Zstd for storage/archive.
+
+Must be compared on the same acquisition/channel workload, with mobile file size as the first decision metric and CPU/thermal/read/write/interoperability costs measured directly.
 
 Status: `OPEN BENCHMARK/INTEROP DECISION`.
 
@@ -320,6 +329,97 @@ Status: `OPEN PHYSICAL/PERFORMANCE GAP`.
 
 ---
 
+# Logging / playback / interoperability: responsibility archaeology completed
+
+Evidence document: `LOGGING_INTEROP_EVIDENCE.md`.
+
+Resolved rules:
+
+- live acquisition/channel authority is format-neutral;
+- live path is proven/optimized before writer implementation becomes the focus;
+- MLG is the first writer for ecosystem interoperability, not the internal data model;
+- MDF4 remains the long-term native-format candidate behind EpicHub's own measurement abstraction;
+- file size is the primary mobile format metric, followed by sustained I/O/CPU/thermal/recovery behavior;
+- MSL/CSV/MLG/MDF are isolated readers/writers feeding common channel/source semantics;
+- playback clock/state is separate from measurement data;
+- current MSL primitive columnar parsing/generation cancellation/binary-search playback are useful techniques, while hardcoded alias/JSON/full-memory design is not;
+- writer/UI/analyzer threads are independent and communicate through bounded batches/queries;
+- large-log analysis is lazy/range-based with rebuildable indexes/caches;
+- plot reduction preserves spikes and is viewport-driven;
+- writer recovery metadata never fabricates measurement data.
+
+## Remaining logging/format evidence and implementation
+
+### MLG executable compatibility corpus
+
+Need authoritative/genuine fixtures for real MLG structure, metadata, records, timestamps, finalization/truncation and MegaLogViewer/TunerStudio compatibility.
+
+Do not derive the production writer from one log file or repeated-block appearance alone.
+
+Status: `OPEN FIXTURE/INTEROP GAP`.
+
+### MDF interoperability/version/compression
+
+Need independent-reader cross-checks, version/compression corpus and identical-workload Android measurements.
+
+Status: `OPEN BENCHMARK/INTEROP GAP`.
+
+### Android recording storage policy
+
+Need app-controlled hot sequential recording location, retention/quota behavior and user export/share policy. SAF remains outside the hot writer loop.
+
+Status: `OPEN PRODUCT/PLATFORM DESIGN`.
+
+### Writer power-loss recovery
+
+Need actual checkpoint/finalization/recovery implementation and fault-injection qualification.
+
+Status: `OPEN IMPLEMENTATION/TEST GAP`.
+
+---
+
+# Diagnostics / performance: responsibility archaeology completed
+
+Evidence document: `DIAGNOSTICS_EVIDENCE.md`.
+
+Resolved rules:
+
+- diagnostics are observational and never become hidden subsystem control authority;
+- structured events, warning incidents, performance metrics and lifecycle/owner traces are separate types;
+- event/metric/history storage is bounded;
+- metric hot paths record cheap primitive samples/counters and aggregate on reads;
+- metric descriptors own explicit units/kinds/stable IDs;
+- p50/p95/p99/max are first-class for latency/jank/queue qualification;
+- monotonic and wall clocks have distinct responsibilities;
+- warning acknowledgement does not mutate channel/rule truth;
+- correlation/session/generation IDs span Kotlin/Rust evidence without merging ownership;
+- Kotlin owns Android/platform diagnostics while Rust owns engine diagnostics;
+- diagnostics cross JNI in bounded snapshots/batches;
+- measurement logging and diagnostics remain distinct;
+- support/qualification export should have a stable machine-readable form in addition to human text.
+
+## Remaining diagnostics implementation decisions
+
+### Event/metric schema
+
+Need final stable event codes, typed fields, metric IDs/units/kinds and ABI/export representation.
+
+Status: `OPEN IMPLEMENTATION DESIGN`.
+
+### Retention/persistence policy
+
+Need exact in-memory ring sizes, warning/incident persistence scope and previous-run crash/uncertainty summaries.
+
+Status: `OPEN PRODUCT/IMPLEMENTATION DESIGN`.
+
+### Report/export schema
+
+Need versioned structured diagnostic snapshot/export plus human-readable rendering and Android user export path.
+
+Status: `OPEN FORMAT/IMPLEMENTATION DESIGN`.
+
+---
+
 # Phase 1 archaeology completed enough to leave deferred list
 
 Stable responsibility-level decomposition now exists for:
@@ -329,7 +429,9 @@ Stable responsibility-level decomposition now exists for:
 - firmware request/response framing and `S/Q/O/R/C/B` paths;
 - original ESP32 BLE↔CAN bridge and evolved Android BLE lifecycle;
 - tuning project authority, derived caches, portable recovery and operation uncertainty journals;
-- Dashboard/Tuner interaction, responsive and rendering responsibility boundaries.
+- Dashboard/Tuner interaction, responsive and rendering responsibility boundaries;
+- logging/playback/MLG/MDF transition responsibilities;
+- diagnostics/performance/lifecycle tracing responsibilities.
 
 This means ownership is known, not that Phase 2 implementation/qualification is complete.
 
@@ -339,7 +441,7 @@ This means ownership is known, not that Phase 2 implementation/qualification is 
 
 Next-highest-value Phase 1 reviews:
 
-1. logging/playback/MLG investigations and transition path toward MDF4;
-2. diagnostics-core/reusable diagnostics schemas;
-3. Tune Viewer parsing/visualization lessons;
-4. AE/PID/TCharge/Injection Angle plugin repositories for future analyzer/autotune responsibilities.
+1. Tune Viewer parsing/visualization lessons;
+2. AE/PID/TCharge/Injection Angle plugin repositories for future analyzer/autotune responsibilities.
+
+After these reviews, Phase 1 should primarily close the explicit design, fixture and benchmark gaps above rather than continue broad archaeology indefinitely.
