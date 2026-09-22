@@ -2,7 +2,9 @@
 
 ## Purpose
 
-EpicHub should have one clear mutable authority for each important state. Snapshots/projections may be copied for presentation/performance, but they must not silently become competing authorities.
+EpicHub has one clear mutable authority for each important state. Snapshots/projections/caches may be copied for presentation/performance, but they never silently become competing authorities.
+
+---
 
 ## Android application state
 
@@ -12,15 +14,10 @@ Examples:
 
 - Activity/process foreground/background state;
 - Android permission results;
-- current user-selected navigation route;
+- current navigation route;
 - platform service attachment state.
 
-Not owned here:
-
-- ECU session truth;
-- runtime channel values;
-- tune image;
-- MDF/log history.
+Not owned here: ECU session truth, runtime channels, tune image, logs.
 
 ## Android USB resource state
 
@@ -28,46 +25,68 @@ Owner: Kotlin `platform/usb` until/unless a selected native transport explicitly
 
 Examples:
 
-- discovered `UsbDevice` facts;
+- discovered device facts;
 - permission request/result;
 - opened `UsbDeviceConnection` lifetime;
 - claimed interfaces/endpoints;
-- native FD handoff metadata if used.
+- native FD/handle handoff metadata if used.
 
-ECU protocol/session authority remains Rust-side once the engine session begins.
+ECU protocol/session authority is separate.
 
 ## BLE/GATT connection state
 
-Owner: Kotlin `Esp32GattClient`/Bluetooth platform domain.
-
-Examples:
-
-- scan/connecting/online/offline/retry state;
-- active GATT object;
-- discovered characteristics;
-- current MTU/write scheduling state.
-
-Accessory semantic state is separate.
-
-## Accessory semantic state
-
-Owner: Kotlin `AccessoryStateStore`.
+Owner: Kotlin `Esp32GattClient` + one connection-wide BLE operation scheduler.
 
 Tracks:
 
-- requested state/value;
-- confirmation/acknowledgement state;
-- last confirmed hardware-reported state where supported;
-- pending/failure/unavailable state;
-- correlation/timestamp information.
+- scan/connecting/online/offline/retry state;
+- active GATT object;
+- discovered legacy/versioned characteristics;
+- MTU/priority state;
+- one ordered GATT operation queue/in-flight operation.
 
-Physical relay/GPIO truth and failsafe ownership remain ESP32 firmware-side. The Android store is the app's best known semantic state, not an assertion that a relay is physically energized without feedback.
+This state says what Android BLE transport is doing, not what a downstream CAN consumer or physical output has done.
+
+## Legacy ESP32 bridge semantic state
+
+Owner: Kotlin `Esp32BridgeGateway`/bridge state model.
+
+Tracks where useful:
+
+- current requested/last-sent button mask;
+- bridge variable requests and correlation/timeouts/partial results;
+- transport completion/failure;
+- bridge availability;
+- downstream state as `unknown` unless independently observed.
+
+Important invariant:
+
+A successful GATT write is not a downstream CAN/action acknowledgement.
+
+The reviewed original bridge does not expose confirmed physical relay/GPIO output state because it is not a direct-output controller.
+
+## Future direct ESP32 output state
+
+Owner only if a versioned direct-output capability is deliberately added: Kotlin direct-output semantic state store backed by explicit protocol acknowledgement/state feedback.
+
+Tracks:
+
+- requested output state;
+- pending/accepted/rejected request;
+- confirmed hardware-reported state where protocol provides it;
+- hardware fault/unavailable state.
+
+Physical output truth, boot/default state, interlocks and disconnect/watchdog fail-safe remain ESP32 firmware authority.
+
+No direct-output state is inferred from legacy button bridge traffic.
 
 ## Location state
 
-Owner: Kotlin `AndroidLocationSource` publishes immutable current `LocationSample` values.
+Owner: Kotlin `AndroidLocationSource` publishes immutable `LocationSample` values.
 
-Consumers receive snapshots. Dashboard/accessory code must not independently mutate GPS truth.
+Consumers receive snapshots. GPS-specific encoders may adapt those samples to the generic legacy variable-set bridge but do not become location authority.
+
+---
 
 ## ECU connection/session state
 
@@ -76,13 +95,13 @@ Owner: one Rust ECU session.
 Tracks at minimum:
 
 - session/generation identity;
-- transport attached/detached state;
+- attached/detached state after transport handoff;
 - live firmware signature/recognition;
 - accepted exact profile identity;
-- streaming/preflight state;
+- synchronization/streaming state;
 - exclusive operation owner/state;
 - disconnect invalidation;
-- protocol health/errors relevant to session authority.
+- protocol health relevant to authority.
 
 No second dashboard/tuner session owner is permitted.
 
@@ -92,123 +111,210 @@ Owner: Rust profile domain.
 
 Authoritative source:
 
-- exact imported generated INI bytes/content + fingerprint/signature identity.
+- exact imported generated INI bytes/content;
+- its exact source fingerprint/signature identity.
 
-Compiled schemas/caches are immutable derived projections tied to that exact source fingerprint.
+Compiled schemas/caches are immutable derived projections tied to that source identity.
 
-No UI-owned or board-name-derived profile geometry may compete with this authority.
+No UI-owned or board-name-derived geometry competes with this authority.
 
 ## Runtime channel state
 
 Owner: Rust `ChannelStore`.
 
-Tracks typed current observations including:
+Tracks typed observations including:
 
-- value;
+- value/raw representation where appropriate;
 - source;
 - timestamp;
 - revision/sequence;
-- validity/freshness;
-- raw/physical representation where appropriate.
+- validity/freshness.
 
-Dashboard, logger, analyzer, warnings and calculations consume projections/queries from this store or compatible file-backed measurement sources.
+Dashboard, logger, analyzer, warnings and calculations consume snapshots/queries. Compose never becomes high-rate channel authority.
 
-Compose receives immutable bounded display snapshots and never becomes high-rate channel authority.
-
-## Tune state
+## Live tune state
 
 Owner: Rust tuning domain once migrated/qualified.
 
 Authoritative elements:
 
 - current complete immutable verified `TuneSnapshot`;
-- its exact profile/session/tune fingerprint identity;
+- exact ECU/profile/session/tune identity;
 - verified dirty-page state;
 - mutation uncertainty state;
 - explicit Burn transaction state.
 
-Local UI draft/edit state may exist separately, but it must be visibly distinct from verified ECU RAM state.
+A requested UI value is not ECU RAM state until the write verification contract succeeds.
 
-A requested UI value is not ECU state until the complete write verification contract succeeds.
+---
 
-## Tune project persistence
+# Tuning persistence categories
 
-Authoritative persisted project tuple:
+These categories are deliberately independent.
 
-- exact generated profile/INI;
-- matching complete verified TuneSnapshot;
-- version/fingerprint metadata required to prevent incompatible interpretation.
+## 1. Persisted project authority
 
-Compiled workspace/profile projections are caches only.
+Owner: Rust tuning/project domain.
 
-The new app may choose a different storage schema/path from EpicDash-JZ, but must preserve this authority principle.
+Authoritative persisted tuple:
+
+```text
+exact generated INI/profile source
++ last complete verified TuneSnapshot
++ version/identity metadata required to validate the tuple
+```
+
+The new app may use a different storage format/path from EpicDash-JZ, but this authority principle is permanent.
+
+A project with only a valid INI is definition-only. A saved snapshot is accepted only when it belongs to that exact profile identity.
+
+## 2. Derived tuning acceleration
+
+Owner: Rust profile/tuning cache layer.
+
+Examples:
+
+- compiled profile/schema;
+- semantic tuner projection cache;
+- decoded/optimized lookup structures.
+
+Rules:
+
+- exact source/profile fingerprint-bound;
+- disposable/rebuildable;
+- stale async work cannot install a cache for a newer project generation;
+- never an alternate authority.
+
+Historical giant WebView/bootstrap JSON caches do not carry forward.
+
+## 3. User recovery / portable backup
+
+Authority: no independent tune authority. It is a portable representation of the project authority tuple.
+
+Schema/integrity owner: Rust project backup codec.
+
+Android URI/picker/export/import transport owner: Kotlin storage/document layer.
+
+Restoring a backup must:
+
+1. validate archive/schema/size;
+2. parse/validate exact profile source;
+3. validate optional complete TuneSnapshot against that profile;
+4. transactionally commit a new local project-authority generation;
+5. roll back on incomplete commit/verification.
+
+Selecting/importing a backup never grants live ECU mutation authority.
+
+## 4. Tuning operation uncertainty journal
+
+Owner: Rust tuning transaction/recovery domain.
+
+Purpose: record durably that an ECU-changing operation may have crossed the point of possible transmission and final hardware state is not yet proven.
+
+This journal is **not** a TuneSnapshot and is **not** project authority.
+
+Required lifecycle:
+
+```text
+verified operation plan
+→ durable journal write + fsync + reread
+→ possible C/B transmission permitted
+→ ACK/readback/full snapshot or Burn evidence
+→ final state proven
+→ durable journal clear
+```
+
+If the process dies/crashes/disconnects after marker durability but before proven clear, the next session is recovery-required.
+
+Present or corrupt journal blocks new mutation until deliberate resynchronization. No automatic replay.
+
+Journal identity should bind at least:
+
+- operation ID/kind/phase;
+- ECU signature/profile fingerprint;
+- source session/generation;
+- baseline tune fingerprint;
+- expected tune fingerprint;
+- write-plan fingerprint/affected pages;
+- Burn request/status identity where relevant.
+
+Historical scalar-pilot raw-byte fields and forced restore/power-cycle sequences are proof machinery, not permanent UX requirements.
+
+### Project snapshot vs journal rule
+
+A clean saved TuneSnapshot does not silently clear an uncertainty journal. Conversely, a journal does not replace the saved TuneSnapshot.
+
+After uncertainty, a fresh live complete read/status verification establishes what the ECU actually contains before any new write/Burn.
+
+## 5. UI edit/draft state
+
+Owner: Kotlin Tuner ViewModel for transient presentation interaction, with Rust semantic draft/model state where calculations or persistent local edits require it.
+
+Draft values are explicitly distinct from:
+
+- saved project snapshot;
+- verified live ECU RAM;
+- operation journal.
+
+Whether user drafts survive process death is a product decision; persistence of a draft must never promote it to verified tune authority.
+
+---
 
 ## Logging session state
 
 Owner: Rust logging domain.
 
-Tracks:
-
-- recording session identity;
-- selected channels/config;
-- start/stop state;
-- writer state;
-- samples/events received/written/dropped;
-- file/recovery state;
-- current byte count/duration/throughput.
+Tracks session identity, configuration, writer state, samples/events received/written/dropped, file recovery state, byte count/duration/throughput.
 
 Logger Compose state is a projection only.
 
 ## MDF/file state
 
-Owner: Rust MDF/measurement writer or reader instance for each opened file.
+Owner: Rust MDF/measurement reader/writer for each opened file.
 
-Sidecar indexes/caches are derived/rebuildable unless explicitly documented otherwise.
-
-A corrupt/stale sidecar must never override the measurement file's validated source data.
+Sidecar indexes/caches are derived/rebuildable unless explicitly documented otherwise. Stale/corrupt sidecars never override validated measurement data.
 
 ## Analyzer state
 
-Heavy data/caches/query execution: Rust analysis domain.
+Heavy dataset/query/cache state: Rust analysis domain.
 
-Presentation interaction state such as currently selected channels, cursor position, viewport and open panels: Kotlin Compose/ViewModel.
+Presentation interaction state—selected channels, viewport, cursor, open panels: Kotlin ViewModel/Compose.
 
-The boundary should send semantic query/viewport requests and receive bounded results. Kotlin must not duplicate the entire log dataset.
+Kotlin never duplicates the entire log dataset.
 
 ## Dashboard layout/edit state
 
-Owner for user-editable presentation layout: Kotlin dashboard/editor domain, persisted via an explicit versioned layout schema.
+Owner: Kotlin dashboard/editor domain, persisted through an explicit versioned layout schema.
 
-Channel values referenced by bindings remain Rust ChannelStore-owned.
-
-Compiled/render-optimized layout projections, if introduced, are derived from the editable layout and may be rebuilt.
+Bound runtime channel values remain Rust ChannelStore-owned.
 
 ## Settings state
 
-Owner: a future typed Kotlin settings store/repository to be specified before Phase 2.
+Owner: typed Kotlin settings store/repository to be locked before Phase 2.
 
-Settings must not duplicate authoritative ECU/profile/tune values. A preference may affect presentation or requested behavior, but does not replace live/profile authority.
+Preferences cannot duplicate authoritative ECU/profile/tune values.
 
 ## Diagnostics state
 
-Engine diagnostic event history: bounded Rust diagnostic event ring.
+Engine event history: bounded Rust diagnostics.
 
-Android/platform diagnostic state: Kotlin platform diagnostics.
+Android/platform diagnostics: Kotlin platform diagnostics.
 
-The Diagnostics UI combines projections but does not mutate subsystem authority.
+Diagnostics UI combines projections only.
 
-## State vs event rule
+---
 
-Persistent/current facts use state/snapshot models.
+# State vs event rule
 
-One-time occurrences use events.
+Persistent/current facts use state/snapshot models. One-time occurrences use events.
 
 Examples:
 
 - `RPM=3200` — state;
-- `ESP32=ONLINE` — state;
+- `ESP32 bridge ONLINE` — state;
 - `TuneWriteFailed` — event;
-- `AccessoryCommandAcknowledged` — event;
+- `BleWriteCompleted` — transport event;
+- `DirectOutputConfirmed` — event only if a versioned protocol actually supplied confirmation;
 - `LoggerStarted` — event.
 
-Events must not accidentally become a second mutable state model through callback accumulation.
+Events must not become a second mutable state model through callback accumulation.
