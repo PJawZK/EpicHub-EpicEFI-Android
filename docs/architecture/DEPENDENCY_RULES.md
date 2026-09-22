@@ -2,101 +2,112 @@
 
 ## Purpose
 
-The codebase topology is useful only if dependency direction prevents domains from silently absorbing each other's responsibilities.
+The topology only works if dependency direction prevents domains from silently absorbing each other's responsibilities.
 
-These are Phase 1 architectural rules. Exact crate/package visibility is finalized before implementation.
+These are Phase 1 rules. Exact crate/package visibility is finalized before implementation.
 
 ## Core direction
 
 ```text
 Compose UI
   │
-  ├─► semantic actions ─► Kotlin platform/accessory owners
+  ├─► semantic actions ─► Kotlin platform / bridge / accessory owners
   │
   └─► NativeEngine façade ─► JNI/FFI ─► Rust Engine
                                       │
                          ┌────────────┼────────────┐
                          ▼            ▼            ▼
                        ECU/Profile  Channels      Tuning
-                                      │
-                           ┌──────────┼──────────┐
-                           ▼          ▼          ▼
-                         Logging     MDF      Analysis
-                                                │
-                                                ▼
-                                             Plotting
+                                      │             │
+                           ┌──────────┼──────┐      ├─ project authority
+                           ▼          ▼      ▼      └─ operation journal
+                         Logging     MDF   Analysis
+                                               │
+                                               ▼
+                                            Plotting
 ```
 
-Dependencies should point toward lower-level domain contracts, never toward presentation consumers.
+Dependencies point toward lower-level domain contracts, never toward presentation consumers.
 
 ## Kotlin UI rules
 
-Compose UI may depend on:
+Compose may depend on:
 
 - UI models/state;
-- `ActionRouter` and semantic action contracts;
-- the Kotlin `NativeEngine` façade;
-- Android presentation helpers/components.
+- semantic `ActionRouter` contracts;
+- Kotlin `NativeEngine` façade;
+- presentation helpers.
 
-Compose UI must not depend directly on:
+Compose must not depend directly on:
 
 - ECU framing/CRC;
 - raw tune pages/offsets/encoded bytes;
 - MDF block structures;
-- Android BLE characteristic objects for normal accessory actions;
-- raw GPIO mappings;
-- historical WebView/JavaScript bridge contracts.
+- BLE characteristic objects for semantic actions;
+- CAN IDs/button masks/raw GPIO as user-facing identity;
+- historical WebView/JS bridge contracts.
+
+A UI draft is not verified ECU or persisted project authority.
 
 ## Kotlin platform rules
 
-Android platform packages may use Android framework APIs and expose narrow domain-neutral/resource abstractions upward.
+Android platform packages may use Android framework APIs and expose narrow resource abstractions upward.
 
-`platform/usb` must not parse tune values or own profile compatibility.
+- `platform/usb` does not parse tunes or decide profile compatibility.
+- `platform/bluetooth` does not interpret downstream CAN/action success.
+- `platform/location` does not own dashboard widgets or generic ESP32 variable-set semantics.
+- `platform/storage` does not implement MDF/tune/profile serialization or decide whether a project generation is valid.
 
-`platform/bluetooth` must not decide accessory semantic meaning.
+Android SAF/document code moves validated/imported/exported bytes and URI permissions; Rust project/tuning code owns archive/project schema and identity validation.
 
-`platform/location` must not own dashboard widgets or GPS-to-ESP32 wire encoding.
+## Legacy bridge rules
 
-`platform/storage` must not implement MDF/tune serialization.
+Legacy ESP32 bridge code may depend on:
 
-## Accessory rules
-
-`accessory` may depend on:
-
-- semantic action contracts;
-- Bluetooth transport client/schema;
-- location data for explicit GPS forwarding;
-- a coarse channel publisher into Rust.
+- semantic action/bridge request contracts;
+- Bluetooth transport/schema;
+- location values only through an explicit GPS→variable-set encoder;
+- coarse channel ingestion into Rust.
 
 It must not depend on:
 
 - ECU tune-memory internals;
-- MDF implementation details;
+- MDF internals;
 - Dashboard-specific state.
 
-The ESP32 firmware remains physical output authority; Android accessory code must not expose raw GPIO mutation to layouts/scripts.
+The generic variable-set codec must not import location; GPS is only one producer.
+
+There is one connection-wide GATT operation scheduler. Button, variable-request and variable-set producers do not each own independent GATT write pipelines.
+
+GATT completion is transport evidence only and cannot be promoted into downstream ECU/CAN confirmation.
+
+## Future direct ESP32 output rules
+
+Direct relay/GPIO control is not part of legacy bridge compatibility.
+
+If added, versioned direct-output code may depend on the BLE transport but remains semantically separate from legacy button forwarding. Android layouts never receive raw GPIO authority.
+
+Physical output mapping/defaults/interlocks/watchdog/disconnect fail-safe remain ESP32 firmware-owned.
 
 ## Native boundary rules
 
 Normal Kotlin production code calls Rust only through `nativeengine`.
 
-The FFI surface must be coarse and semantic. Prohibited design patterns include:
+FFI is coarse and semantic. Prohibited patterns include:
 
 - one JNI getter per channel;
 - one JNI call per ECU sample;
-- Rust→Kotlin callbacks per sample/channel;
-- passing large object graphs through JNI when packed/shared buffers are suitable;
-- exposing Rust internal pointers/struct layout without a versioned ABI contract.
+- callbacks per sample/channel;
+- huge object graphs where packed/shared buffers fit;
+- exposing internal Rust pointers/layout without versioned ABI.
 
 ## Rust engine rules
 
-`epichub-engine` composes subsystems but should delegate protocol/file-format/analysis implementation to owning crates/modules.
+`epichub-engine` composes lifetimes/transactions but delegates protocol/file-format/profile/tuning/analysis to their owners. It must not become a replacement giant `Manager`.
 
-It may coordinate lifetimes and transactions; it should not become a new giant `Manager`.
+## Channel rules
 
-## Channels rules
-
-`epichub-channels` is domain-neutral measurement/runtime state.
+`epichub-channels` is domain-neutral runtime/measurement state.
 
 It must not import:
 
@@ -105,77 +116,117 @@ It must not import:
 - MDF block structures;
 - ESP32 GATT types.
 
-ECU/GPS/accessory sources adapt observations into channel/sample contracts.
+ECU/GPS/bridge sources adapt observations into sample/channel contracts.
 
 ## ECU rules
 
-ECU protocol code may depend on transport/profile/channel primitives required to interpret firmware data.
+ECU protocol code may depend on transport/profile/channel primitives needed for firmware communication.
 
 It must not depend on:
 
 - Dashboard/Tuner Compose packages;
 - MDF writer internals;
-- accessory BLE/GATT;
-- arbitrary app settings.
+- BLE/GATT accessory code;
+- arbitrary UI settings.
+
+Request framing, response framing/status, synchronization policy and typed command operations remain distinct responsibilities.
 
 ## Profile rules
 
-Profile parsing/model code owns interpretation of the exact generated profile/INI.
+Profile code owns exact generated-INI interpretation.
 
-Other domains consume typed compiled schemas rather than reparsing the INI independently.
+Other domains consume typed compiled schemas; there is no second parser in Tuner/Dashboard.
 
-There must not be a second profile parser hidden in the tuner or dashboard.
+Profile condition compatibility/write authority remains independently tested from the general analyzer expression language.
+
+Derived compiled profile/schema caches depend on exact source identity and are disposable.
 
 ## Tuning rules
 
 Tuning may depend on:
 
-- accepted profile tune schema;
-- sole ECU session/transport operation interface;
-- immutable TuneSnapshot identity.
+- accepted profile tune/condition schema;
+- sole ECU session operation interface;
+- immutable TuneSnapshot identity;
+- app-private persistence primitive/path;
+- project backup byte I/O adapter where necessary.
 
-It must not accept raw page/offset/byte payloads from UI/actions/scripts as production edit requests.
+It must not accept raw page/offset/bytes from UI/actions/scripts as production edit requests.
 
-Burn remains a tuning transaction, not a UI or generic transport function.
+Burn remains a tuning transaction, not UI/generic transport behavior.
 
-## Logging/MDF rules
+### Project persistence rule
 
-`logging` orchestrates recording sessions and writes sample/event batches through a measurement writer abstraction.
+Rust tuning/project code owns the meaning and integrity of:
 
-`mdf` implements MDF format mechanics.
+```text
+exact profile source + complete verified TuneSnapshot
+```
+
+Kotlin storage code may provide path/URI/file transport but never decides that a project/profile/snapshot pair is authoritative.
+
+Compiled schemas, semantic projections and startup caches are derived acceleration only.
+
+### Portable backup rule
+
+Portable recovery/backup is an encoding of project authority, not a third authority.
+
+Import flow is:
+
+```text
+Android document bytes
+→ Rust backup/schema validation
+→ exact profile parse + snapshot identity validation
+→ transactional local project-generation commit
+```
+
+Export reverses this without exposing tune mutation authority.
+
+### Operation journal rule
+
+The tuning operation journal depends on tuning transaction identity and durability primitives, but is independent from portable project backup.
+
+It must be durable before possible hardware mutation, and its presence/corruption blocks further mutation until resynchronization. It never authorizes automatic replay.
+
+No saved project cache may automatically clear an uncertainty journal.
+
+## Logging / MDF rules
+
+`logging` orchestrates recording and writes sample/event batches through a measurement-writer abstraction.
+
+`mdf` implements MDF mechanics.
 
 Therefore:
 
-- `logging` should not duplicate MDF block code;
-- `mdf` should not know UI/dashboard/tune semantics;
-- the dashboard must not be in the write path.
+- logging does not duplicate MDF blocks;
+- MDF knows no Compose/dashboard/tune semantics;
+- Dashboard is not in the writer path.
 
-## Analysis/plotting rules
+## Analysis / plotting rules
 
 `analysis` operates on measurement/channel sources and produces semantic results.
 
-`plotting` turns relevant time-series results into viewport-sized trace packets.
+`plotting` produces viewport-sized trace packets.
 
-Neither depends on Compose. Compose renders prepared results and owns user interaction/cursors/viewport requests.
+Neither depends on Compose. Compose owns interaction/cursors/viewport requests only.
 
 ## Diagnostics rules
 
-Diagnostics may observe/report other systems but should not become their decision authority.
+Diagnostics observe/report but do not become subsystem decision authority.
 
-Instrumentation must not change queue/transport/tuning decisions merely to make metrics easier to collect.
+Instrumentation must not change queue/transport/tuning decisions merely for convenience.
 
 ## Interop rules
 
-MSL/MLG/CSV adapters translate external formats into/out of EpicHub's common measurement/channel contracts.
-
-External file formats must not become the runtime data model used throughout the app.
+MSL/MLG/CSV adapters translate external formats into/out of EpicHub common measurement/channel contracts. External formats do not become the internal runtime model.
 
 ## Enforcement direction
 
-Before Phase 2, these rules should be translated into practical enforcement where worthwhile:
+Before Phase 2, translate important rules into practical enforcement where useful:
 
 - Rust crate dependency graph;
-- Kotlin package/module visibility;
-- lint/architecture tests for prohibited imports;
+- Kotlin visibility/package rules;
+- architecture tests for prohibited imports;
 - FFI ABI tests;
-- code-review checklist.
+- persistence/operation-journal fault-injection tests;
+- review checklist.
