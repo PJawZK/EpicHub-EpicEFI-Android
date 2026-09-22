@@ -20,33 +20,22 @@ Current evidence:
 - CDC communications interface class `0x02`;
 - CDC data interface class `0x0A`;
 - bulk data endpoints;
-- with USB MSD enabled, CDC control/data move to interfaces 1/2; without MSD they are interfaces 0/1.
+- optional USB MSD shifts CDC control/data interface numbers.
 
 Authority rule:
 
 `0483:5740` plus expected CDC shape identifies a shared STM32 EpicEFI/rusEFI transport candidate only. It is not a Mega144H7 identity and grants no runtime decoding/tune-write/Burn authority.
 
-Application evidence/reference:
-
-- EpicDash-JZ `UsbDeviceSelectionPolicy`;
-- `docs/audits/ECU_RECOGNITION_FIRMWARE_EVIDENCE.md`;
-- USB selection/permission tests.
-
 ## Android CDC topology and port setup
 
-Primary authority for device/interface facts is the USB descriptor exposed by Android and the matching firmware descriptor source. EpicDash-JZ `UsbEcuManager` is qualified behavioural evidence for the Android host-side setup sequence.
+Primary authority for descriptor facts is the Android-observed USB topology plus matching firmware descriptor source. EpicDash-JZ is qualified behavioural evidence for host setup.
 
-Current evidence:
+Rules:
 
-- CDC control and data interface numbers cannot be hardcoded because optional mass storage changes them;
-- the control/data relationship can be resolved from CDC Union or Call Management descriptors, then validated against actual bulk IN/OUT endpoints;
-- the Android host path may claim control and data interfaces separately;
-- `SET_LINE_CODING` and `SET_CONTROL_LINE_STATE` are Android/CDC setup operations, not ECU binary-protocol operations;
-- the proven compatibility probe has exercised DTR and DTR+RTS variants.
-
-Authority rule:
-
-Android USB topology discovery, interface claiming and CDC control requests stay outside the ECU protocol codec. Future native runtime-I/O ownership may move below Kotlin only after the Android-opened-FD approach is physically proven; the protocol layer must not depend on one hardcoded interface number or endpoint address.
+- resolve CDC control/data relationships and bulk endpoints from descriptors, not hardcoded interface numbers;
+- interface claiming/release and `SET_LINE_CODING`/`SET_CONTROL_LINE_STATE` are Android CDC concerns, not ECU protocol concerns;
+- proven DTR/DTR+RTS compatibility attempts may inform the Android setup policy;
+- sustained runtime bulk-I/O ownership remains a PoC decision, but upper protocol/session semantics must be unchanged by it.
 
 ## ECU live firmware identity
 
@@ -56,13 +45,11 @@ Primary authority:
 - generated firmware signature headers/build output;
 - `firmware/console/binary/tunerstudio.cpp` query handling.
 
-Current evidence:
-
-`signature.cpp` includes the generated board-specific signature header and `getTsSignature()` returns `TS_SIGNATURE`.
+`getTsSignature()` returns generated `TS_SIGNATURE`.
 
 Authority rule:
 
-The complete live TunerStudio signature is the runtime firmware identity/compatibility token. Parsed board/build components may be displayed diagnostically but do not independently authorize output decoding or tuning.
+The complete live TunerStudio signature is firmware identity/compatibility authority. Parsed board/build components are diagnostic only.
 
 ## Generated INI / profile authority
 
@@ -70,59 +57,42 @@ Primary authority:
 
 The exact generated TunerStudio INI corresponding to the connected firmware signature.
 
-Authority rule:
+Rules:
 
 - exact complete live signature equality with imported generated-INI signature is required before runtime/tune interpretation;
-- generated INI owns runtime output layout, tune schema, page geometry, storage metadata, bounds, scaling and Burn definitions used by EpicHub;
-- board names must not be used to hardcode runtime/tune geometry;
-- compiled representations are derived acceleration only and remain fingerprint-bound to the exact source INI.
+- generated INI owns runtime layout, tune schema, page geometry, storage metadata, bounds, scaling and Burn definitions;
+- board names do not hardcode runtime/tune geometry;
+- compiled representations are derived acceleration only and remain exact-source-fingerprint-bound.
 
-Current EpicDash-JZ parser evidence establishes a deliberately supported subset rather than a generic arbitrary TunerStudio parser. The current accepted path requires:
+Current EpicDash-JZ evidence establishes a supported subset rather than a universal arbitrary TunerStudio parser. Current accepted profiles require, among other validated facts:
 
 - `messageEnvelopeFormat = msEnvelope_1.0`;
-- little-endian channel/tune primitive interpretation;
+- little-endian primitive interpretation;
 - a non-empty query command;
 - an output command beginning with `O`;
-- a valid `ochBlockSize` and parsed scalar/bit output channels;
-- calibration page identifiers/sizes/read commands/Burn commands taken from the exact INI.
+- valid output block/channel definitions;
+- calibration page identifiers/sizes/read/Burn commands taken from the exact INI.
 
-That supported-subset validation is a distinct responsibility from lexical parsing. Future EpicHub must reject unsupported constructs explicitly instead of silently compiling an incomplete profile.
-
-Reference evidence:
-
-- EpicDash-JZ `UsbTunerStudioProfile.kt`;
-- `TuningIniDefinition.kt`;
-- `IniConditionEvaluator.kt`;
-- generated-INI compatibility tests;
-- `reference/ecu/mainController-*.ini`.
+Supported-subset validation is separate from syntax parsing. Unsupported constructs must fail explicitly rather than compile silently incomplete behaviour.
 
 ## TunerStudio request framing
 
 Primary authority:
 
 - `firmware/console/binary/tunerstudio.cpp`, especially `tsProcessOne()`;
-- `firmware/console/binary/tunerstudio_io.h` for packet constants and synchronization state.
+- `firmware/console/binary/tunerstudio_io.h`.
 
-The CRC request frame is asymmetric with the response frame and must be modeled separately:
+CRC request frame:
 
 ```text
-request
-┌───────────────┬────────────────────────┬──────────────┐
-│ BE u16 length │ command + request data │ BE u32 CRC32 │
-└───────────────┴────────────────────────┴──────────────┘
+BE u16 length(command+data)
+command + request data
+BE u32 CRC32(command+data)
 ```
 
-Where:
+CRC excludes the length field. Plain `S/Q` query commands are also accepted in the current firmware detection/startup path.
 
-- `length` is the byte count of `command + request data`;
-- CRC32 covers `command + request data`, not the length field;
-- a known command with valid size and CRC establishes the firmware channel's synchronized state.
-
-Plain `S/Q` query commands are also accepted by current firmware for detection/startup.
-
-Future Rust API rule:
-
-Use a request-specific codec operation such as `encode_request(...)`. Do not expose a single symmetric `envelope()` abstraction that obscures the different response body/status semantics.
+Future Rust rule: request framing has its own `encode_request`-style API.
 
 ## TunerStudio response framing/status
 
@@ -130,154 +100,235 @@ Primary authority:
 
 `firmware/console/binary/tunerstudio_io.cpp` / `tunerstudio_io.h`.
 
-CRC response format is:
+CRC response:
 
 ```text
-response
-┌──────────────────┬────────┬──────────────┬──────────────┐
-│ BE u16 bodyLength│ status │ response data│ BE u32 CRC32 │
-└──────────────────┴────────┴──────────────┴──────────────┘
+BE u16 length(status+data)
+status
+response data
+BE u32 CRC32(status+data)
 ```
 
-Where:
+Rules:
 
-- `bodyLength = 1 + responseDataLength`;
-- the first body byte is the response/status code;
-- CRC32 covers `status + response data`, not the length field;
-- large payloads may be emitted incrementally but retain the same logical framing;
-- protocol error codes are meaningful response status values, not payload bytes to be stripped heuristically.
+- body length includes the one-byte response status;
+- CRC excludes the length field;
+- status is protocol metadata, not arbitrary payload;
+- large payloads may stream incrementally while retaining this logical frame.
 
-Future Rust API rule:
-
-Use response-specific operations such as `decode_response(...) -> { status, payload }`. Status interpretation belongs in typed protocol response handling.
+Future Rust rule: response framing has its own `decode_response -> status + payload` API. Do not use one symmetric `envelope()` abstraction for request and response.
 
 ## Protocol synchronization and probe policy
 
-Firmware authority:
+Firmware authority: `TsChannelBase::in_sync` and `tsProcessOne()`.
 
-`TsChannelBase::in_sync` and `tsProcessOne()` in `tunerstudio_io.h` / `tunerstudio.cpp`.
+Application evidence: EpicDash-JZ plain/framed `S/Q`, framed signature synchronization and bounded read-only `O` probes.
 
-Application behavioural evidence:
+Rules:
 
-EpicDash-JZ deliberately runs a compatibility sequence that can try plain/framed `S/Q`, establishes CRC synchronization with a framed signature command, and verifies bounded read-only `O` requests before normal streaming.
+- synchronization/probe strategy belongs to session policy above the pure codec;
+- profileless recognition may read identity, then closes/stops;
+- profileless mode does not run output preflight, TuneSnapshot reads or mutation operations.
 
-Authority rule:
-
-Synchronization/probe strategy is session policy above the pure frame codec. It must remain read-only until exact profile authority exists. A profileless recognized ECU stops after identity and closes; it does not run output preflight, TuneSnapshot reads or mutation operations.
-
-## Supported command semantics
+## Supported ECU command semantics
 
 Primary authority:
 
-- `firmware/console/binary/tunerstudio.cpp`;
-- `firmware/console/binary/tunerstudio_commands.cpp`;
-- exact generated INI for command/page geometry.
+- firmware `tunerstudio.cpp`;
+- `tunerstudio_commands.cpp`;
+- exact generated INI for page/command geometry.
 
-Current audited path:
+Audited path:
 
-- `S/Q` — query live signature;
-- `O` — request live output bytes by offset/count;
-- `R` — read calibration bytes for page/offset/count;
-- `C` — write a calibration chunk for page/offset/count + bytes;
-- `B` — request Burn for a page.
+- `S/Q` — live signature;
+- `O` — output bytes by offset/count;
+- `R` — calibration page bytes;
+- `C` — calibration chunk write;
+- `B` — page Burn request.
 
-`O` validates requested range against firmware `TS_TOTAL_OUTPUT_SIZE`, updates current TunerStudio state, gathers live-data fragments and returns the requested bytes. `R` and `C` validate page/range against firmware working-page boundaries. `C` can be rejected by firmware lock/preset-refresh policy and applies board configuration overrides. `B` validates the page/configuration and returns a distinct Burn acknowledgement.
-
-Authority rule:
-
-EpicHub implements typed operations corresponding to these semantics. It must not infer page identifiers, output sizes or Burn page mapping from board names.
+`O`, `R`, `C` and `B` validate their ranges/pages in firmware. `C` observes firmware lock/preset rules and board overrides. `B` returns a distinct Burn acknowledgement.
 
 ## INI semantic structure and condition authority
 
-The exact generated INI remains source authority, while EpicHub's compiler/evaluator owns the supported interpretation.
+Distinct responsibilities established by current source:
 
-Distinct responsibilities proven by the current implementation are:
-
-1. lexical/section parsing and escaped-string/list handling;
+1. syntax/source parsing;
 2. supported-subset validation;
 3. runtime-channel schema compilation;
-4. calibration/tune storage schema compilation;
-5. table/curve/menu/dialog semantic structure compilation;
-6. primitive engineering/raw value codecs;
-7. condition expression parsing/evaluation against a verified TuneSnapshot;
+4. tune storage schema compilation;
+5. table/curve/menu/dialog semantic schema compilation;
+6. primitive engineering/raw representation;
+7. condition grammar/evaluation against a verified TuneSnapshot;
 8. fail-closed condition-driven UI/write policy.
 
-`TuningIniDefinition` demonstrates that structural tune surfaces can be compiled from INI without inventing values. `IniConditionEvaluator` demonstrates that conditions are not presentation decoration only: they also constrain whether a semantic target is currently writable. Unsupported/unresolved conditions fail closed for affected writes.
+`TuningIniDefinition` shows structural surfaces can be compiled without inventing tune values. `IniConditionEvaluator` shows conditions can constrain write authority, not just visibility.
 
-Authority rule:
-
-Compose may render condition state, but it must not independently reinterpret conditions or authorize writes. Condition/write authority stays below the UI boundary in the profile/tuning engine.
+Compose may display condition state but does not independently reinterpret it or authorize writes.
 
 ## Tune mutation safety contract
 
-Behaviour authority during Phase 1:
+Behaviour authority: physically accepted EpicDash-JZ workflow plus current INI/firmware reality.
 
-Physically accepted EpicDash-JZ tuning workflow plus exact current INI/firmware protocol reality.
+Required RAM mutation sequence:
 
-Required preserved sequence for normal RAM mutation:
-
-1. current live session/generation/signature/profile/tune identity;
-2. semantic target resolution from exact current INI;
-3. complete baseline verification;
+1. current session/generation/signature/profile/tune identity;
+2. semantic target + active condition authority;
+3. complete baseline reread/verification;
 4. bounded `C` write;
 5. exact acknowledgement;
-6. exact `R` range read-back;
+6. exact `R` range readback;
 7. complete expected TuneSnapshot reread/comparison;
 8. verified RAM state or fail-closed uncertainty.
 
-Normal tune Read/Write/Burn owns one exclusive ECU operation slot and temporarily pauses ordinary output polling. The user-visible stale-data policy must understand that deliberate exclusivity rather than presenting old values as live or raising a false transport failure.
+Normal Read/Write/Burn owns one exclusive ECU-operation slot and deliberately pauses ordinary output polling. Burn remains separate/explicit with flash-state progression and complete post-Burn tune verification.
 
-Burn remains a separate explicit transaction with flash-state evidence and complete post-Burn tune verification.
+## Legacy ESP32 BLE bridge authority
 
-Presentation must not expose arbitrary raw page/offset/bytes as a production mutation API.
+Source evidence:
 
-## ESP32 BLE accessory protocol
-
-Current source authorities/evidence:
-
-- `AKCore/EpicEFIVirtualDash` Android and ESP32 firmware for original wire-format intent;
-- EpicDash-JZ evolved BLE implementation/physical behaviour for reconnect/queue/lifecycle lessons;
-- any future EpicHub-specific ESP32 firmware contract once deliberately versioned.
-
-Current observed wire details:
-
-- service UUID `4fafc201-1fb5-459e-8fcc-c5c9c331914b`;
-- button characteristic `beb5483e-36e1-4688-b7f5-ea07361b26a8`;
-- variable-data characteristic `...a9`;
-- variable-request characteristic `...aa`;
-- GPS/variable-set characteristic `...ab`;
-- button mask is 16-bit little-endian in the original protocol;
-- requested variable hashes and returned hash/value entries are big-endian;
-- batched variable operations are supported by the observed implementation.
+- `AKCore/EpicEFIVirtualDash/Firmware/src/main.cpp` for original ESP32 wire/CAN behaviour;
+- original Android `BleManager.kt` for app-side format intent;
+- EpicDash-JZ evolved `BleManager.kt` for qualified/reworked Android lifecycle/reconnect/queue behaviour.
 
 Authority caution:
 
-The upstream repository currently declares no GitHub license. Protocol/behaviour may be reimplemented cleanly; wholesale source transplantation is not assumed permissible.
+The upstream repository currently declares no GitHub repository license. Protocol/behaviour may be reimplemented cleanly where compatibility is required; source transplantation is not assumed permissible.
 
-Future EpicHub rule:
+### Device/service identity
 
-UI/layouts address semantic accessory actions, not BLE characteristic details or raw GPIOs. The accessory protocol layer resolves those semantics into the required wire format. ESP32 firmware owns physical output mapping/failsafe policy.
+Observed legacy server:
 
-## ESP32 CAN bridge behaviour
+- advertised name `ESP32 Dashboard`;
+- service `4fafc201-1fb5-459e-8fcc-c5c9c331914b`;
+- characteristics `...a8`, `...a9`, `...aa`, `...ab`.
 
-Current observed original protocol:
+The service/characteristic UUID set is stronger protocol identity than a generic device-name match. Discovery policy may use name as a hint but should validate service identity before declaring compatibility.
 
-- button TX CAN ID `0x711`, hardware button-box category 27;
-- variable request base `0x700 + ECU_ID`;
-- variable response base `0x720 + ECU_ID`;
-- GPS/variable-set base `0x780 + ECU_ID`.
+### Button characteristic `...a8`
 
-These values remain protocol evidence, not yet a declaration that every mechanism must remain unchanged in final EpicHub/ESP32 firmware. Phase 1 must distinguish required compatibility from opportunities for a deliberately versioned improved accessory protocol.
+Primary/current Android wire form:
+
+- 16-bit little-endian button mask.
+
+Original firmware also accepts one byte as a legacy single-button ID.
+
+CAN forwarding:
+
+- ID `0x711`;
+- payload `[0x5A, 0x00, 27, maskHi, maskLo]`.
+
+The firmware forwards only when the mask changes.
+
+Important limitation: BLE disconnect does not automatically clear `lastButtonMask` or send a zero/release CAN frame. Release/disconnect behaviour is therefore not a proven failsafe contract and must be explicitly compatibility-tested before changing it.
+
+### Variable request characteristic `...aa`
+
+Android→ESP32:
+
+- one or more 4-byte big-endian variable hashes;
+- original firmware accepts up to 16 per batch;
+- requests are issued sequentially over CAN `0x700 + ECU_ID` (currently `0x701`);
+- per-variable timeout is 100 ms.
+
+### Variable data characteristic `...a9`
+
+Expected CAN response ID: `0x720 + ECU_ID` (`0x721`).
+
+Entry format:
+
+```text
+hash:  int32 BE
+value: float32 BE
+```
+
+ESP32 returns one BLE notification containing repeated 8-byte entries. Original firmware can send a partial batch after timeouts and rate-limits BLE notifications to 10 ms minimum spacing.
+
+Legacy implementation details that are **not** elevated to permanent protocol guarantees include dropping a newly received batch while one is active, advancing on any matching CAN response ID without explicitly checking expected hash, and absence of application-level delivery acknowledgement.
+
+### Generic variable-set characteristic `...ab`
+
+Historical names call this `GPS_DATA`, but the reviewed firmware treats it as generic variable-set transport:
+
+```text
+[hash int32 BE][4-byte raw value]
+```
+
+One or more entries are copied directly to CAN `0x780 + ECU_ID` (`0x781`). Producers include GPS variables and virtual ADC values. Therefore EpicHub internal naming must be **variable-set**, with GPS as one producer, not the protocol's identity.
+
+### Local ESP32 inputs
+
+Reviewed original firmware additionally publishes:
+
+- GPIO 5 ADC, sampled nominally at 100 Hz, scaled 0–1023 and change-thresholded;
+- GPIO 1 active-low digital input, sampled nominally at 50 Hz with 50 ms debounce.
+
+Both feed the CAN variable-set concept. The reviewed digital-input hash is marked TODO in source and is not permanent protocol authority without independent ECU/profile evidence.
+
+### Legacy bridge liveness/reconnect
+
+Firmware has a 5-second ESP task watchdog and restarts BLE advertising about 100 ms after disconnect. This protects firmware liveness; it is not a physical-output state failsafe.
+
+The reviewed legacy firmware does **not** expose protocol version, capabilities, application-level command acknowledgement, direct output state or hardware-fault status.
+
+## EpicDash-JZ Android BLE lifecycle evidence
+
+The evolved Android manager preserves UUID/wire compatibility while adding:
+
+- guarded scan sessions;
+- 10-second windows;
+- 5/10/20/30-second reconnect backoff;
+- scan-mode adaptation;
+- connection timeout;
+- stale/superseded GATT callback rejection;
+- deterministic stale-GATT cleanup;
+- required-characteristic validation;
+- notification setup, high connection priority and MTU request;
+- manual/automatic reconnect semantics;
+- alternate-transport suspension;
+- queue diagnostics and malformed-batch accounting.
+
+These behaviours are reference evidence for Kotlin platform BLE design.
+
+The evolved implementation still owns three independent characteristic write FIFOs. EpicHub does not preserve that ownership model: one connection-wide GATT operation scheduler serializes operations, while semantic message class/priority remains explicit above it.
+
+## Legacy bridge vs future direct accessory outputs
+
+This distinction is now authoritative for Phase 1:
+
+### Legacy bridge compatibility
+
+Potentially preserve/reimplement:
+
+- UUIDs;
+- button mask forwarding;
+- variable request/response;
+- generic variable-set forwarding;
+- local input bridge behaviour where product-relevant;
+- proven Android reconnect/lifecycle behaviour.
+
+### Future direct relay/GPIO outputs
+
+Not present as a reviewed legacy capability. If EpicHub adds them, use a deliberately versioned extension defining:
+
+- capabilities/version handshake;
+- semantic output IDs;
+- command acknowledgement;
+- confirmed state/fault telemetry;
+- boot/default state;
+- hardware interlocks;
+- watchdog/disconnect fail-safe behaviour.
+
+Android GATT completion alone must never be treated as confirmed physical state.
 
 ## Location/GPS mapping
 
 Authority:
 
 - Android location APIs for acquisition semantics;
-- physically/characterization-tested EpicDash-JZ mapping behaviour where compatible behaviour is required;
-- ESP32/CAN firmware protocol for forwarded packed/raw representation.
+- tested EpicDash-JZ mapping behaviour where compatibility is required;
+- generic ESP32 variable-set/CAN format for forwarded values.
 
-Acquisition, channel mapping and accessory forwarding are separate responsibilities even when they originate from one Android location sample.
+Acquisition, channel mapping, GPS packing and variable-set transport remain separate responsibilities.
 
 ## MDF4
 
@@ -285,14 +336,10 @@ Primary authority:
 
 ASAM MDF specification plus independent interoperability validation.
 
-EpicDash/EpicDash-JZ are not MDF4 authority.
-
 Implementation rule:
 
-MDF4 remains behind EpicHub's own measurement-store/file-format abstraction. Rust crate behaviour must be validated against independent tooling/corpus before becoming accepted file-format authority.
+MDF4 remains behind EpicHub's measurement-store/file-format abstraction. Rust crate behaviour must be cross-validated against independent tooling/corpus before becoming accepted authority.
 
 ## MSL / MLG / CSV interoperability
 
-Authority depends on the exact external format/tool ecosystem. These formats are interoperability concerns and must not become the internal channel/data authority for EpicHub.
-
-Specific reader/writer contracts will be added when implementation work begins.
+Authority depends on the exact external format/tool ecosystem. These remain interoperability concerns, not EpicHub's internal channel/data authority.
