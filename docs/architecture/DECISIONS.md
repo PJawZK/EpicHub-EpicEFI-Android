@@ -112,3 +112,13 @@ Diagnostics may observe, timestamp, correlate, count, summarize and export subsy
 Instrumentation must not reconnect transports, invalidate sessions, alter queue/loss policy, change tuning safety decisions or otherwise modify production behavior merely to simplify reporting or improve metrics.
 
 Android/platform diagnostics remain Kotlin-owned; engine diagnostics remain Rust-owned. They share stable event/metric/correlation contracts and cross the native boundary in bounded snapshots/batches rather than per-event or per-sample callbacks.
+
+## D-018 — Full semantic tune comparison requires exact authoritative profile identity
+
+Full semantic comparison of tune settings, arrays, tables or curves is allowed only when both sides resolve through the same exact authoritative profile identity. EpicHub uses its profile/source fingerprints and compiled-profile identity for this gate rather than assuming that equal board names, parameter names or similar firmware versions imply equal semantics.
+
+When profile identities differ, any comparison is explicitly informational and conservative. A shared-name scalar/bit intersection may be presented only when both definitions describe the item compatibly; it never grants edit, migration or ECU-write authority. Cross-profile arrays/tables/curves remain non-comparable unless a separately specified and qualified compatibility or transformation contract exists.
+
+If table axes differ, direct positional cell deltas are considered ambiguous by default. Any future regridding/interpolation comparison is derived analysis with explicit transform policy and cannot silently become source tune data or migration/write authority.
+
+Compact compiled-profile projections and comparison reports are derived acceleration/evidence only. They remain exact-identity-bound, versioned/rebuildable where appropriate, and never replace the source profile, TuneSnapshot, project authority or live ECU verification.
