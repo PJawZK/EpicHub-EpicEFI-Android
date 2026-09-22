@@ -8,10 +8,11 @@ Phase 1 builds the repository-backed architecture before production Android/Rust
 - `PHASE1_PROGRESS.md` — current completed/current source-review tranches.
 - `DECISIONS.md` — durable architectural decisions.
 - `DEVELOPMENT_WORKFLOW.md` — repository and chat/handoff workflow.
+- `REVIEW_CHECKLIST.md` — explicit Phase 1 closure gate.
 
 ## Evidence and responsibility mapping
 
-- `SOURCE_INVENTORY.md` — reference repositories and what each is authoritative/useful for.
+- `SOURCE_INVENTORY.md` — reference repositories, provenance handling and what each is authoritative/useful for.
 - `RESPONSIBILITY_INVENTORY.md` — normalized behaviours/responsibilities independent of historical files.
 - `RESPONSIBILITY_DESTINATIONS.md` — where retained/redesigned responsibilities belong in EpicHub.
 - `PROTOCOL_AUTHORITIES.md` — source of truth for important wire/profile/file-format contracts.
@@ -19,12 +20,15 @@ Phase 1 builds the repository-backed architecture before production Android/Rust
 
 Deep-dive evidence:
 
+- `ECU_PROTOCOL_DIRECT_VERIFICATION.md` — targeted direct verification against the current EpicEFI/rusEFI firmware fork.
 - `ESP32_ACCESSORY_EVIDENCE.md` — original/evolved BLE↔CAN bridge and accessory boundaries.
 - `TUNING_PERSISTENCE_RECOVERY_EVIDENCE.md` — project authority, recovery, journals and derived caches.
 - `UI_INTERACTION_EVIDENCE.md` — Dashboard/Tuner interaction, responsive behavior and rendering lessons.
 - `LOGGING_INTEROP_EVIDENCE.md` — live logging, MSL/MLG/MDF interoperability and analyzer-facing storage lessons.
 - `DIAGNOSTICS_EVIDENCE.md` — structured diagnostics, performance and lifecycle tracing evidence.
+- `DIAGNOSTICS_CORE_EVIDENCE.md` — shared semantic-channel/warning-definition/test-vector reference review.
 - `TUNE_VIEWER_EVIDENCE.md` — tune/profile parsing, exact-identity comparison, definition-diff and visualization lessons.
+- `ANALYZER_AUTOTUNE_PLUGIN_EVIDENCE.md` — AE/PID/TCharge/Injection Angle evidence, analysis profiles and bounded experiment lessons.
 
 ## Target architecture contracts
 
