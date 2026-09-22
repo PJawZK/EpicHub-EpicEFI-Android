@@ -2,271 +2,305 @@
 
 ## Purpose
 
-This document separates responsibilities that have strong historical implementations/evidence from capabilities that EpicHub must design substantially from first principles.
+This document separates architecture/responsibility questions already resolved by evidence from work that still requires design, fixtures, benchmarking or physical qualification.
 
-A gap is not necessarily a missing product feature. It may be a new architecture required to unify previously separate behaviours cleanly.
+A gap does not necessarily mean a missing product feature. It may be the remaining proof needed before a known responsibility can be implemented safely.
 
-## High-priority clean-slate gaps
+---
 
-### Kotlin/Rust engine boundary
+# Major clean-slate implementation gaps
 
-No predecessor provides the desired final boundary.
+## Kotlin/Rust engine boundary
 
-Needed design:
+No predecessor provides the target final boundary.
+
+Still required:
 
 - small semantic JNI API;
-- lifecycle-safe native engine handle;
+- lifecycle-safe engine handle;
 - packed/shared runtime snapshot buffer;
-- bounded engine event transfer;
-- explicit error mapping;
-- no per-channel/per-sample JNI API;
-- ownership/lifetime rules for any USB native descriptor handoff.
+- bounded structured event transfer;
+- stable error mapping;
+- no per-channel/per-sample JNI calls;
+- explicit ownership/lifetime rules for any native USB handle handoff.
 
 Status: `PROPOSED`.
 
-### Rust runtime ChannelStore
+## Rust runtime ChannelStore
 
-Historical apps have dashboard/data hubs and runtime snapshots, but no domain-neutral native channel authority shared by Dashboard, Logger, Analyzer and calculations.
+Historical dashboard/data hubs exist, but no domain-neutral native channel authority shared by Dashboard, Logger, Analyzer and calculations.
 
-Needed design:
+Still required:
 
 - stable channel IDs/schema;
 - typed raw/physical values;
 - timestamps/revisions/source/validity;
-- live and file-backed source abstraction;
-- bounded current/history/cache ownership;
-- accessory/GPS ingestion path.
+- live/file-backed source abstraction;
+- bounded cache/history ownership;
+- GPS/legacy bridge ingestion.
 
 Status: `PROPOSED`.
 
-### MDF4 native logger
+## MDF4 writer / reader / recovery
 
-No existing EpicDash implementation provides native MDF4 acquisition/writing.
+No EpicDash predecessor supplies the intended native MDF4 path.
 
-Needed design:
+Still required:
 
 - streaming writer;
-- metadata/channel schema mapping;
+- metadata/channel mapping;
 - block sizing/buffering;
-- compression selection;
-- crash/power-loss recovery;
-- file finalization;
-- independent interoperability tests;
-- storage/size benchmarks on Android hardware.
+- version/compression decision;
+- crash/power-loss recovery/finalization;
+- lazy partial reads and indexing;
+- independent interoperability corpus;
+- Android file-size/CPU/storage benchmarks.
 
 Status: `PROPOSED`.
 
-### MDF4 reader/index
+## Native analyzer / plot-resolution engine
 
-Needed design:
+Still required:
 
-- lazy/memory-mapped access where useful;
-- time→block/channel indexes;
-- decompression cache;
-- disposable/rebuildable sidecar index where justified;
-- partial range reads;
-- validation against independent MDF tooling/corpus.
-
-Status: `PROPOSED`.
-
-### Native analyzer
-
-Existing EpicDash analysis/history features and separate tuner plugins provide useful concepts, but there is no common large-log analyzer engine.
-
-Needed design:
-
-- time-range/channel query API;
-- statistics;
-- search/filter/event detection;
-- histogram/scatter/heatmap primitives;
-- expression/derived-channel integration;
-- reusable tuning-analysis algorithms;
-- live/log source parity.
-
-Status: `PROPOSED`.
-
-### Plot-resolution engine
-
-Needed design:
-
+- bounded time/channel query API;
+- statistics/search/events;
+- histogram/scatter/heatmap;
+- derived channels;
+- tuning analysis reuse;
 - min/max multiresolution pyramid preserving spikes;
-- viewport-driven level selection;
-- screen-sized plot packets;
-- native-data fallback at close zoom;
-- cache strategy;
-- Compose rendering first, specialized GPU path only if measurements justify it.
+- viewport-sized plot packets/cache;
+- Compose rendering first, specialized GPU only if measured need.
 
 Status: `PROPOSED`.
 
-### Compose application shell
+## Compose application shell
 
-EpicDash-JZ WebView/native hybrid and old Android Views provide behavioural/UI references but not the target implementation.
+Still required:
 
-Needed design:
-
-- one Compose navigation shell;
-- phone/tablet/portrait/landscape responsive behavior;
-- dashboard runtime and editor;
-- tuner parameters/curves/tables/3D visualization;
-- logger/analyzer/diagnostics/settings surfaces;
-- frame-rate-aware telemetry state handling.
+- one responsive navigation shell;
+- phone/tablet/portrait/landscape behavior;
+- Dashboard and editor;
+- Tuner parameters/curves/tables/3D visualization;
+- Logger/Analyzer/Diagnostics/Settings;
+- frame-rate-aware telemetry consumption.
 
 Status: `PROPOSED`.
 
-### Semantic action system
+## Unified structured diagnostics
 
-Original EpicDash exposes button transport semantics directly. EpicHub needs a product-level action model.
+Still required:
 
-Needed design:
-
-- `Local`, `Accessory`, `ECU` targets;
-- semantic action IDs/definitions;
-- allowed sources and guard policy;
-- requested/confirmed/fault accessory state;
-- event logging;
-- future approved automation actions without exposing GPIO/tune bytes.
-
-Status: `PROPOSED`.
-
-### Accessory profile/protocol evolution
-
-The original ESP32 protocol is known, but EpicHub may eventually need richer relay/output acknowledgement, hardware state, version negotiation and explicit failsafe contracts.
-
-Needed decision:
-
-- compatibility-only reimplementation versus deliberately versioned EpicHub accessory protocol extension;
-- discovery/capability/version handshake;
-- requested vs confirmed state feedback;
-- output/failsafe definition ownership.
-
-Status: `PROPOSED`; do not alter protocol until Phase 1 has inventoried existing firmware behavior fully.
-
-### Unified structured diagnostics
-
-EpicDash-JZ has substantial diagnostics but they are distributed across Android/WebView/transports.
-
-Needed design:
-
-- common structured event schema;
-- Android platform event adapter;
-- Rust engine event ring;
-- correlation/session IDs;
+- common event schema/correlation/session IDs;
+- Kotlin platform event adapter;
+- Rust event ring;
 - bounded history;
 - performance counters;
 - export/report model.
 
-Status: `PROPOSED` based on `PROVEN` diagnostic need.
+Status: `PROPOSED` from a `PROVEN` diagnostic need.
 
-### New-project storage model
+## Clean project/storage model
 
-No install continuity is required, so EpicHub can define a clean storage model.
+No install continuity is required.
 
-Needed design:
+Still required:
 
-- imported/generated profile storage;
-- verified TuneSnapshot/project state;
+- exact profile + verified TuneSnapshot project storage;
 - layouts/settings/rules;
 - logs/indexes;
 - recovery journals;
-- explicit externally exported backups;
-- schema/version/checksum strategy.
+- explicit external backups;
+- schema/version/checksum rules.
 
-Status: `PROPOSED` while preserving tuning authority invariants.
+Status: `PROPOSED`, with tuning authority invariants already locked.
 
-## Important unresolved technical decisions
+---
 
-### ECU sustained runtime I/O owner after Android USB open
+# Important unresolved technical decisions
 
-The source archaeology now cleanly separates Android USB permission/device/CDC setup from TunerStudio protocol/session semantics. The remaining decision is only who performs the sustained bulk transfer after Android has opened and claimed the device.
+## ECU sustained runtime I/O after Android open
 
-Candidates to benchmark:
+Responsibility ownership above transport is resolved. Remaining benchmark choice:
 
-1. Kotlin bulk I/O with coarse batched transfer into Rust;
-2. Android permission/open/claim then proven native FD/handle handoff to Rust sustained I/O.
-
-A pure Kotlin decode architecture no longer needs to be a final candidate, but it may remain a benchmark/reference implementation if useful.
+1. Kotlin bulk I/O with coarse batches into Rust;
+2. Android permission/open/claim then proven native FD/handle to Rust sustained I/O.
 
 Decision criteria:
 
-- attach/permission/open latency;
-- reconnect correctness after detach/replug;
-- ownership/close semantics;
-- sustained packet rate/CPU/allocation;
+- attach/open latency;
+- detach/replug correctness;
+- close/ownership semantics;
+- sustained rate/CPU/allocation;
 - JNI crossings/bytes;
 - failure recovery;
-- compatibility on Samsung A13/SM-A137F and SM-T500-class hardware plus future target devices.
+- Samsung A13/SM-A137F and SM-T500-class performance plus later targets.
 
-Decision must be based on real Android device and ECU evidence, not architectural aesthetics.
+Status: `OPEN BENCHMARK DECISION`.
 
-### MDF4 version/compression baseline
+## MDF4 version/compression baseline
 
-Current direction:
+Current candidates:
 
-- MDF 4.2 + Deflate for broad compatibility;
-- investigate MDF 4.3 + LZ4 for live performance;
-- investigate MDF 4.3 + Zstd for archive/storage.
+- MDF 4.2 + Deflate for compatibility;
+- MDF 4.3 + LZ4 for live performance;
+- MDF 4.3 + Zstd for storage/archive.
 
-Do not lock until interoperability/performance tests establish the supported reader ecosystem and Android costs.
+Do not lock until reader interoperability and Android cost are measured.
 
-### Minimum Android/API/ABI/device target
+Status: `OPEN BENCHMARK/INTEROP DECISION`.
 
-Must be locked before production scaffold:
+## Minimum Android/API/ABI/device target
 
-- minimum API level;
-- primary ABI, expected to begin with `arm64-v8a` unless evidence requires more;
-- low/mid device performance target;
-- phone/tablet/head-unit resolution/orientation requirements.
+Lock before Phase 2 scaffold:
 
-### New package/application ID
+- minimum API;
+- ABI set, likely starting with `arm64-v8a` unless evidence requires more;
+- low/mid hardware performance target;
+- phone/tablet/head-unit resolution/orientation matrix.
 
-No continuity requirement. A clean namespace such as `com.epicefi.epichub` is preferred but must be formally locked before implementation scaffold.
+Status: `OPEN PRODUCT/BUILD DECISION`.
 
-### Generated-INI compatibility corpus breadth
+## New Android package/application ID
 
-The parser/profile architecture is now decomposed, and the current supported subset is understood. Remaining gap is corpus breadth, not responsibility ownership.
+No continuity requirement. `com.epicefi.epichub` is the current architectural placeholder/preference but must be formally locked before scaffold.
 
-Needed before Phase 2 implementation is considered mature:
+Status: `OPEN NAMING/BUILD DECISION`.
 
-- retain several genuine generated INIs across representative EpicEFI/rusEFI boards/firmware generations;
-- catalogue constructs actually present in those files;
-- distinguish must-support constructs from intentionally unsupported TunerStudio features;
-- include malformed/ambiguous/unsupported fixtures for fail-closed tests;
-- add a genuine complete epicECU generated INI fixture when trustworthy evidence becomes available.
+---
 
-### Protocol golden-vector corpus
+# Evidence/fixture gaps after completed ECU/profile archaeology
 
-Request/response framing, status semantics and `S/Q/O/R/C/B` command dispatch are now directly verified in firmware. Remaining gap is to preserve this as executable fixture evidence before implementation:
+## Generated-INI compatibility corpus breadth
 
-- plain signature responses;
-- framed signature request/response;
-- `O` full/chunk requests;
+Responsibility split is resolved; remaining gap is evidence breadth.
+
+Need:
+
+- genuine generated INIs across representative EpicEFI/rusEFI boards/firmware generations;
+- catalogue of constructs actually present;
+- explicit must-support vs intentionally unsupported feature list;
+- malformed/ambiguous/unsupported fail-closed fixtures;
+- genuine complete epicECU generated INI when trustworthy evidence becomes available.
+
+Status: `OPEN FIXTURE GAP`.
+
+## ECU protocol golden-vector corpus
+
+Request/response framing and `S/Q/O/R/C/B` semantics are source-verified.
+
+Need executable vectors for:
+
+- plain/framed signature;
+- `O` full/chunk reads;
 - `R` page reads;
-- `C` write + OK/error responses;
-- `B` accepted/error responses;
-- CRC failure, underrun/out-of-range/unrecognized status cases;
-- response payload lengths around buffer/chunk boundaries.
+- `C` write + success/error;
+- `B` success/error;
+- CRC failure, underrun, out-of-range, unrecognized command;
+- response sizes around buffer/chunk boundaries.
 
-These vectors should be generated from documented/controlled firmware interactions or independently constructed from the verified source contract and cross-checked against real firmware.
+Status: `OPEN FIXTURE GAP`.
 
-## Phase 1 archaeology completed enough to leave the deferred list
+---
 
-The following former deferred items now have sufficient responsibility-level decomposition for architecture work to continue:
+# ESP32 legacy bridge: responsibility archaeology completed
 
-- EpicDash-JZ `UsbEcuManager` platform/session/framing/output/tuning coordination split;
-- EpicDash-JZ generated-INI parser/compiler/condition split;
-- firmware request/response framing and `S/Q/O/R/C/B` read/write/Burn command paths.
+The reviewed original ESP32 firmware and evolved EpicDash-JZ Android BLE path are now decomposed sufficiently for permanent ownership decisions.
 
-This does **not** mean their Phase 2 implementations are complete; it means Phase 1 now knows their permanent responsibilities and authority boundaries.
+Resolved findings:
 
-## Deferred deeper source inventories
+- original ESP32 is a BLE↔CAN bridge with local ADC/digital inputs, not a proven direct relay/GPIO output controller;
+- characteristic `...ab` is generic variable-set transport, not GPS-specific;
+- legacy button/variable-request/variable-response/variable-set wire formats are documented;
+- evolved Android scan/reconnect/GATT lifecycle behavior is useful compatibility evidence;
+- one connection-wide GATT operation scheduler replaces the historical three independent per-characteristic queue owners;
+- Android GATT completion is not downstream CAN/action confirmation;
+- original BLE disconnect does not send a proven zero/release button frame;
+- ESP task watchdog is liveness protection, not output-state failsafe;
+- future direct ESP32 relay/GPIO output control is a separate versioned capability requiring its own acknowledgement/state/interlock/failsafe contract.
 
-The following references still need dedicated Phase 1 review before their responsibilities are considered complete:
+These are no longer responsibility-discovery gaps.
 
-- complete original ESP32 firmware behavior including physical buttons/outputs/ADC/CAN/watchdog/reconnect/failure/failsafe semantics;
-- EpicDash-JZ BLE evolution/reconnect/write-queue behavior against the original ESP32 protocol;
-- tuning project persistence/recovery stores beyond the already captured exact-profile/TuneSnapshot authority;
-- Epic-DashTune-UXUI interaction/responsive/performance lessons without importing its visual language;
-- Tune Viewer parsing/visualization lessons;
-- diagnostics-core architecture and reusable diagnostics schemas if present;
-- logging-format/MLG implementation investigations already performed elsewhere in the project;
-- AE/PID/TCharge/Injection Angle plugins for future analyzer/autotune responsibilities.
+## Remaining legacy bridge product/qualification decisions
+
+### Keep/retire legacy bridge compatibility surface
+
+Decide which legacy capabilities remain product requirements in the clean app:
+
+- button-box mask forwarding;
+- CAN-backed variable request/response;
+- generic variable-set forwarding;
+- phone virtual ADC compatibility;
+- ESP32 local ADC/digital input forwarding.
+
+Do not implement every historical capability merely because it exists.
+
+Status: `OPEN PRODUCT-SCOPE DECISION`.
+
+### Button disconnect/release semantics
+
+Need to verify the actual downstream ECU/button-box consumer behavior before changing disconnect semantics.
+
+Questions to resolve on bench/source:
+
+- does the ECU consumer treat mask as state or momentary event?
+- is an explicit zero-mask release required?
+- can a disconnect after a non-zero mask create a sticky semantic state?
+- what reconnect behavior is expected?
+
+Status: `OPEN COMPATIBILITY/PHYSICAL GAP`.
+
+### ESP32 BLE/CAN golden vectors
+
+Create fixtures for:
+
+- 16-bit LE button masks and CAN payload conversion;
+- BE variable hash request batches;
+- hash+float response batches;
+- partial/time-out response cases;
+- generic variable-set entries including packed/raw32 values;
+- malformed/trailing byte cases;
+- reconnect/session reset behavior where representable.
+
+Status: `OPEN FIXTURE GAP`.
+
+### Versioned direct-output extension
+
+Only needed if EpicHub is to directly control ESP32 relays/GPIO.
+
+Would require:
+
+- protocol/capability versioning;
+- semantic output IDs;
+- app-level command acknowledgement;
+- confirmed state/fault feedback;
+- boot/default state;
+- interlocks;
+- disconnect/watchdog fail-safe behavior.
+
+Status: `DEFERRED NEW CAPABILITY`, not legacy parity work.
+
+---
+
+# Phase 1 archaeology completed enough to leave deferred list
+
+The following now have stable responsibility-level decomposition:
+
+- EpicDash-JZ `UsbEcuManager` platform/session/framing/runtime/tuning split;
+- generated-INI parser/compiler/condition split;
+- firmware request/response framing and `S/Q/O/R/C/B` paths;
+- original ESP32 BLE↔CAN bridge responsibilities and evolved Android BLE connection/queue behavior.
+
+This does **not** mean their Phase 2 implementations are complete; it means their permanent ownership boundaries are known.
+
+---
+
+# Deferred deeper source inventories
+
+Next-highest-value remaining Phase 1 reviews:
+
+1. tuning project persistence/recovery stores and uncertainty/recovery behavior beyond the already locked exact-profile/TuneSnapshot authority;
+2. dashboard/editor/tuner UI interaction/responsive/performance lessons, including Epic-DashTune-UXUI without importing its visual language;
+3. logging/playback/MLG implementation investigations and transition path toward MDF4;
+4. diagnostics-core architecture/reusable schemas if present;
+5. Tune Viewer parsing/visualization lessons;
+6. AE/PID/TCharge/Injection Angle plugin repositories for future analyzer/autotune responsibilities.
