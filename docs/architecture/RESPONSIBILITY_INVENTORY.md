@@ -2,953 +2,782 @@
 
 ## Purpose
 
-This inventory records behaviours/responsibilities, not historical classes. A historical file may contribute to many entries, and one future responsibility may draw evidence from several historical files/repositories.
+This inventory records permanent behaviours/responsibilities, not historical classes. Historical files are evidence sources only: one old class may split across many future owners and several old mechanisms may merge into one clean responsibility.
 
-Status values:
+Classification values: `PRESERVE`, `REDESIGN`, `MERGE`, `SPLIT`, `REFERENCE`, `REMOVE`.
 
-- `PRESERVE`
-- `REDESIGN`
-- `MERGE`
-- `SPLIT`
-- `REFERENCE`
-- `REMOVE`
+Evidence levels: `PROVEN`, `SUPPORTED`, `PROPOSED`.
 
-Evidence levels:
-
-- `PROVEN`
-- `SUPPORTED`
-- `PROPOSED`
-
-This is an active Phase 1 inventory. Entries are refined as source archaeology continues.
+This is an active Phase 1 inventory and is refined as source archaeology progresses.
 
 ---
 
-## Android application and lifecycle
+# Android application / presentation platform
 
-### `android.lifecycle.application`
+## `android.lifecycle.application`
 
-Purpose: own Android application/process lifecycle and expose lifecycle state without owning ECU/BLE/domain logic.
+Purpose: own Android application/process lifecycle without owning ECU/BLE/tuning business logic.
 
-Historical evidence: EpicDash-JZ application/Activity lifecycle work and lifecycle diagnostics.
+Historical evidence: EpicDash-JZ application/activity lifecycle work and lifecycle diagnostics.
 
-Finding: historical Activities accumulated transport, WebView, playback, diagnostics and navigation ownership. Those responsibilities must not remain Activity-owned.
+Classification: `REDESIGN`. Evidence: lifecycle/duplicate-owner need `PROVEN`; target structure `PROPOSED`.
 
-Classification: `REDESIGN`
+Future owner: Kotlin app/platform layer.
 
-Evidence: `PROVEN` that lifecycle/duplicate-owner behaviour matters; future structure `PROPOSED`.
+## `android.navigation.presentation`
 
-Future owner: Kotlin platform/app layer.
+Purpose: route Dashboard, Tuner, Logger, Analyzer, Diagnostics and Settings without becoming data authority.
 
-### `android.navigation.presentation`
+Classification: `REDESIGN`. Evidence: `SUPPORTED`.
 
-Purpose: route between Dashboard, Tuner, Logger, Analyzer, Diagnostics and Settings without becoming data authority.
-
-Historical evidence: MainActivity/DashboardLabActivity/WebView shell navigation and tuner UI work.
-
-Classification: `REDESIGN`
-
-Evidence: `SUPPORTED`.
-
-Future owner: Compose navigation layer.
+Future owner: Compose navigation.
 
 ---
 
-## Android USB platform responsibilities
+# Android USB platform
 
-### `android.usb.discovery`
+## `android.usb.discovery`
 
-Purpose: enumerate Android USB devices and identify transport candidates before probing.
+Purpose: enumerate Android USB devices and identify safe transport candidates before probing.
 
-Historical evidence: EpicDash-JZ `UsbDeviceSelectionPolicy`, `UsbEcuManager`, USB selection correction audit.
+Invariant: `0483:5740` plus expected CDC shape is transport-candidate evidence only, not ECU/profile authority.
 
-Invariant: do not request/probe arbitrary CDC devices; `0483:5740` + expected CDC shape is a firmware transport-candidate gate, not ECU model authority.
+Classification: `PRESERVE` behaviour / `SPLIT` old implementation. Evidence: `PROVEN`/firmware-supported.
 
-Classification: `PRESERVE` behaviour / `SPLIT` historical implementation.
+Future owner: Kotlin USB platform layer.
 
-Evidence: `PROVEN`/firmware-supported.
+## `android.usb.permission`
 
-Future owner: Kotlin Android USB platform layer.
+Purpose: permission request/result lifecycle, duplicate-request prevention and stale-result rejection.
 
-### `android.usb.permission`
+Classification: `PRESERVE` behaviour / `SPLIT`. Evidence: `SUPPORTED`.
 
-Purpose: Android USB permission request/result lifecycle, duplicate request protection and stale-result rejection.
+Future owner: Kotlin USB platform layer.
 
-Historical evidence: `UsbPermissionRequestTracker`, manager permission receiver/coordinator.
+## `android.usb.cdc-topology`
 
-Classification: `PRESERVE` behaviour / `SPLIT` implementation.
+Purpose: resolve CDC communications/data interface relationship and bulk IN/OUT endpoints from actual descriptors rather than hardcoded interface numbers.
 
-Evidence: `SUPPORTED`.
+Evidence: EpicDash-JZ descriptor parsing; firmware optional MSD changes CDC interface numbering.
 
-Future owner: Kotlin Android USB platform layer.
-
-### `android.usb.cdc-topology`
-
-Purpose: resolve the actual CDC communications/data interface relationship and bulk IN/OUT pipe from descriptors rather than hardcoded interface numbers.
-
-Historical evidence: `UsbEcuManager` CDC Union and Call Management parsing, endpoint enumeration/scoring; firmware `usbcfg.cpp` with optional MSD changing CDC interface numbers.
-
-Invariant: interface IDs/endpoints are discovered facts, not ECU-model constants.
-
-Classification: `PRESERVE` behaviour / `SPLIT` implementation.
-
-Evidence: `PROVEN`/firmware-supported.
+Classification: `PRESERVE` behaviour / `SPLIT`. Evidence: `PROVEN`/firmware-supported.
 
 Future owner: Kotlin `CdcTopologyResolver`-type component.
 
-### `android.usb.cdc-control`
+## `android.usb.cdc-control`
 
-Purpose: perform host-side CDC interface claiming/control setup such as `SET_LINE_CODING` and `SET_CONTROL_LINE_STATE` independently of ECU command framing.
+Purpose: interface claiming/control setup such as `SET_LINE_CODING` and DTR/RTS independently of ECU command framing.
 
-Historical evidence: `UsbEcuManager` open/probe path; proven DTR and DTR+RTS compatibility attempts.
-
-Classification: `PRESERVE` compatibility behaviour / `SPLIT`.
-
-Evidence: `SUPPORTED` by physically exercised current path.
+Classification: `PRESERVE` compatibility behaviour / `SPLIT`. Evidence: `SUPPORTED` by physically exercised current path.
 
 Future owner: Kotlin Android CDC control component.
 
-### `android.usb.connection-open`
+## `android.usb.connection-open`
 
-Purpose: open/close `UsbDeviceConnection`, claim/release interfaces and expose a bounded transport resource to the engine.
+Purpose: open/close `UsbDeviceConnection`, claim/release selected interfaces and expose the bounded resource needed by the sustained-I/O strategy.
 
-Historical evidence: EpicDash-JZ shared USB owner.
+Classification: `REDESIGN` boundary while preserving proven Android resource lifecycle.
 
-Future investigation: compare Kotlin-owned sustained bulk I/O with Android-opened native-FD handoff to Rust; do not assume FD/native ownership until bench/device evidence proves lifecycle/reconnect parity.
+Evidence: existing Kotlin path `PROVEN`; native-FD/handle sustained-I/O alternative `PROPOSED`.
 
-Classification: `REDESIGN` boundary, with current behaviour to preserve.
-
-Evidence: existing Kotlin path `PROVEN`; Rust-FD alternative `PROPOSED`.
-
-Future owner: Kotlin setup/resource boundary; sustained runtime I/O owner intentionally unresolved pending PoC.
+Future owner: Kotlin setup/resource boundary. Sustained bulk-I/O owner remains a benchmark decision.
 
 ---
 
-## ECU transport/session/protocol
+# ECU transport / protocol / identity
 
-### `ecu.transport.session`
+## `ecu.transport.session`
 
-Purpose: one authoritative ECU communication session, including connection/session identity, protocol state, exclusivity and clean disconnect invalidation.
+Purpose: one authoritative ECU communication session with protocol state, exclusivity and clean disconnect invalidation.
 
-Historical evidence: `UsbEcuManager`, `UsbGenerationAuthority`, tuning exclusive-operation behaviour.
+Invariant: no independent dashboard/tuner USB stacks and no second tune-snapshot authority.
 
-Invariant: no independent dashboard/tuner USB stacks and no second tune snapshot authority.
+Classification: `PRESERVE` behaviour / `SPLIT`. Evidence: `PROVEN`.
 
-Classification: `PRESERVE` behaviour / `SPLIT` implementation.
+Future owner: Rust engine after transport handoff.
 
-Evidence: `PROVEN`.
+## `ecu.transport.generation`
 
-Future owner: Rust engine after transport decision, coordinated by Kotlin Android connection layer.
+Purpose: bind asynchronous work to a connection/session generation so stale permission/reconnect/probe work cannot revive a dead session.
 
-### `ecu.transport.generation`
+Classification: `PRESERVE` semantics / `REDESIGN` placement. Evidence: `PROVEN` need.
 
-Purpose: make attach/detach/reconnect/permission/probe results generation-bound so obsolete asynchronous work cannot revive a dead session.
+Future owner: Kotlin before native session creation; Rust for active ECU session generation.
 
-Historical evidence: `UsbGenerationAuthority`, permission generation coordinator and immediate detach invalidation.
+## `ecu.transport.retry-policy`
 
-Classification: `PRESERVE` semantics / `REDESIGN` placement.
+Purpose: distinguish retryable transport loss from profile/protocol/compatibility failures that must stop.
 
-Evidence: `PROVEN` need.
+Classification: `PRESERVE` intent / `REDESIGN` pure policy. Evidence: `SUPPORTED`.
 
-Future owner: Kotlin for permission/open attempt tokens before native session creation; Rust for active ECU session generation thereafter.
+Future owner: ECU session policy.
 
-### `ecu.transport.retry-policy`
-
-Purpose: bound reconnect attempts and distinguish retryable transport loss from compatibility/protocol/profile failure that must stop and require deliberate user action.
-
-Historical evidence: manager retry wait/failure cap and no-retry first-output/profile mismatch behaviour.
-
-Classification: `PRESERVE` intent / `REDESIGN` pure policy.
-
-Evidence: `SUPPORTED`.
-
-Future owner: ECU session policy, not UI.
-
-### `ecu.protocol.request-framing`
+## `ecu.protocol.request-framing`
 
 Purpose: encode CRC-framed TunerStudio requests.
 
-Firmware authority: `tunerstudio.cpp::tsProcessOne()`.
+Contract: `BE length(command+data) + command/data + BE CRC32(command+data)`.
 
-Contract: two-byte big-endian body length, then `command + request data`, then big-endian CRC32 over `command + request data` only.
+Classification: `PRESERVE` protocol / `REDESIGN` implementation. Evidence: `PROVEN` from firmware.
 
-Classification: `PRESERVE` protocol / `REDESIGN` implementation.
+Future owner: Rust request codec.
 
-Evidence: `PROVEN` by direct firmware source plus qualified Android behaviour.
+## `ecu.protocol.response-framing`
 
-Future owner: Rust ECU request codec.
+Purpose: decode CRC responses and keep response status separate from payload.
 
-### `ecu.protocol.response-framing`
+Contract: `BE length(status+data) + status + data + BE CRC32(status+data)`.
 
-Purpose: accumulate/decode CRC responses and keep response status distinct from payload.
+Finding: request and response envelopes are asymmetric; one symmetric generic `envelope()` abstraction is rejected.
 
-Firmware authority: `tunerstudio_io.cpp` / `tunerstudio_io.h`.
+Classification: `PRESERVE` protocol / `REDESIGN`. Evidence: `PROVEN`.
 
-Contract: two-byte big-endian body length where body is `status + payload`, followed by status, payload, and big-endian CRC32 over `status + payload`.
+Future owner: Rust response codec.
 
-Finding: request and response envelopes are deliberately asymmetric; a single generic symmetric `envelope()` abstraction is rejected for the new architecture.
+## `ecu.protocol.status-errors`
 
-Classification: `PRESERVE` protocol / `REDESIGN` implementation.
+Purpose: represent OK/Burn-OK/error status as typed protocol state rather than heuristically stripping payload bytes.
 
-Evidence: `PROVEN`.
+Classification: `PRESERVE` semantics / `REDESIGN`. Evidence: `PROVEN` firmware-side.
 
-Future owner: Rust ECU response codec + typed protocol response model.
+Future owner: Rust protocol-response model.
 
-### `ecu.protocol.status-errors`
-
-Purpose: represent OK/Burn-OK and firmware error responses as typed protocol status rather than ad-hoc stripped leading bytes.
-
-Historical evidence: manager response helpers; firmware `sendErrorCode`, `writeCrcResponse` and command handlers.
-
-Classification: `PRESERVE` semantics / `REDESIGN`.
-
-Evidence: `PROVEN` firmware-side.
-
-Future owner: Rust `protocol_response` layer.
-
-### `ecu.protocol.sync-probe`
+## `ecu.protocol.sync-probe`
 
 Purpose: establish/verify protocol synchronization using bounded read-only operations before runtime streaming.
 
-Historical evidence: plain/framed `S/Q` compatibility sequence, framed `S` CRC sync, bounded `O` probes.
+Evidence: plain/framed `S/Q`, framed signature sync and bounded `O` probes; firmware `in_sync` state.
 
-Firmware evidence: `TsChannelBase::in_sync` and `tsProcessOne` synchronization rules.
+Invariant: profileless recognition ends after identity and close; no output/TuneSnapshot/mutation authority.
 
-Invariant: profileless recognition stops after signature identity and closes before output/TuneSnapshot/mutation authority.
-
-Classification: `PRESERVE` safety intent / `REDESIGN` session state machine.
-
-Evidence: `SUPPORTED` by qualified current implementation and firmware source.
+Classification: `PRESERVE` safety intent / `REDESIGN`. Evidence: `SUPPORTED`/firmware-backed.
 
 Future owner: Rust ECU session/probe policy.
 
-### `ecu.protocol.command-operations`
+## `ecu.protocol.command-operations`
 
-Purpose: expose typed supported firmware operations rather than raw arbitrary command frames to higher domains.
+Purpose: expose typed supported operations rather than arbitrary raw command frames.
 
-Current audited operations: signature `S/Q`, output `O`, tune read `R`, RAM write `C`, Burn `B`.
+Current audited operations: `S/Q`, `O`, `R`, `C`, `B`.
 
-Classification: `PRESERVE` protocol vocabulary / `REDESIGN` API.
+Classification: `PRESERVE` vocabulary / `REDESIGN` API. Evidence: `PROVEN`.
 
-Evidence: `PROVEN` by direct firmware command dispatch.
+Future owner: Rust ECU protocol layer.
 
-Future owner: Rust ECU protocol operation layer.
+## `ecu.identity.signature-query`
 
-### `ecu.identity.signature-query`
+Purpose: perform read-only live TunerStudio signature query.
 
-Purpose: perform the read-only live TunerStudio signature query.
+Classification: `PRESERVE`. Evidence: `PROVEN`.
 
-Invariant: transport identity is not board/profile authority.
+Future owner: Rust identity/session layer.
 
-Classification: `PRESERVE`.
+## `ecu.identity.recognition`
 
-Evidence: `PROVEN`/firmware-supported.
+Purpose: report firmware family/board/build diagnostically without granting profile/tuning authority.
 
-Future owner: Rust ECU identity/session layer.
+Invariant: parsed board name is descriptive only.
 
-### `ecu.identity.recognition`
-
-Purpose: report firmware family/board/build identity diagnostically without granting profile/tune authority.
-
-Historical evidence: `EcuFirmwareIdentity`, `EcuRecognitionResult`, firmware-evidence audit.
-
-Invariant: board-name parsing is descriptive only.
-
-Classification: `PRESERVE` semantics / `REDESIGN` implementation.
-
-Evidence: `SUPPORTED` with qualified EpicDash-JZ implementation.
+Classification: `PRESERVE` semantics / `REDESIGN`. Evidence: `SUPPORTED`.
 
 Future owner: Rust ECU identity layer.
 
-### `ecu.profile.exact-match`
+## `ecu.profile.exact-match`
 
-Purpose: require exact complete live signature equality with imported generated-INI signature before runtime-output decoding/tuning authority.
+Purpose: require exact complete live signature equality with imported generated-INI signature before runtime/tuning authority.
 
-Classification: `PRESERVE`.
+Classification: `PRESERVE`. Evidence: `PROVEN`.
 
-Evidence: `PROVEN`.
-
-Future owner: Rust ECU profile/session authority.
+Future owner: Rust profile/session authority.
 
 ---
 
-## Generated INI/profile responsibilities
+# Generated INI / profile
 
-### `profile.ini.syntax-parse`
+## `profile.ini.syntax-parse`
 
-Purpose: parse the exact generated TunerStudio INI text into typed source facts: sections, assignments, escaped strings, top-level comma fields, dimensions, defines and conditions.
+Purpose: parse sections, assignments, escaped strings, top-level lists, dimensions, defines and condition-source strings from the exact generated INI.
 
-Historical evidence: `UsbTunerStudioProfile.kt` one-pass parser and helpers.
-
-Classification: `PRESERVE` required behaviour / `SPLIT` + `REDESIGN` implementation.
-
-Evidence: `PROVEN` for current supported profiles.
+Classification: `PRESERVE` required behaviour / `SPLIT` + `REDESIGN`. Evidence: `PROVEN` for current supported profiles.
 
 Future owner: Rust profile parser/model.
 
-### `profile.support-policy`
+## `profile.support-policy`
 
-Purpose: explicitly decide whether a parsed generated INI is within EpicHub's supported protocol/schema subset.
+Purpose: explicitly decide whether a parsed INI is within EpicHub's supported TunerStudio/profile subset.
 
-Current evidence: current path requires `msEnvelope_1.0`, little-endian primitive interpretation, non-empty query, `O` output command, valid output block and parsed output channels.
+Current evidence includes `msEnvelope_1.0`, little endian, valid query/output command geometry and supported output/tune primitive constructs.
 
-Invariant: unsupported constructs fail explicitly; parser success alone does not grant compatibility authority.
+Invariant: syntax success alone does not grant compatibility; unsupported constructs fail explicitly.
 
-Classification: `ADD FORMAL OWNER` from previously embedded parser checks.
-
-Evidence: `PROVEN` that checks exist; clean separation `PROPOSED`.
+Classification: `ADD FORMAL OWNER`. Evidence: embedded checks `PROVEN`; clean split `PROPOSED`.
 
 Future owner: Rust profile support policy/compiler gate.
 
-### `profile.runtime-schema`
+## `profile.runtime-schema`
 
-Purpose: compile output-channel offsets/types/scales/bits and output command/block geometry from the exact generated INI.
+Purpose: compile output channel types/offsets/scales/bits plus output request/block geometry.
 
-Classification: `PRESERVE` semantics / `SPLIT`.
+Classification: `PRESERVE` / `SPLIT`. Evidence: `PROVEN`.
 
-Evidence: `PROVEN`.
+Future owner: Rust runtime schema.
 
-Future owner: Rust profile runtime schema.
+## `profile.tune-storage-schema`
 
-### `profile.tune-storage-schema`
+Purpose: compile calibration pages, IDs, sizes, read/Burn commands, primitive storage metadata, bounds and scale/translate.
 
-Purpose: compile calibration pages, identifiers, sizes, read/Burn commands, scalar/array/bit storage metadata, bounds and scale/translate.
+Classification: `PRESERVE` / `SPLIT`. Evidence: `PROVEN`.
 
-Classification: `PRESERVE` / `SPLIT`.
+Future owner: Rust tune schema.
 
-Evidence: `PROVEN`.
+## `profile.tuner-surface-schema`
 
-Future owner: Rust profile tune schema.
+Purpose: compile tables/curves/menus/dialogs into semantic structure without inventing tune values.
 
-### `profile.tuner-surface-schema`
+Classification: `PRESERVE` structural authority / `MERGE` + `REDESIGN`. Evidence: `SUPPORTED`/tested.
 
-Purpose: compile table/curve/menu/dialog structure from INI without inventing values.
+Future owner: Rust profile compiler/tuner schema.
 
-Historical evidence: `UsbTunerStudioProfile.kt` + `TuningIniDefinition.kt`.
+## `profile.schema-canonicalization`
 
-Classification: `PRESERVE` structural authority / `MERGE` + `REDESIGN` implementation.
+Purpose: reject ambiguity, canonicalize equivalent definitions, validate page bounds and table/curve dimensions.
 
-Evidence: `SUPPORTED`/regression tested.
-
-Future owner: Rust profile compiler/tuner schema; Compose consumes typed projection.
-
-### `profile.schema-canonicalization`
-
-Purpose: detect duplicate/ambiguous definitions, verify page bounds and table/curve dimensional compatibility, and produce a deterministic usable semantic schema.
-
-Historical evidence: `TuningIniDefinitionBuilder` canonical scalar/array/table/curve/bit logic.
-
-Classification: `PRESERVE` behaviour / `SPLIT` from presentation JSON generation.
-
-Evidence: `SUPPORTED`.
+Classification: `PRESERVE` behaviour / `SPLIT`. Evidence: `SUPPORTED`.
 
 Future owner: Rust profile compiler.
 
-### `profile.primitive-decode`
+## `profile.primitive-decode`
 
-Purpose: decode profile-defined little-endian raw scalar/bit/array primitives independent of presentation.
+Purpose: decode profile-defined little-endian primitive scalar/bit/array values independently of presentation.
 
-Historical evidence: primitive methods embedded in `UsbOutputChannel`, `UsbTuneScalar`, `UsbTuneArray`, `UsbTuneBitField`.
+Classification: `MERGE` + `REDESIGN`. Evidence: `PROVEN` current path.
 
-Classification: `MERGE` + `REDESIGN`.
+Future owner: Rust profile primitive module.
 
-Evidence: `PROVEN` current path.
+## `profile.condition-parse`
 
-Future owner: Rust profile primitive module; tuning mutation conversion uses tuning value codec built on the same type metadata.
+Purpose: parse generated-INI compatibility condition grammar.
 
-### `profile.condition-parse`
-
-Purpose: parse the generated-INI condition expression grammar used by menu/dialog enable/visibility rules.
-
-Classification: `PRESERVE` capability / `SPLIT`.
-
-Evidence: `SUPPORTED` by current parser/tests.
+Classification: `PRESERVE` capability / `SPLIT`. Evidence: `SUPPORTED`.
 
 Future owner: Rust profile condition parser.
 
-### `profile.condition-evaluate`
+## `profile.condition-evaluate`
 
-Purpose: evaluate supported condition expressions against explicitly decoded values from a complete verified TuneSnapshot.
+Purpose: evaluate supported conditions against explicitly decoded values from a complete verified TuneSnapshot.
 
 Invariant: unsupported/unresolved expressions fail closed for affected controls/targets.
 
-Classification: `PRESERVE` safety semantics / `SPLIT`.
-
-Evidence: `SUPPORTED`.
+Classification: `PRESERVE` safety semantics / `SPLIT`. Evidence: `SUPPORTED`.
 
 Future owner: Rust profile condition evaluator.
 
-### `profile.condition-target-authority`
+## `profile.condition-target-authority`
 
-Purpose: traverse menu/dialog/table/curve routing to determine whether a semantic tuning target is currently unconstrained/active/hidden/disabled/unsupported and therefore whether a write is allowed.
+Purpose: derive active/hidden/disabled/unsupported semantic target state and write eligibility from menu/dialog/surface conditions.
 
-Historical evidence: `IniConditionAuthority`.
+Finding: conditions are not presentation-only metadata; they participate in write authorization.
 
-Finding: INI conditions are not presentation-only metadata; they participate in write authorization.
+Classification: `PRESERVE` safety behaviour / `REDESIGN` API. Evidence: `SUPPORTED`/tested.
 
-Classification: `PRESERVE` safety behaviour / `REDESIGN` API.
+Future owner: Rust profile condition authority consumed by tuning policy.
 
-Evidence: `SUPPORTED`/tested.
+## `profile.fingerprint`
 
-Future owner: Rust profile condition authority consumed by tuning safety policy.
+Purpose: exact source identity binding for compiled/cached profile state.
 
-### `profile.fingerprint`
-
-Purpose: exact identity binding for compiled/cached profile state.
-
-Classification: `PRESERVE`.
-
-Evidence: `PROVEN` current architecture.
+Classification: `PRESERVE`. Evidence: `PROVEN`.
 
 Future owner: Rust profile crate.
 
-Invariant across all profile responsibilities: do not hardcode geometry by board name; exact generated INI remains structural/schema authority.
+Invariant across the profile domain: exact generated INI is structural/schema authority; board name does not own geometry.
 
 ---
 
-## Runtime channels and telemetry
+# Runtime channels / telemetry
 
-### `runtime.output.poll`
+## `runtime.output.poll`
 
-Purpose: request/receive live ECU output blocks under the current exact profile/session authority.
+Purpose: request live ECU output bytes under exact profile/session authority.
 
-Firmware evidence: `cmdOutputChannels()` validates offset/count against current generated output size and returns requested live-data fragments.
-
-Classification: `PRESERVE` behaviour / `REDESIGN` implementation.
-
-Evidence: `PROVEN`.
+Classification: `PRESERVE` behaviour / `REDESIGN`. Evidence: `PROVEN`.
 
 Future owner: Rust ECU/runtime engine.
 
-### `runtime.output.decode`
+## `runtime.output.decode`
 
-Purpose: decode raw output bytes according to exact profile metadata without board-name geometry assumptions.
+Purpose: decode output bytes strictly from exact profile metadata.
 
-Classification: `PRESERVE` semantics / `REDESIGN` implementation.
-
-Evidence: `PROVEN`.
+Classification: `PRESERVE` semantics / `REDESIGN`. Evidence: `PROVEN`.
 
 Future owner: Rust channel/profile engine.
 
-### `runtime.channel.store`
+## `runtime.channel.store`
 
-Purpose: sole high-volume mutable authority for current channel values, timestamp/revision/source/validity.
+Purpose: sole high-volume mutable authority for current channel values, timestamps, revisions, sources and validity.
 
-Historical evidence: `DashboardDataHub`, `DashboardRuntimeSnapshotStore`, variable repositories and native runtime state.
+Finding: telemetry is domain-neutral, not Dashboard-owned.
 
-Finding: telemetry must not belong specifically to Dashboard.
-
-Classification: `MERGE` + `REDESIGN`.
-
-Evidence: old behaviours `SUPPORTED`; new owner `PROPOSED`.
+Classification: `MERGE` + `REDESIGN`. Evidence: old needs `SUPPORTED`; new owner `PROPOSED`.
 
 Future owner: Rust channel engine.
 
-### `runtime.snapshot.display`
+## `runtime.snapshot.display`
 
-Purpose: expose bounded immutable latest-state snapshots to Compose at display cadence, independent of ECU sample rate.
+Purpose: bounded immutable latest-state snapshots to Compose at display cadence, independent of ECU sample rate.
 
-Historical evidence: bounded latest-state WebView bridge and runtime snapshot store.
+Classification: `REDESIGN`. Evidence: bounded-latest semantics `PROVEN`; packed/native snapshot `PROPOSED`.
 
-Classification: `REDESIGN`.
+Future owner: Rust producer + Kotlin native buffer adapter.
 
-Evidence: old bounded-latest-state semantics `PROVEN`; direct shared/packed native snapshot `PROPOSED`.
+## `runtime.source.freshness`
 
-Future owner: Rust snapshot producer + Kotlin native-buffer adapter.
+Purpose: distinguish live/demo/playback/disconnected/stale state using generation/revision/timestamps and deliberate exclusive operations.
 
-### `runtime.source.freshness`
+Classification: `PRESERVE` semantics / `REDESIGN`. Evidence: `PROVEN`.
 
-Purpose: distinguish live/demo/playback/disconnected/stale state using session/generation/revision/timestamps and exclusive-operation awareness.
+Future owner: Rust runtime/session model projected to UI.
 
-Historical evidence: EpicDash-JZ freshness/stale-warning and tuning-exclusive-operation corrections.
+## `runtime.math.derived-channels`
 
-Classification: `PRESERVE` semantics / `REDESIGN` representation.
+Purpose: one calculation system over the same channel model used by live/log analysis.
 
-Evidence: `PROVEN`.
-
-Future owner: Rust runtime session/channel model, projected to Kotlin UI.
-
-### `runtime.math.derived-channels`
-
-Purpose: compute user/system derived channels against the same channel model used by live/log analysis.
-
-Historical evidence: EpicDash-JZ math channels; future analyzer requirements.
-
-Classification: `PRESERVE` capability / `REDESIGN` implementation.
-
-Evidence: existing feature `SUPPORTED`; unified engine `PROPOSED`.
+Classification: `PRESERVE` capability / `REDESIGN`. Evidence: existing feature `SUPPORTED`; unified engine `PROPOSED`.
 
 Future owner: Rust expression engine.
 
 ---
 
-## ESP32 accessory / BLE domain
+# ESP32 legacy bridge / Android BLE
 
-### `accessory.ble.discovery`
+## `accessory.ble.discovery`
 
-Purpose: discover intended ESP32 accessory devices using Android BLE APIs.
+Purpose: discover candidate ESP32 bridge devices using Android BLE APIs, then validate service identity before declaring compatibility.
 
-Historical evidence: original EpicDash and EpicDash-JZ BLE scanning/reconnect work.
+Evidence: original/evolved BLE managers. Legacy name `ESP32 Dashboard` is a hint; service UUID is stronger protocol evidence.
 
-Classification: `PRESERVE` capability / `SPLIT` implementation.
-
-Evidence: `PROVEN` in evolved app.
+Classification: `PRESERVE` capability / `SPLIT`. Evidence: `PROVEN` in evolved app.
 
 Future owner: Kotlin Android BLE layer.
 
-### `accessory.ble.connection`
+## `accessory.ble.connection`
 
-Purpose: own GATT connection/service discovery/characteristic subscription and connection state.
+Purpose: own GATT connect/disconnect, service discovery, required-characteristic validation, notification subscription, connection priority/MTU and stale-GATT cleanup.
 
-Historical evidence: original/EpicDash-JZ `BleManager`.
-
-Classification: `PRESERVE` capability / `SPLIT` implementation.
-
-Evidence: `PROVEN`.
+Classification: `PRESERVE` capability / `SPLIT`. Evidence: `PROVEN`/well characterized in EpicDash-JZ.
 
 Future owner: Kotlin `Esp32GattClient`-type component.
 
-### `accessory.ble.reconnect-policy`
+## `accessory.ble.reconnect-policy`
 
-Purpose: decide retry/backoff behaviour independently of GATT mechanics.
+Purpose: decide scan/retry/backoff separately from GATT mechanics.
 
-Historical evidence: EpicDash-JZ reconnect improvements.
+Evidence: guarded scan windows, adaptive scan mode, connection timeout, 5/10/20/30-second backoff and manual/automatic reconnect behavior.
 
-Classification: `SPLIT` + `REDESIGN`.
-
-Evidence: `PROVEN` need; future pure-policy form `PROPOSED`.
+Classification: `SPLIT` + `REDESIGN`. Evidence: need `PROVEN`; pure-policy form `PROPOSED`.
 
 Future owner: Kotlin BLE policy.
 
-### `accessory.ble.write-scheduling`
+## `accessory.ble.operation-scheduler`
 
-Purpose: serialize/queue writes according to Android GATT constraints without mixing message semantics into transport scheduling.
+Purpose: provide **one connection-wide serialized GATT operation owner** for characteristic writes/descriptors and future operations, with message class/priority/backpressure metadata where justified.
 
-Historical evidence: distinct button, variable-request and GPS FIFO queues; queue diagnostics/characterisation.
+Historical evidence: EpicDash-JZ has three separate FIFO queues/`isWriting` flags for button, variable-request and variable-set/GPS traffic.
 
-Classification: `PRESERVE` requirement / `MERGE` transport mechanism + semantic priority policy to be designed.
+Finding: separate per-characteristic queues are useful evidence for buffering need, but are rejected as the final ownership model because they do not express one connection-wide GATT operation order.
 
-Evidence: `SUPPORTED`/partly physically characterized.
+Classification: `MERGE` + `REDESIGN`. Evidence: serialization need `SUPPORTED`; final scheduler `PROPOSED`.
 
-Future owner: Kotlin BLE write scheduler.
+Future owner: Kotlin `BleWriteScheduler`/GATT operation scheduler.
 
-### `accessory.protocol.message-codec`
+## `accessory.protocol.legacy-button-bridge`
 
-Purpose: encode/decode the ESP32 BLE payloads independently of GATT lifecycle.
+Purpose: cleanly encode/decode legacy BLE button-mask compatibility and its CAN forwarding semantics.
 
-Known protocol evidence: button mask LE; variable hashes/data BE; batched variable responses; phone-to-ESP32 variable-set/GPS entries.
+Wire evidence:
 
-Classification: `PRESERVE` required wire compatibility where still used / `SPLIT` implementation.
+- BLE preferred form: 16-bit little-endian mask;
+- original firmware also accepts one-byte button ID as legacy shortcut;
+- CAN ID `0x711`;
+- CAN payload `[0x5A, 0x00, 27, maskHi, maskLo]`;
+- ESP32 forwards only when mask changes.
 
-Evidence: `SUPPORTED` by upstream Android+ESP32 source and EpicDash-JZ implementation.
+Classification: `PRESERVE` compatibility where product requires it / `SPLIT` from GATT lifecycle.
 
-Future owner: Kotlin accessory protocol codec.
+Evidence: `SUPPORTED` by original Android+firmware source.
 
-### `accessory.action.semantic-routing`
+Future owner: Kotlin accessory protocol/gateway.
 
-Purpose: route semantic actions such as accessory output toggles without exposing BLE characteristics/GPIO numbers to UI layouts.
+## `accessory.protocol.legacy-variable-request`
 
-Classification: `PROPOSED`.
+Purpose: encode batched BE variable hashes, bridge them sequentially to CAN requests and decode returned batched hash+float entries.
 
-Evidence: `PROPOSED`.
+Legacy evidence:
 
-Future owner: Kotlin ActionRouter + accessory gateway.
+- up to 16 hashes per ESP32 batch;
+- CAN request ID `0x701` for current ECU ID 1;
+- CAN response ID `0x721`;
+- response entry `[hash BE4][float BE4]`;
+- 100 ms per-variable timeout;
+- final notification may contain a partial batch.
 
-### `accessory.state.requested-confirmed`
+Classification: `PRESERVE` compatibility semantics where retained / `REDESIGN` app request/correlation model.
 
-Purpose: distinguish requested output state from confirmed/accessory-reported state and failure/no-response state.
+Evidence: `SUPPORTED`.
 
-Classification: `PROPOSED`.
+Future owner: Kotlin accessory bridge codec/gateway.
 
-Evidence: `PROPOSED`.
+## `accessory.protocol.legacy-variable-set`
 
-Future owner: Kotlin accessory state store; mirrored as channels/events where useful.
+Purpose: send generic `[hash BE4][raw-value BE4]` entries from Android through ESP32 to CAN variable-set ID `0x781` (current ECU ID 1).
 
-### `accessory.hardware.failsafe`
+Finding: the characteristic historically called `GPS_DATA` is **not GPS-specific**. GPS, packed GPS and phone virtual ADC values all use this generic wire path.
 
-Purpose: ensure physical relay/GPIO outputs have safe behaviour if Android/BLE fails or disconnects.
+Classification: `PRESERVE` wire compatibility / `RENAME` + `SPLIT` semantics.
 
-Classification: `PRESERVE` product requirement / implementation to be defined in ESP32 firmware.
+Evidence: `PROVEN` by direct firmware source.
 
-Evidence: `PROPOSED` as formalized EpicHub contract.
+Future owner: Kotlin `Esp32VariableSetCodec`-type component; GPS and other producers remain separate domains.
 
-Future owner: ESP32 firmware, not Android UI/Rust measurement engine.
+## `accessory.bridge.request-correlation-status`
 
-### `accessory.telemetry.to-channels`
+Purpose: make app-side request identity, pending/timeout/partial-result state explicit instead of copying accidental legacy assumptions.
 
-Purpose: publish returned ESP32 variables/inputs/relay states into the common runtime channel model.
+Historical implementation limitations:
 
-Classification: `REDESIGN`.
+- new variable batch can be dropped while one is active;
+- returned CAN hash is not explicitly checked against the expected pending hash before advancing;
+- BLE notification has no application-level delivery acknowledgement.
 
-Evidence: existing variable return path `SUPPORTED`; unified channel integration `PROPOSED`.
+Classification: `REDESIGN`. Evidence: legacy limitations `PROVEN`; improved app model `PROPOSED`.
 
-Future owner: Kotlin accessory gateway → coarse Rust channel ingestion.
+Future owner: Kotlin accessory gateway/state.
+
+## `accessory.bridge.disconnect-release-semantics`
+
+Purpose: explicitly define what a BLE disconnect means for the legacy button mask/downstream CAN consumer.
+
+Finding: reviewed original firmware does not clear `lastButtonMask` and does not send a zero/release CAN frame on disconnect.
+
+Invariant: do not invent a release behavior until the downstream ECU/button-box consumer semantics are verified. Do not present transport disconnect as confirmed downstream release.
+
+Classification: `ADD FORMAL CONTRACT`.
+
+Evidence: absence in legacy firmware `PROVEN`; correct product behavior remains `PROPOSED` pending verification.
+
+Future owner: compatibility policy + ESP32 bridge firmware if a change is deliberately made.
+
+## `accessory.bridge.local-adc-input`
+
+Purpose: preserve/evaluate the ESP32 local ADC bridge capability independently of BLE action semantics.
+
+Legacy behavior: GPIO 5, nominal 100 Hz, 12-bit read scaled to 0–1023, change threshold 5, published through the CAN variable-set path.
+
+Classification: `REFERENCE` / `PRESERVE` only if still product-relevant.
+
+Evidence: `PROVEN` source behavior.
+
+Future owner: ESP32 bridge firmware; returned/observed value may enter common runtime channels.
+
+## `accessory.bridge.local-digital-input`
+
+Purpose: preserve/evaluate local digital input forwarding independently of UI actions.
+
+Legacy behavior: GPIO 1 active-low, nominal 50 Hz sampling, 50 ms debounce, current bit 0 only.
+
+Caution: reviewed source marks the digital-input variable hash as TODO; that numeric hash is not permanent protocol authority without independent ECU/profile evidence.
+
+Classification: `REFERENCE` / `PRESERVE` only if still product-relevant.
+
+Evidence: source behavior `PROVEN`; final hash/contract not established.
+
+Future owner: ESP32 bridge firmware.
+
+## `accessory.bridge.firmware-liveness`
+
+Purpose: keep the bridge firmware responsive/recoverable.
+
+Legacy evidence: 5-second ESP task watchdog and restart of BLE advertising after disconnect.
+
+Finding: watchdog is firmware-liveness protection, **not** proof of a downstream output-safe state.
+
+Classification: `PRESERVE` concept / `REDESIGN` exact firmware implementation as needed.
+
+Evidence: `PROVEN` source behavior.
+
+Future owner: ESP32 firmware.
+
+## `accessory.action.semantic-routing`
+
+Purpose: bind UI/input to stable semantic actions rather than characteristic UUIDs, button bits, CAN IDs or GPIOs.
+
+For legacy bridge actions the result may only be `queued`/`transport-completed`; downstream state remains unknown unless independently observed.
+
+Classification: `PROPOSED`. Evidence: `PROPOSED` clean architecture need.
+
+Future owner: Kotlin ActionRouter + bridge gateway.
+
+## `accessory.state.legacy-transport-vs-downstream`
+
+Purpose: distinguish BLE/GATT transport observations from downstream ECU/CAN state.
+
+Invariant: GATT acceptance/completion is not an application-level acknowledgement that the ECU/CAN consumer applied a button/action.
+
+Classification: `ADD`.
+
+Evidence: acknowledgement absence `PROVEN`.
+
+Future owner: Kotlin accessory/bridge state model.
+
+## `accessory.output.versioned-direct-control`
+
+Purpose: represent **future** direct ESP32 relay/GPIO outputs as a separate versioned capability rather than pretending they exist in the legacy bridge.
+
+Required before such a capability exists:
+
+- protocol version/capability negotiation;
+- semantic output IDs independent of raw GPIO;
+- application-level command acknowledgement;
+- confirmed hardware state/fault reporting as required;
+- boot/default state;
+- electrical/interlock policy;
+- watchdog/disconnect fallback.
+
+Classification: `PROPOSED NEW CAPABILITY`.
+
+Evidence: legacy absence `PROVEN`; design `PROPOSED`.
+
+Future owner: ESP32 firmware + Kotlin accessory gateway. Physical fail-safe authority remains firmware-side.
+
+## `accessory.telemetry.to-channels`
+
+Purpose: publish returned bridge variables/local-input states into the common runtime channel model without making the BLE manager a telemetry authority.
+
+Classification: `REDESIGN`. Evidence: legacy returned-value path `SUPPORTED`; unified channel integration `PROPOSED`.
+
+Future owner: Kotlin bridge gateway → coarse Rust channel ingestion.
 
 ---
 
-## Location/GPS
+# Location / GPS
 
-### `location.acquire`
+## `location.acquire`
 
-Purpose: acquire Android location samples with explicit quality/timestamp semantics.
+Purpose: acquire Android location samples with explicit timestamps/quality.
 
-Historical evidence: `LocationDataHub`, GPS characterization and regression tests.
-
-Classification: `PRESERVE` capability / `REDESIGN` implementation boundary.
-
-Evidence: `PROVEN` aspects in EpicDash-JZ.
+Classification: `PRESERVE` capability / `REDESIGN` boundary. Evidence: `PROVEN` aspects in EpicDash-JZ.
 
 Future owner: Kotlin Android location source.
 
-### `location.map-runtime-channels`
+## `location.map-runtime-channels`
 
-Purpose: expose GPS values as typed runtime channels without conflating acquisition and display.
+Purpose: expose GPS as typed runtime channels without conflating acquisition and display.
 
-Classification: `PRESERVE` capability / `REDESIGN`.
+Classification: `PRESERVE` capability / `REDESIGN`. Evidence: `PROVEN` mapping behavior.
 
-Evidence: `PROVEN` mapping behaviour exists.
+Future owner: Kotlin→Rust channel ingestion.
 
-Future owner: Kotlin→Rust channel ingestion boundary.
+## `location.encode-legacy-variable-set`
 
-### `location.forward-esp32`
+Purpose: encode GPS-specific float/packed values into the **generic legacy variable-set** bridge format when that compatibility path remains required.
 
-Purpose: encode/send selected GPS data through ESP32 for CAN transmission where firmware use requires it.
-
-Historical evidence: original ESP32 characteristic/CAN path and EpicDash-JZ GPS mapping.
-
-Classification: `PRESERVE` protocol capability pending product review.
+Classification: `PRESERVE` compatibility capability / `RENAME` + `SPLIT` old GPS-specific transport naming.
 
 Evidence: `SUPPORTED`/historically implemented.
 
-Future owner: Kotlin location + accessory protocol domains, not generic BLE code.
+Future owner: Kotlin `GpsVariableEncoder` feeding the accessory variable-set gateway.
 
 ---
 
-## Tuning authority and persistence
+# Tuning authority / persistence
 
-### `tuning.operation.exclusive-owner`
+## `tuning.operation.exclusive-owner`
 
-Purpose: serialize tune Read/RAM-write/Burn against ordinary output polling on the one ECU session.
+Purpose: serialize tune Read/RAM-write/Burn against ordinary output polling on one ECU session.
 
-Historical evidence: current manager's exclusive TUNER operation owner and deliberate poll pause/resume.
+Invariant: deliberate exclusivity is represented in freshness state so it does not look like failed streaming.
 
-Invariant: UI does not create a second transport owner; deliberate exclusive operation is reflected in freshness state so stale warnings do not misreport it as a failed stream.
+Classification: `PRESERVE` semantics / `REDESIGN`. Evidence: `PROVEN` physically.
 
-Classification: `PRESERVE` semantics / `REDESIGN` implementation.
+Future owner: Rust ECU/tuning transaction gate.
 
-Evidence: `PROVEN` by prior physical correction.
+## `tuning.snapshot.read-complete`
 
-Future owner: Rust ECU/tuning session transaction gate.
+Purpose: read a complete bounded TuneSnapshot from exact profile/session authority and INI-derived `R` plan.
 
-### `tuning.snapshot.read-complete`
+Classification: `PRESERVE`. Evidence: `PROVEN` physically.
 
-Purpose: read a complete bounded TuneSnapshot using current exact profile/session authority and INI-derived `R` plan.
+Future owner: Rust tuning/session engine.
 
-Classification: `PRESERVE`.
+## `tuning.snapshot.immutable-authority`
 
-Evidence: `PROVEN` physically.
+Purpose: complete verified tune image/fingerprint as immutable semantic/write-verification authority.
 
-Future owner: Rust tuning/session engine after parity qualification.
-
-### `tuning.snapshot.immutable-authority`
-
-Purpose: represent the complete verified tune image as immutable authority for semantic interpretation/write verification.
-
-Classification: `PRESERVE`.
-
-Evidence: `PROVEN`.
+Classification: `PRESERVE`. Evidence: `PROVEN`.
 
 Future owner: Rust tuning model.
 
-### `tuning.project.persist-profile-snapshot`
+## `tuning.project.persist-profile-snapshot`
 
-Purpose: persist exact imported INI plus matching complete verified TuneSnapshot as project authority, with compiled projections only as identity-bound acceleration.
+Purpose: persist exact imported INI plus matching complete verified TuneSnapshot, with compiled projections only as identity-bound acceleration.
 
-Classification: `PRESERVE` principle / `REDESIGN` storage implementation for new app.
+Classification: `PRESERVE` principle / `REDESIGN` storage. Evidence: `PROVEN` current architecture.
 
-Evidence: `PROVEN` current architecture.
+Future owner: Rust project/tuning model plus Kotlin storage adapter where needed.
 
-Future owner: Rust tuning/project model plus Kotlin Android file/storage boundary where necessary.
+## `tuning.semantic.target-resolution`
 
-### `tuning.semantic.target-resolution`
+Purpose: resolve scalar/array/table/curve/bit-enum semantic targets into current exact-profile storage metadata below UI.
 
-Purpose: resolve scalar/array/table/curve/bit-enum semantic targets into current profile storage metadata below the UI boundary.
-
-Classification: `PRESERVE`.
-
-Evidence: `PROVEN` physically for mixed scalar/table-backed edits.
+Classification: `PRESERVE`. Evidence: `PROVEN` physically for mixed target types.
 
 Future owner: Rust tuning engine.
 
-### `tuning.value.codec`
+## `tuning.value.codec`
 
-Purpose: convert engineering values to/from supported raw calibration primitive representations according to current INI metadata.
+Purpose: engineering↔raw calibration conversion according to exact INI metadata.
 
-Classification: `PRESERVE` semantics / `REDESIGN` implementation.
+Classification: `PRESERVE` semantics / `REDESIGN`. Evidence: `PROVEN`/tested.
 
-Evidence: `PROVEN`/regression tested.
+Future owner: Rust tuning codec reusing profile primitive metadata.
 
-Future owner: Rust tuning codec, reusing profile primitive type metadata without duplicating profile parsing.
+## `tuning.write.condition-authority`
 
-### `tuning.write.condition-authority`
+Purpose: require profile condition authority to allow a target before a write plan may include it.
 
-Purpose: require the current profile condition authority to allow a semantic target before a write plan can include it.
+Classification: `PRESERVE` safety semantic. Evidence: `SUPPORTED`/tested.
 
-Historical evidence: `IniConditionAuthority.requireWriteAllowed`.
+Future owner: Rust tuning safety policy.
 
-Classification: `PRESERVE` safety semantic.
+## `tuning.write.plan`
 
-Evidence: `SUPPORTED`/tested.
+Purpose: validate identity, semantic targets, uniqueness/range/non-overlap and construct complete expected post-write snapshot before transmission.
 
-Future owner: Rust tuning safety policy consuming profile condition state.
+Classification: `PRESERVE`. Evidence: `PROVEN`.
 
-### `tuning.write.plan`
+Future owner: Rust planner.
 
-Purpose: validate semantic edits, uniqueness/range/non-overlap/identity and construct complete expected post-write snapshot before transmission.
+## `tuning.write.baseline-reread`
 
-Classification: `PRESERVE`.
+Purpose: immediately before any possible `C`, reread complete tune and require exact planned baseline fingerprint.
 
-Evidence: `PROVEN`.
+Classification: `PRESERVE`. Evidence: `PROVEN` physically.
 
-Future owner: Rust tuning planner.
+Future owner: Rust transaction preflight.
 
-### `tuning.write.baseline-reread`
+## `tuning.write.transaction`
 
-Purpose: immediately before any possible `C` transmission, reread the complete tune and require its fingerprint to match the edit plan's baseline.
+Purpose: bounded `C` write + ACK + exact `R` range readback + final complete expected TuneSnapshot verification + dirty-page update.
 
-Classification: `PRESERVE`.
+Classification: `PRESERVE` safety semantics / `REDESIGN`. Evidence: `PROVEN` physically.
 
-Evidence: `PROVEN` physically in normal tuning workflow.
+Future owner: Rust tuning transaction through sole ECU session.
 
-Future owner: Rust write transaction preflight.
+## `tuning.write.uncertainty`
 
-### `tuning.write.transaction`
+Purpose: fail closed after possible transmission with incomplete proof; no automatic replay until deliberate complete resynchronization.
 
-Purpose: bounded RAM-write transaction with `C` write ACK, exact `R` range read-back, complete TuneSnapshot verification and dirty-page update.
+Classification: `PRESERVE`. Evidence: `PROVEN`.
 
-Classification: `PRESERVE` safety semantics / `REDESIGN` implementation.
+Future owner: Rust tuning/session state.
 
-Evidence: `PROVEN` physically.
+## `tuning.burn.transaction`
 
-Future owner: Rust tuning transaction, using sole ECU transport session.
+Purpose: separate explicit `B` Burn with current INI page authority, flash readiness/progression evidence, complete post-Burn reread and dirty-page clearing.
 
-### `tuning.write.uncertainty`
-
-Purpose: enter fail-closed uncertain state after possible transmission with incomplete verification; prohibit automatic retry/replay until deliberate complete resynchronization.
-
-Classification: `PRESERVE`.
-
-Evidence: `PROVEN` safety contract.
-
-Future owner: Rust tuning transaction/session state.
-
-### `tuning.burn.transaction`
-
-Purpose: explicit separate `B` Burn using current INI Burn-page authority, flash readiness/progression evidence, complete post-Burn reread and dirty-page clearing.
-
-Classification: `PRESERVE`.
-
-Evidence: `PROVEN` physically.
+Classification: `PRESERVE`. Evidence: `PROVEN` physically.
 
 Future owner: Rust tuning/Burn module.
 
-### `tuning.ui.semantic-editing`
+## `tuning.ui.semantic-editing`
 
-Purpose: present parameters/curves/tables and submit semantic edits without raw memory/protocol authority.
+Purpose: present parameters/curves/tables and submit semantic edits with no raw memory/protocol authority.
 
-Historical evidence: WebView tuner and accepted hierarchy/content modes.
+Classification: `PRESERVE` boundary / `REDESIGN` Compose presentation. Evidence: behavior `SUPPORTED`; new UI `PROPOSED`.
 
-Classification: `PRESERVE` semantic boundary / `REDESIGN` presentation in Compose.
-
-Evidence: behavioural requirements `SUPPORTED`/some physically qualified; new UI implementation `PROPOSED`.
-
-Future owner: Kotlin Compose tuner UI/ViewModels; Rust supplies typed tune models and executes semantic operations.
+Future owner: Compose tuner UI + Rust typed tune model/operations.
 
 ---
 
-## Logging and interoperability
+# Logging / interoperability
 
-### `interop.msl.playback`
+## `interop.msl.playback`
+Purpose: MSL playback/import as a source feeding common channels. Classification: `PRESERVE` capability / `REDESIGN`. Future owner: Rust interop.
 
-Purpose: read/play TunerStudio MSL logs as an interoperability source feeding the common channel interface.
+## `interop.csv.import`
+Purpose: CSV import without making CSV the internal model. Classification: `PRESERVE`. Future owner: Rust interop.
 
-Historical evidence: `MslLogPlayer` and playback work.
+## `interop.mlg`
+Purpose: initial TunerStudio/MegaLogViewer compatibility path where useful during transition/testing. Classification: `PROPOSED`. Future owner: Rust interop.
 
-Classification: `PRESERVE` useful capability / `REDESIGN` implementation.
+## `logging.session.record`
+Purpose: live recording session independently of concrete file writer. Classification: `PROPOSED`. Future owner: Rust logging.
 
-Evidence: `SUPPORTED`.
-
-Future owner: Rust interop reader or isolated import layer after format evaluation.
-
-### `interop.csv.import`
-
-Purpose: import compatible CSV measurement data without making CSV the internal runtime/log model.
-
-Classification: `PRESERVE` capability.
-
-Evidence: `SUPPORTED` historically.
-
-Future owner: Rust interop/import layer.
-
-### `interop.mlg`
-
-Purpose: initial TunerStudio/MegaLogViewer-compatible logging/import/export path where useful during transition/testing.
-
-Classification: `PROPOSED`/partly based on existing separate investigations.
-
-Evidence: `PROPOSED` for new app.
-
-Future owner: Rust interop layer.
-
-### `logging.session.record`
-
-Purpose: own a live measurement recording session independently of the concrete file-format writer.
-
-Classification: `PROPOSED` clean-slate responsibility.
-
-Future owner: Rust logging crate.
-
-### `logging.format.mdf4`
-
-Purpose: write/read/recover native MDF4 measurement files behind an internal abstraction.
-
-Classification: `PROPOSED`.
-
-Future owner: Rust MDF crate.
+## `logging.format.mdf4`
+Purpose: native MDF4 read/write/recovery behind internal abstraction. Classification: `PROPOSED`. Future owner: Rust MDF crate.
 
 ---
 
-## Analyzer / plotting
+# Analyzer / plotting
 
-### `analysis.query`
+## `analysis.query`
+Purpose: bounded channel/time queries against live/file-backed sources. Classification: `PROPOSED`. Future owner: Rust analysis.
 
-Purpose: query channels/time ranges against live or file-backed sources without loading entire datasets into the UI.
+## `analysis.events-search`
+Purpose: search/filter/event detection over channel data. Classification: `PROPOSED`. Future owner: Rust analysis/expression engine.
 
-Classification: `PROPOSED`.
+## `plot.downsample-resolution`
+Purpose: spike-preserving multires min/max viewport data. Classification: `PROPOSED`. Future owner: Rust plotting.
 
-Future owner: Rust analysis engine.
-
-### `analysis.events-search`
-
-Purpose: search/filter/detect conditions and events over recorded/live channel data.
-
-Classification: `PROPOSED`, with future algorithms informed by existing tuning plugins/tools.
-
-Future owner: Rust analysis/expression engine.
-
-### `plot.downsample-resolution`
-
-Purpose: produce viewport-sized traces using spike-preserving min/max multiresolution data rather than transferring full raw history.
-
-Classification: `PROPOSED`.
-
-Future owner: Rust plotting/downsample engine.
-
-### `plot.compose-render`
-
-Purpose: render prepared plot packets responsively in Compose; use more specialized rendering only if measurement proves necessary.
-
-Classification: `PROPOSED`.
-
-Future owner: Kotlin Compose initially.
+## `plot.compose-render`
+Purpose: render prepared plot packets in Compose; specialized GPU only if measurements justify it. Classification: `PROPOSED`.
 
 ---
 
-## Diagnostics and performance
+# Diagnostics / performance
 
-### `diagnostics.android-usb`
+## `diagnostics.android-usb`
+Purpose: Android permission/device/interface/endpoint/open/claim/control-transfer facts. Classification: `SPLIT`. Future owner: Kotlin USB diagnostics.
 
-Purpose: record Android-owned permission/device/interface/endpoint/open/claim/control-transfer facts without absorbing ECU protocol state.
+## `diagnostics.ecu-protocol-session`
+Purpose: sync, command/status/CRC/rates/timeouts/session-generation facts. Classification: `SPLIT` + `REDESIGN`. Future owner: Rust diagnostics.
 
-Classification: `SPLIT` from historical manager diagnostics.
+## `diagnostics.tuning-transaction`
+Purpose: semantic tune Read/Write/Burn state, uncertainty, fingerprints and verification evidence. Classification: `SPLIT`. Future owner: Rust tuning diagnostics/events.
 
-Evidence: `SUPPORTED`.
+## `diagnostics.ble-connection-queue`
+Purpose: scan/connect/retry/GATT operation depth/latency/drop/error metrics without embedding action semantics. Classification: `PRESERVE` diagnostic need / `REDESIGN` around one global scheduler. Future owner: Kotlin BLE diagnostics.
 
-Future owner: Kotlin platform USB diagnostics.
+## `diagnostics.structured-events`
+Purpose: bounded structured events across Android and Rust with correlation/session IDs. Classification: `MERGE` + `REDESIGN`. Evidence: need `PROVEN`; unified model `PROPOSED`.
 
-### `diagnostics.ecu-protocol-session`
-
-Purpose: record protocol sync, command/status/CRC/request-rate/timeout/session-generation facts in the engine domain.
-
-Classification: `SPLIT` + `REDESIGN`.
-
-Evidence: existing instrumentation need `PROVEN`.
-
-Future owner: Rust diagnostics.
-
-### `diagnostics.tuning-transaction`
-
-Purpose: expose bounded semantic tune Read/Write/Burn state/results, uncertainty, fingerprints and verification evidence without exposing raw mutation authority.
-
-Classification: `SPLIT` from `UsbEcuManager` diagnostic JSON.
-
-Evidence: `PROVEN` useful in current physical validation.
-
-Future owner: Rust tuning events/diagnostic snapshot.
-
-### `diagnostics.structured-events`
-
-Purpose: maintain bounded structured diagnostic events across Android/platform/Rust-engine domains and expose/export them without random ad-hoc logs as the sole evidence.
-
-Historical evidence: `DiagnosticStore`, lifecycle/USB/BLE diagnostics and report formatting.
-
-Classification: `MERGE` + `REDESIGN`.
-
-Evidence: need `PROVEN`; unified model `PROPOSED`.
-
-Future owner: shared schema; native Rust event ring for engine events plus Kotlin Android diagnostics adapter/store.
-
-### `diagnostics.performance-metrics`
-
-Purpose: measure frame/jank, ECU rates, queue depth/drop, JNI crossings/bytes, logging throughput, analyzer latency, memory/CPU/thermal behaviour.
-
-Historical evidence: `PerformanceMetrics`, rolling metrics, performance measurement protocol.
-
-Classification: `PRESERVE` measurement discipline / `REDESIGN` metrics architecture.
-
-Evidence: `PROVEN` need.
-
-Future owner: split Kotlin Android metrics and Rust engine metrics, aggregated diagnostically.
+## `diagnostics.performance-metrics`
+Purpose: frame/jank, ECU rates, JNI crossings/bytes, queue/drop, logging throughput, analyzer latency, CPU/memory/thermal metrics. Classification: `PRESERVE` measurement discipline / `REDESIGN` architecture.
 
 ---
 
-## Historical architecture explicitly not carried forward
+# Historical ownership models explicitly removed
 
-### `presentation.webview-json-dom-hot-path`
+## `presentation.webview-json-dom-hot-path`
+Classification: `REMOVE`. Replacement: Compose + typed packed native state.
 
-Historical purpose: render dashboard/tuner through native→JSON→JavaScript→DOM/WebView path.
+## `dashboard-specific-telemetry-authority`
+Classification: `REMOVE`. Replacement: domain-neutral Rust ChannelStore.
 
-Classification: `REMOVE` from final runtime architecture.
+## `usb-manager-monolith`
+Classification: `REMOVE`. Replacement: Android CDC platform pieces + sole ECU session + typed protocol/runtime/tuning/diagnostic owners.
 
-Reason: Compose/native typed state replaces this translation/rendering path; useful UI behaviour is inventoried separately.
+## `profile-parser-monolith`
+Classification: `REMOVE`. Replacement: parser/model/support policy/schema compiler/primitive/condition responsibilities under one exact profile identity.
 
-### `dashboard-specific-telemetry-authority`
+## `ble-per-characteristic-operation-owners`
+Classification: `REMOVE` as final architecture. Replacement: one connection-wide GATT operation scheduler with semantic producers above it.
 
-Historical purpose: dashboard-centric hub/store owns runtime data.
+## `gps-named-generic-variable-transport`
+Classification: `REMOVE` naming leakage. Replacement: generic variable-set transport + GPS-specific producer/encoder.
 
-Classification: `REMOVE` as an ownership model.
+## `legacy-bridge-implied-relay-failsafe`
+Classification: `REMOVE` assumption. Replacement: legacy bridge compatibility model; any direct relay/GPIO output is a separately versioned new capability with firmware-owned safety contract.
 
-Replacement: domain-neutral Rust ChannelStore consumed by Dashboard/Logger/Analyzer/etc.
-
-### `usb-manager-monolith`
-
-Historical purpose: one large Android class owns platform USB, protocol, session, runtime, tuning and diagnostics.
-
-Classification: `REMOVE` as an ownership model.
-
-Replacement: Android CDC platform pieces + one ECU session + typed protocol/runtime/tuning/diagnostic owners.
-
-### `profile-parser-monolith`
-
-Historical purpose: one compiled profile object/parser also owns raw codecs, surface compilation and condition semantics.
-
-Classification: `REMOVE` as a future structure.
-
-Replacement: separate parser/model/support policy/schema compiler/primitive/condition responsibilities under one exact profile identity.
-
-### `development-stage-production-names`
-
-Historical examples: `T3*`, `T4*`, `T6*`, `W4*`.
-
-Classification: `REMOVE` from new production vocabulary.
-
-Replacement: permanent responsibility-based names.
+## `development-stage-production-names`
+Historical examples: `T3*`, `T4*`, `T6*`, `W4*`. Classification: `REMOVE`. Replacement: permanent responsibility-based names.
