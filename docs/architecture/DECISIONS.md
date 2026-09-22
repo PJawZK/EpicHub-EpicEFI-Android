@@ -104,3 +104,11 @@ Rust/profile/tuning/channel domains own semantic truth such as tune targets/valu
 Compose owns presentation/interaction state such as responsive layout, gesture arbitration, zoom/pan, panel folding, table display orientation, modal ownership and 3D camera state.
 
 Presentation transformations do not reorder or mutate authoritative tune data. Three-dimensional table inspection remains view-only unless a future separately accepted semantic edit contract is added.
+
+## D-017 — Diagnostics are observational, not control authority
+
+Diagnostics may observe, timestamp, correlate, count, summarize and export subsystem behavior, but the subsystem owner remains the authority that decides state transitions and actions.
+
+Instrumentation must not reconnect transports, invalidate sessions, alter queue/loss policy, change tuning safety decisions or otherwise modify production behavior merely to simplify reporting or improve metrics.
+
+Android/platform diagnostics remain Kotlin-owned; engine diagnostics remain Rust-owned. They share stable event/metric/correlation contracts and cross the native boundary in bounded snapshots/batches rather than per-event or per-sample callbacks.
