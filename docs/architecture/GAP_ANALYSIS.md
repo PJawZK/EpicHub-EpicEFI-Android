@@ -175,15 +175,28 @@ Status: `PROPOSED` while preserving tuning authority invariants.
 
 ## Important unresolved technical decisions
 
-### ECU runtime I/O owner after Android USB open
+### ECU sustained runtime I/O owner after Android USB open
+
+The source archaeology now cleanly separates Android USB permission/device/CDC setup from TunerStudio protocol/session semantics. The remaining decision is only who performs the sustained bulk transfer after Android has opened and claimed the device.
 
 Candidates to benchmark:
 
-1. Kotlin USB I/O + Kotlin decode baseline/reference;
-2. Kotlin USB I/O + batched Rust decode/processing;
-3. Kotlin permission/open → native FD → Rust/native I/O.
+1. Kotlin bulk I/O with coarse batched transfer into Rust;
+2. Android permission/open/claim then proven native FD/handle handoff to Rust sustained I/O.
 
-Decision must be based on real Android device and ECU lifecycle/reconnect/throughput evidence, not architectural aesthetics.
+A pure Kotlin decode architecture no longer needs to be a final candidate, but it may remain a benchmark/reference implementation if useful.
+
+Decision criteria:
+
+- attach/permission/open latency;
+- reconnect correctness after detach/replug;
+- ownership/close semantics;
+- sustained packet rate/CPU/allocation;
+- JNI crossings/bytes;
+- failure recovery;
+- compatibility on Samsung A13/SM-A137F and SM-T500-class hardware plus future target devices.
+
+Decision must be based on real Android device and ECU evidence, not architectural aesthetics.
 
 ### MDF4 version/compression baseline
 
@@ -208,15 +221,52 @@ Must be locked before production scaffold:
 
 No continuity requirement. A clean namespace such as `com.epicefi.epichub` is preferred but must be formally locked before implementation scaffold.
 
+### Generated-INI compatibility corpus breadth
+
+The parser/profile architecture is now decomposed, and the current supported subset is understood. Remaining gap is corpus breadth, not responsibility ownership.
+
+Needed before Phase 2 implementation is considered mature:
+
+- retain several genuine generated INIs across representative EpicEFI/rusEFI boards/firmware generations;
+- catalogue constructs actually present in those files;
+- distinguish must-support constructs from intentionally unsupported TunerStudio features;
+- include malformed/ambiguous/unsupported fixtures for fail-closed tests;
+- add a genuine complete epicECU generated INI fixture when trustworthy evidence becomes available.
+
+### Protocol golden-vector corpus
+
+Request/response framing, status semantics and `S/Q/O/R/C/B` command dispatch are now directly verified in firmware. Remaining gap is to preserve this as executable fixture evidence before implementation:
+
+- plain signature responses;
+- framed signature request/response;
+- `O` full/chunk requests;
+- `R` page reads;
+- `C` write + OK/error responses;
+- `B` accepted/error responses;
+- CRC failure, underrun/out-of-range/unrecognized status cases;
+- response payload lengths around buffer/chunk boundaries.
+
+These vectors should be generated from documented/controlled firmware interactions or independently constructed from the verified source contract and cross-checked against real firmware.
+
+## Phase 1 archaeology completed enough to leave the deferred list
+
+The following former deferred items now have sufficient responsibility-level decomposition for architecture work to continue:
+
+- EpicDash-JZ `UsbEcuManager` platform/session/framing/output/tuning coordination split;
+- EpicDash-JZ generated-INI parser/compiler/condition split;
+- firmware request/response framing and `S/Q/O/R/C/B` read/write/Burn command paths.
+
+This does **not** mean their Phase 2 implementations are complete; it means Phase 1 now knows their permanent responsibilities and authority boundaries.
+
 ## Deferred deeper source inventories
 
 The following references still need dedicated Phase 1 review before their responsibilities are considered complete:
 
-- EpicDash-JZ huge USB manager: split all transport/session/framing/output/tuning coordination responsibilities explicitly;
-- EpicDash-JZ INI parser/compiler/conditions;
-- complete ESP32 original firmware behavior including physical inputs/ADC/watchdog/reconnect/failure semantics;
-- firmware fork command/framing/write/Burn source paths;
-- Epic-DashTune-UXUI interaction/performance lessons;
+- complete original ESP32 firmware behavior including physical buttons/outputs/ADC/CAN/watchdog/reconnect/failure/failsafe semantics;
+- EpicDash-JZ BLE evolution/reconnect/write-queue behavior against the original ESP32 protocol;
+- tuning project persistence/recovery stores beyond the already captured exact-profile/TuneSnapshot authority;
+- Epic-DashTune-UXUI interaction/responsive/performance lessons without importing its visual language;
 - Tune Viewer parsing/visualization lessons;
-- diagnostics-core architecture;
+- diagnostics-core architecture and reusable diagnostics schemas if present;
+- logging-format/MLG implementation investigations already performed elsewhere in the project;
 - AE/PID/TCharge/Injection Angle plugins for future analyzer/autotune responsibilities.
