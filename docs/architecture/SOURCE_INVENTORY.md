@@ -149,16 +149,32 @@ Classification: **interaction/design reference**.
 
 ## `PJawZK/PJawZK-EpicEFI-Tune-Viewer`
 
-Role: **tune/INI visualization and parsing reference** where it contains independently useful behaviour.
+Role: **qualified read-only reference for tune/profile interpretation, semantic comparison, profile-definition evolution and derived definition packaging**.
 
-Potential use:
+Reviewed `main`: `abfa325597d16cb362623c260ec92ed5bf5f37f1` (`1.0.0-rc.1`). Detailed evidence: `TUNE_VIEWER_EVIDENCE.md`.
 
-- tune structure interpretation;
-- table/curve visualization ideas;
-- parser/test fixtures;
-- cross-checks against EpicDash-JZ behaviour.
+High-value evidence includes:
 
-Classification: **reference implementation** pending deeper domain inventory.
+- exact-signature definition gating with no nearest-version fallback;
+- explicit scalar/bits/array/table/curve/dialog/menu semantic kinds;
+- conservative cross-firmware scalar-only comparison and same-firmware table/curve gating;
+- structural definition diff with stable property-order-insensitive comparison;
+- exact-signature compact definition registry with SHA-256, compression and provenance/count checks;
+- asynchronous load-generation/stale-result rejection;
+- read-only comparison/reporting boundaries;
+- table shape validation and presentation-only axis ordering;
+- useful parser/condition construct inventory for independent cross-check fixtures.
+
+Important limits:
+
+- its TypeScript MSQ/INI parsers are not EpicHub's target profile/tune authority;
+- its limited condition evaluator is not sufficient for write authorization;
+- React/browser structure and SVG renderer do not migrate as the Compose architecture;
+- the reviewed viewer contains 2D calibration grids and SVG curves, not a reusable Plotly/3D engine;
+- positional deltas with changed table axes are viewer evidence only and are deliberately tightened to non-comparable-by-default in EpicHub;
+- catalog/index/browser caches are convenience state, not local project authority.
+
+Classification: **qualified read-only behaviour evidence + reference implementation**.
 
 ## Tuning plugin repositories
 
