@@ -420,6 +420,63 @@ Status: `OPEN FORMAT/IMPLEMENTATION DESIGN`.
 
 ---
 
+# Tune Viewer parsing/comparison: responsibility archaeology completed
+
+Evidence document: `TUNE_VIEWER_EVIDENCE.md`.
+
+Resolved rules:
+
+- semantic tune interpretation requires exact authoritative profile identity; similar firmware, board name or matching parameter names are not sufficient;
+- full scalar/array/table/curve comparison is same-profile behavior only;
+- cross-profile comparison, if exposed, is conservative informational evidence and never edit/migration/write authority;
+- semantic target kinds are explicit; presentation must not guess a scalar/table/curve editor from value shape;
+- compact compiled-profile projections may exist only as exact-identity-bound derived acceleration;
+- asynchronous profile/project/comparison loads require stale-result rejection through request/session/generation identity;
+- definition evolution diffing is diagnostic evidence, not migration authorization;
+- comparison reports are derived evidence rather than tune/project/ECU authority;
+- Tune Viewer's React/browser parser/rendering architecture does not migrate as EpicHub's profile authority or Compose renderer;
+- the reviewed Tune Viewer has 2D calibration grids and SVG curves, not a reusable 3D engine.
+
+## Remaining tune-comparison/profile-projection decisions
+
+### Exact comparison identity contract
+
+Define the persisted identity tuple used to prove two saved projects/tunes share one authoritative semantic profile. It should include source/compiled profile fingerprints and enough tune/project-generation identity to invalidate stale derived comparison results.
+
+Status: `OPEN IMPLEMENTATION DESIGN`.
+
+### Same-profile comparison golden corpus
+
+Need executable fixtures for scalar, bits, string where relevant, arrays, curves, table axes/cells and missing/incomplete structures against representative genuine profiles/tunes.
+
+Status: `OPEN FIXTURE GAP`.
+
+### Cross-profile compatibility corpus
+
+Need fixtures proving that different scales, units, storage types, option semantics, dimensions and surface definitions fail conservatively rather than being treated as equal because names match.
+
+Status: `OPEN FIXTURE GAP`.
+
+### Changed-axis table comparison/regridding
+
+Default semantic state is **non-comparable/ambiguous** when X or Y axes differ. If a future transformed comparison is useful, specify interpolation, extrapolation, ordering, units, tolerances and provenance separately. Transformed values remain derived analysis and cannot become implicit tune/migration/write data.
+
+Status: `OPEN ANALYSIS DESIGN`.
+
+### Compact compiled-profile projection
+
+Decide from Android startup/search/project-open measurements whether persisting a compact hashed compiled-profile projection is worthwhile. If used, it must be schema-versioned, exact-source-identity-bound, integrity-checked and safely rebuildable.
+
+Status: `OPEN PERFORMANCE/FORMAT DECISION`.
+
+### Comparison report schema
+
+If project/tune compare is product scope, define a versioned derived report with sufficient source/profile/tune fingerprints to reproduce or invalidate its interpretation without embedding a second project authority.
+
+Status: `OPEN FORMAT/PRODUCT DECISION`.
+
+---
+
 # Phase 1 archaeology completed enough to leave deferred list
 
 Stable responsibility-level decomposition now exists for:
@@ -431,7 +488,8 @@ Stable responsibility-level decomposition now exists for:
 - tuning project authority, derived caches, portable recovery and operation uncertainty journals;
 - Dashboard/Tuner interaction, responsive and rendering responsibility boundaries;
 - logging/playback/MLG/MDF transition responsibilities;
-- diagnostics/performance/lifecycle tracing responsibilities.
+- diagnostics/performance/lifecycle tracing responsibilities;
+- Tune Viewer profile interpretation, semantic comparison, definition-diff and derived-projection lessons.
 
 This means ownership is known, not that Phase 2 implementation/qualification is complete.
 
@@ -439,9 +497,8 @@ This means ownership is known, not that Phase 2 implementation/qualification is 
 
 # Deferred deeper source inventories
 
-Next-highest-value Phase 1 reviews:
+Next-highest-value Phase 1 review:
 
-1. Tune Viewer parsing/visualization lessons;
-2. AE/PID/TCharge/Injection Angle plugin repositories for future analyzer/autotune responsibilities.
+1. AE/PID/TCharge/Injection Angle plugin repositories for future analyzer/autotune responsibilities.
 
-After these reviews, Phase 1 should primarily close the explicit design, fixture and benchmark gaps above rather than continue broad archaeology indefinitely.
+After that review, Phase 1 should primarily close the explicit design, fixture and benchmark gaps above rather than continue broad archaeology indefinitely.
