@@ -15,6 +15,7 @@ Phase 1 builds the repository-backed architecture before production Android/Rust
 - `SOURCE_INVENTORY.md` — reference repositories, provenance handling and what each is authoritative/useful for.
 - `RESPONSIBILITY_INVENTORY.md` — normalized behaviours/responsibilities independent of historical files.
 - `RESPONSIBILITY_DESTINATIONS.md` — where retained/redesigned responsibilities belong in EpicHub.
+- `ANALYSIS_RESPONSIBILITY_MAP.md` — permanent owners/boundaries for plugin-derived analysis/autotune responsibilities.
 - `PROTOCOL_AUTHORITIES.md` — source of truth for important wire/profile/file-format contracts.
 - `GAP_ANALYSIS.md` — new EpicHub responsibilities and unresolved technical decisions.
 
