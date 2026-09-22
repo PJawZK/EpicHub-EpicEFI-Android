@@ -10,13 +10,17 @@ Do not infer current EpicHub architecture from EpicDash-JZ when this repository 
 
 Repository: `PJawZK/EpicHub-EpicEFI-Android`
 
+Permanent integration branch: `main`
+
 Active Phase 1 branch: `phase1/architecture-inventory`
 
-Architecture content head immediately before this handoff update: `8addeb897d7976674562995e1d801972ffe23ab9`
+Open draft PR: **#1 — Phase 1: architecture and responsibility inventory**
 
-This handoff commit itself advances the branch, so always verify the actual current branch head when resuming.
+Architecture branch head immediately before this handoff refresh: `7f3b1a8af01de99a32ecb4a6cf4f96e39be5da74`
 
-`main` contains only the clean-slate repository bootstrap at this point.
+This handoff commit itself advances the branch, so always verify the actual current branch/PR head when resuming.
+
+`main` currently contains only the clean-slate repository bootstrap. Do not merge PR #1 merely because it exists; Phase 1 remains an active inventory until its review gate is accepted.
 
 ## Current phase
 
@@ -24,18 +28,13 @@ This handoff commit itself advances the branch, so always verify the actual curr
 
 No production Android/Rust scaffold yet.
 
+The authoritative Phase 1 scope/completion gate is `docs/architecture/PHASE1_SCOPE.md`. Progress is summarized in `docs/architecture/PHASE1_PROGRESS.md`, and `docs/architecture/REVIEW_CHECKLIST.md` is the closure checklist.
+
 ## Current objective
 
-Use EpicDash-JZ, original EpicDash/EpicEFIVirtualDash, the EpicEFI firmware fork and later relevant UI/tuning/diagnostics repositories as evidence sources to produce:
+Use EpicDash-JZ, original EpicDash/EpicEFIVirtualDash, the EpicEFI firmware fork and later relevant UI/tuning/diagnostics repositories as evidence sources to produce a complete behaviour/responsibility model and a clean target EpicHub topology before implementation.
 
-- complete responsibility inventory;
-- protocol/source authority map;
-- target Kotlin/Rust/file topology;
-- responsibility-to-destination map;
-- gap analysis;
-- dependency/data/state/thread/safety/FFI/test contracts.
-
-Historical files are not migration units. Behaviour/protocol/test knowledge is transferred into clean EpicHub responsibilities.
+Historical files are not migration units. Behaviour, protocol semantics, safety invariants, test evidence and useful interaction knowledge are transferred into new descriptive responsibilities.
 
 ## Locked decisions
 
@@ -52,46 +51,52 @@ Read `docs/architecture/DECISIONS.md` for the durable list. Key decisions includ
 - no permanent development-stage names (`T3`, `T4`, `T6`, `B2`, etc.);
 - repository documentation is durable project memory; this is the only current handoff file.
 
-## Work completed in Phase 1 so far
+## Architecture documents established so far
 
-Repository/bootstrap:
+Start with `docs/architecture/README.md`, which indexes the Phase 1 documents.
 
-- initialized new repository README on `main`;
-- created `phase1/architecture-inventory` branch.
+Core evidence/mapping:
 
-Architecture documents created with substantive initial content:
+- `SOURCE_INVENTORY.md`
+- `RESPONSIBILITY_INVENTORY.md`
+- `RESPONSIBILITY_DESTINATIONS.md`
+- `PROTOCOL_AUTHORITIES.md`
+- `GAP_ANALYSIS.md`
 
-- `docs/architecture/DEVELOPMENT_WORKFLOW.md`
-- `docs/architecture/DECISIONS.md`
-- `docs/architecture/NAMING_RULES.md`
-- `docs/architecture/SOURCE_INVENTORY.md`
-- `docs/architecture/RESPONSIBILITY_INVENTORY.md`
-- `docs/architecture/PROTOCOL_AUTHORITIES.md`
-- `docs/architecture/GAP_ANALYSIS.md`
-- `docs/architecture/CODEBASE_TOPOLOGY.md`
-- `docs/architecture/RESPONSIBILITY_DESTINATIONS.md`
-- `docs/architecture/DEPENDENCY_RULES.md`
-- `docs/architecture/STATE_OWNERSHIP.md`
-- `docs/architecture/THREADING_MODEL.md`
-- `docs/architecture/KOTLIN_RUST_BOUNDARY.md`
-- `docs/architecture/ACTION_MODEL.md`
-- `docs/architecture/TEST_STRATEGY.md`
-- `docs/architecture/DATA_FLOW.md`
-- `docs/architecture/SAFETY_BOUNDARIES.md`
+Target contracts:
+
+- `CODEBASE_TOPOLOGY.md`
+- `DEPENDENCY_RULES.md`
+- `STATE_OWNERSHIP.md`
+- `DATA_FLOW.md`
+- `THREADING_MODEL.md`
+- `KOTLIN_RUST_BOUNDARY.md`
+- `ACTION_MODEL.md`
+- `SAFETY_BOUNDARIES.md`
+- `NAMING_RULES.md`
+- `TEST_STRATEGY.md`
+
+Workflow/review:
+
+- `DEVELOPMENT_WORKFLOW.md`
+- `DECISIONS.md`
+- `PHASE1_SCOPE.md`
+- `PHASE1_PROGRESS.md`
+- `REVIEW_CHECKLIST.md`
 
 ## Evidence reviewed so far
 
 ### EpicDash-JZ
 
-Current main examined during this inventory: `45de2752811edbd66b01441c0cff8311d3e62647`.
+Main examined during this inventory: `45de2752811edbd66b01441c0cff8311d3e62647`.
 
-High-value reviewed documents include:
+High-value reviewed evidence includes:
 
 - `docs/PROJECT_STATE.md`;
 - `docs/ARCHITECTURE.md`;
 - `docs/audits/ECU_RECOGNITION_FIRMWARE_EVIDENCE.md`;
 - `docs/audits/TUNER_READ_WRITE_IMPLEMENTATION.md`;
-- repository tree including large current USB/tuner/WebView implementation and extensive tests.
+- repository tree including the large USB/tuning/WebView implementation and extensive tests.
 
 Important preserved evidence:
 
@@ -132,11 +137,11 @@ Directly verified:
 
 The firmware repository is very large and not code-search indexed, so deeper Phase 1 review should use known paths from EpicDash-JZ audits plus targeted directory traversal.
 
-## Current target topology
+## Current target split
 
-Read `docs/architecture/CODEBASE_TOPOLOGY.md` rather than reconstructing it from this handoff.
+Read `CODEBASE_TOPOLOGY.md` for detailed proposed files/responsibilities.
 
-Important intended split:
+High-level:
 
 ```text
 Kotlin/Compose
@@ -162,7 +167,7 @@ ESP32 firmware
 
 ## Important unresolved questions
 
-Read `docs/architecture/GAP_ANALYSIS.md` for full list. Highest priority:
+Read `GAP_ANALYSIS.md` for the full list. Highest priority:
 
 - final ECU USB runtime-I/O ownership: Kotlin vs batched Rust vs Android-opened FD handed to Rust;
 - full decomposition/inventory of current EpicDash-JZ `UsbEcuManager` and INI/profile parser responsibilities;
@@ -186,11 +191,11 @@ Read `docs/architecture/GAP_ANALYSIS.md` for full list. Highest priority:
 
 ## Exact next action
 
-Continue the Phase 1 domain inventory, starting with the **current EpicDash-JZ USB/profile/runtime path**:
+Continue the Phase 1 domain inventory with the **current EpicDash-JZ USB/profile/runtime path**:
 
 1. decompose `UsbEcuManager.kt` into all distinct responsibilities and map each to the target topology;
-2. inventory `UsbTunerStudioProfile.kt`, profile/INI parsing/compilation and condition evaluation responsibilities;
-3. verify the corresponding firmware framing/query/output/read/write/Burn source paths directly in `epicefi_fw_jzfork`;
-4. update `RESPONSIBILITY_INVENTORY.md`, `RESPONSIBILITY_DESTINATIONS.md`, `PROTOCOL_AUTHORITIES.md` and `CODEBASE_TOPOLOGY.md` where the evidence changes/refines the current model.
+2. inventory `UsbTunerStudioProfile.kt`, generated-INI parsing/compilation and condition evaluation responsibilities;
+3. verify corresponding firmware framing/query/output/read/write/Burn source paths directly in `epicefi_fw_jzfork`;
+4. update the responsibility inventory/destinations, protocol authorities and codebase topology where evidence changes/refines the current model.
 
-After that, move domain-by-domain through ESP32/accessory, tuning persistence, UI/editor, logging/interoperability, diagnostics and future analyzer/plugin sources.
+Then proceed domain-by-domain through ESP32/accessory, tuning persistence/recovery, UI/editor, logging/interoperability, diagnostics and future analyzer/plugin sources.
