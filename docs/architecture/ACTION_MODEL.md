@@ -7,7 +7,7 @@ EpicHub must support user/app actions that target different domains without expo
 Primary target domains:
 
 - `Local` — actions implemented inside the Android application;
-- `Accessory` — semantic commands sent to the ESP32/accessory controller;
+- `Accessory` — semantic commands handled by an accessory/bridge domain;
 - `Ecu` — guarded semantic ECU/tuning/runtime actions handled by the engine.
 
 ## Core model
@@ -38,7 +38,11 @@ The exact Kotlin types are defined in Phase 2 after the inventory is complete.
 
 ## UI rule
 
-A dashboard button should bind to a semantic action such as:
+A dashboard control binds to a semantic action such as:
+
+`buttonbox_aux_1`
+
+or, for future direct accessory hardware where deliberately supported:
 
 `aux_fan_override`
 
@@ -63,44 +67,90 @@ Examples:
 
 The router dispatches these directly to the appropriate Kotlin/app or NativeEngine API. They do not traverse unrelated transports.
 
-## Accessory actions
+## Accessory/bridge actions
 
-Path:
+The reviewed original ESP32 firmware is primarily a BLE↔CAN bridge with local input sources. It does **not** provide a reviewed BLE-controlled relay/GPIO output authority.
+
+Legacy bridge path:
 
 ```text
 Compose/input
   → ActionRouter
   → Esp32AccessoryGateway
   → Esp32MessageCodec
-  → BleWriteScheduler / Esp32GattClient
-  → ESP32
+  → connection-wide BleWriteScheduler
+  → Esp32GattClient
+  → ESP32 bridge
+  → CAN consumer / ECU
 ```
 
-Rust is not in the accessory command path merely to centralize architecture.
+Rust is not in this command path merely to centralize architecture.
 
-The ESP32 remains the final authority for:
+Legacy examples include:
 
-- physical GPIO/relay mapping;
-- electrical interlocks;
+- sending the 16-bit button-box mask to the ESP32 for CAN forwarding;
+- requesting CAN-backed ECU variables through the bridge;
+- sending generic variable-set values such as GPS or virtual ADC data.
+
+## Legacy bridge state limitation
+
+The current button protocol has no application-level acknowledgement/state message. Android GATT accepting a write is not evidence that the downstream CAN consumer applied the semantic action.
+
+For a legacy bridge action EpicHub can represent states such as:
+
+- unavailable/offline;
+- request queued;
+- handed to GATT;
+- transport write completed/failed where Android reports it;
+- downstream state unknown unless a separate authoritative feedback channel exists.
+
+It must not label a button/CAN state as physically `confirmed` merely because a BLE write completed.
+
+The original firmware also does not send an automatic zero/release button frame on BLE disconnect. Disconnect/release semantics therefore require explicit compatibility testing before EpicHub changes them.
+
+## Future direct accessory outputs
+
+If EpicHub later adds ESP32-controlled relays/GPIO outputs, that is a **new versioned accessory capability**, not behaviour inherited from the original bridge.
+
+A direct-output extension must define:
+
+- capability/version negotiation;
+- semantic output IDs independent of GPIO numbers;
+- application-level command acknowledgements;
+- confirmed hardware state/fault feedback where needed;
+- electrical/interlock ownership;
 - disconnect/watchdog fallback;
-- any hardware-level safety condition that must survive Android/app failure.
+- boot/default state;
+- behavior across Android/app/BLE failure.
 
-## Requested vs confirmed accessory state
+For such direct physical outputs, the ESP32 firmware—not Android—is the final hardware authority for mapping, interlocks and fail-safe state.
 
-EpicHub should distinguish at least:
+## Requested vs confirmed state
+
+EpicHub distinguishes confirmation according to the capability actually available.
+
+For a versioned accessory output with explicit feedback:
 
 - unavailable/offline;
 - known OFF;
 - ON requested/pending;
-- confirmed ON where feedback exists;
+- confirmed ON;
 - OFF requested/pending;
 - confirmed OFF;
 - command failed/no response;
-- hardware fault where protocol supports it.
+- hardware fault.
 
-Sending a command is not sufficient evidence that the physical state changed.
+For the legacy button bridge, downstream confirmation is generally unavailable unless an independent returned ECU/channel value provides it. The UI/state model must retain that uncertainty rather than inventing confidence.
 
-Where the current ESP32 protocol lacks acknowledgement/state feedback, Phase 1 should record that limitation and decide whether a versioned protocol extension is required.
+## Generic variable-set action/data path
+
+The legacy characteristic historically named `GPS_DATA` actually carries generic 8-byte `hash + raw32/float32` variable-set entries. EpicHub therefore separates:
+
+- `Esp32VariableSetCodec` — wire encoding;
+- `GpsVariableEncoder` — GPS-specific producer;
+- other producers such as virtual inputs where deliberately retained.
+
+A transport name must not force unrelated producers into a GPS domain.
 
 ## ECU actions
 
@@ -128,37 +178,44 @@ Every guarded action can identify its origin, for example:
 - approved automation/rule;
 - internal recovery/maintenance operation.
 
-Source identity supports policy such as allowing a user-held accessory action while prohibiting the same action from unattended automation.
+Source identity supports policy such as allowing a user-held action while prohibiting the same action from unattended automation.
 
 ## Automation
 
-Future rules may request approved actions, but arbitrary custom math/script execution must not gain unrestricted ECU or hardware output authority.
+Future rules may request approved actions, but arbitrary custom math/script execution must not gain unrestricted ECU or physical-output authority.
 
 An action definition/policy explicitly states allowed automated sources.
 
 Examples:
 
-- warning rule may request an auxiliary fan action if explicitly allowed;
-- fuel-pump/critical output may require a guarded user action;
+- a warning rule may request a versioned auxiliary-output action if explicitly allowed and the accessory capability supports it;
+- fuel-pump/critical outputs may require guarded user/hardware authority;
 - tune writes/Burn are never implicitly enabled simply because the rule engine can name an action.
 
 ## Logging actions/events
 
-Semantic actions and confirmations should be representable as timestamped events in the measurement/logging system.
+Semantic actions and any genuine confirmations should be representable as timestamped events in the measurement/logging system.
 
-For accessory state, useful channels/events may include separate command and confirmed-state records so latency/failure can be analyzed later.
-
-Example:
+For a protocol with explicit confirmation:
 
 ```text
 12.001  UserAction(aux_fan, ON)
 12.048  AccessoryState(aux_fan, CONFIRMED_ON)
 ```
 
-The logging event representation must not become the action execution authority.
+For the legacy button bridge the event may instead be:
+
+```text
+12.001  UserAction(buttonbox_aux_1, PRESSED)
+12.006  BridgeTransport(buttonbox_mask, WRITE_COMPLETED)
+```
+
+with downstream state remaining unknown unless observed independently.
+
+The logging event representation never becomes the action execution authority.
 
 ## Extensibility
 
 Transport changes should not force layout/action-definition changes.
 
-If a future accessory transport moves from BLE to another mechanism, the semantic action IDs and UI bindings should remain stable while only the gateway/transport implementation changes.
+If a future accessory transport moves from BLE to another mechanism, semantic action IDs and UI bindings remain stable while only the gateway/transport implementation changes.
