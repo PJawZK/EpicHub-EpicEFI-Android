@@ -148,21 +148,50 @@ Remaining work: final typed event/metric schema, retention/persistence policy an
 
 ---
 
+# Completed deep-dive: EpicEFI Tune Viewer parsing / comparison / visualization
+
+Evidence: `TUNE_VIEWER_EVIDENCE.md`.
+
+Reviewed source: `PJawZK/PJawZK-EpicEFI-Tune-Viewer` main `abfa325597d16cb362623c260ec92ed5bf5f37f1`, V1.0 RC1.
+
+Permanent findings:
+
+- exact profile identity gates semantic interpretation; no nearest-version or board-name fallback;
+- scalar/bits/array/table/curve/dialog/menu are explicit semantic types, preventing accidental UI fallback to the wrong editor surface;
+- the viewer's MSQ/INI parsers are useful capability/fixture evidence but do **not** become parallel EpicHub tuning/profile authority;
+- compact gzip definition packs with SHA-256, exact-signature registry identity and count/signature revalidation are a useful model for optional **derived** compiled-profile projections;
+- asynchronous definition/project-style loads reject stale completion through generation/active guards;
+- full scalar/table/curve tune comparison is permitted only under exact matching firmware/definition identity in the viewer; EpicHub strengthens this to exact authoritative profile fingerprint/compiled identity;
+- cross-profile comparison is informational and conservative, never edit/migration/write authority;
+- arrays/tables/curves are not cross-profile comparable without an explicit qualified compatibility contract;
+- positional table deltas become ambiguous when axes differ; EpicHub should default such tables to non-comparable unless an explicit regridding transform is requested and qualified;
+- structural profile-definition diffing is useful diagnostics/migration evidence but not migration authorization;
+- the reviewed viewer contains 2D calibration tables and SVG curves, **not** a separate Plotly/3D engine; its semantic/render-validation rules transfer, its React/browser renderer does not;
+- comparison JSON is derived evidence only, not project/tune/ECU authority.
+
+Durable decision: `D-018 — Full semantic tune comparison requires exact authoritative profile identity`.
+
+Remaining work:
+
+- exact saved-project/tune comparison identity schema;
+- same-profile and cross-profile executable comparison goldens;
+- changed-axis table comparison/regridding policy;
+- decision whether a persisted compact compiled-profile projection provides worthwhile Android startup/search benefit;
+- versioned comparison-report schema if retained as a product feature.
+
+---
+
 # Current inventory tranche
 
-Primary next target: **Tune Viewer parsing/visualization architecture lessons**.
+Primary next target: **AE / PID / TCharge / Injection Angle plugin repositories** for future Analyzer/autotune responsibilities.
 
 Review goals:
 
-- inspect the qualified EpicEFI Tune Viewer repository rather than assuming its data model;
-- identify reusable parsing, tune-diff, table/curve/scalar classification and visualization techniques;
-- separate viewer-only convenience state from authoritative tuning/profile state;
-- determine whether its navigation/search/compare/export features belong in EpicHub Tuner, project comparison or Analyzer;
-- preserve useful visualization and large-tune performance lessons without importing duplicate parsers or alternate tune authority;
-- identify any reusable tests/fixtures for profile/tune interpretation.
+- extract algorithms, required channels, gating/quality criteria and evidence capture flows independently of their TunerStudio/plugin UI shells;
+- identify common analysis primitives that belong in the Rust analyzer rather than independent feature-specific engines;
+- separate recommendations/proposals from write authority;
+- identify reusable offline-log workflows so the same recorded session can feed multiple positive/negative analyses;
+- capture fixture/replay needs for deterministic analyzer qualification;
+- avoid copying plugin-specific architecture, UI assumptions or hardcoded tune context into EpicHub.
 
-## Subsequent tranche
-
-- AE/PID/TCharge/Injection Angle plugin repositories for future analyzer/autotune responsibilities.
-
-After those source reviews, Phase 1 should pivot from broad archaeology to closing the remaining explicit design/fixture/benchmark decisions and deciding whether the review gate is satisfied for Phase 2 scaffolding.
+After this source review, Phase 1 should pivot from broad archaeology to closing the remaining explicit design/fixture/benchmark decisions and deciding whether the review gate is satisfied for Phase 2 scaffolding.
