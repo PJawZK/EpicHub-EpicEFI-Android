@@ -4,103 +4,122 @@
 
 Phase 1 is active on `phase1/architecture-inventory`.
 
-The repository-backed architecture foundation has been established. Production Android/Rust scaffolding has not started.
+Repository-backed architecture/evidence work is progressing domain-by-domain. Production Android/Rust scaffolding has **not** started.
 
 ## Completed architecture foundation
 
-- clean-slate development workflow and handoff rules;
-- durable architecture decision log;
-- permanent naming rules;
-- cross-repository source inventory;
-- normalized responsibility inventory;
-- protocol-authority map;
-- gap analysis;
-- detailed provisional codebase topology;
-- responsibility-to-destination mapping;
+- clean-slate workflow/handoff rules;
+- durable decision log and permanent naming rules;
+- source and responsibility inventories;
+- protocol authorities and gap analysis;
+- provisional concrete codebase topology;
+- responsibility destination mapping;
 - dependency/state/data/threading/FFI/action/safety contracts;
-- test strategy and Phase 1 review checklist.
+- test strategy/review gate.
 
-## Completed deep-dive tranche: ECU USB / protocol / generated INI
+---
 
-The current EpicDash-JZ ECU/profile/runtime path has now been decomposed far enough to establish permanent responsibility boundaries.
+# Completed deep-dive: ECU USB / protocol / generated INI
 
-### `UsbEcuManager` decomposition completed
+Permanent responsibilities are now known for:
 
-The historical manager is confirmed to combine responsibilities that EpicHub will keep separate:
+- Android USB discovery/permission/CDC topology/control;
+- one ECU session/generation/retry owner;
+- asymmetric request/response framing and typed protocol status;
+- synchronization/probe policy;
+- `S/Q`, `O`, `R`, `C`, `B` semantics;
+- exact live signature + generated-INI authority;
+- INI syntax parsing versus supported-subset validation;
+- runtime/tune/tuner-surface schema compilation;
+- primitive codecs;
+- INI condition parsing/evaluation/write authority;
+- runtime output polling/decoding;
+- verified TuneSnapshot/RAM-write/Burn transaction boundaries.
 
-- Android USB discovery/permission/attach-detach lifecycle;
-- CDC descriptor topology and bulk endpoint resolution;
-- interface claim/release and CDC line/control state;
-- session generation/invalidation/retry;
-- plain/framed signature probing and protocol synchronization;
-- request framing/CRC;
-- response accumulation/status/CRC;
-- output polling/decoding/freshness;
-- complete tune reads;
-- exclusive normal tuning operations;
-- RAM write transactions and exact verification;
-- Burn transactions and flash-state evidence;
-- workspace/profile caches;
-- multi-domain diagnostics.
+Remaining work is fixture/benchmark evidence, not responsibility discovery:
 
-The destination map and target topology now assign these to Android platform USB, Rust ECU/session/protocol, profile, tuning, channels and diagnostics owners instead of creating a replacement monolith.
+- ECU protocol golden vectors;
+- broader genuine INI corpus;
+- Kotlin-batched vs Android-opened-native-FD sustained USB benchmark.
 
-### Generated-INI decomposition completed
+---
 
-`UsbTunerStudioProfile`, `TuningIniDefinition` and `IniConditionEvaluator` establish distinct future responsibilities for:
+# Completed deep-dive: ESP32 legacy bridge / Android BLE
 
-- INI syntax/source parsing;
-- explicit supported-profile subset validation;
-- primitive representation/decode;
-- runtime output schema compilation;
-- calibration/tune storage schema compilation;
-- table/curve/menu/dialog semantic schema compilation;
-- duplicate/ambiguity/geometry canonicalization;
-- exact profile fingerprinting;
-- compatibility-sensitive condition grammar/evaluation;
-- condition-derived semantic target/write authority.
+New evidence document: `ESP32_ACCESSORY_EVIDENCE.md`.
 
-INI conditions are not treated as presentation-only state. Unsupported/unresolved conditions fail closed for affected writes.
+Permanent findings:
 
-### Firmware protocol verification completed
+- original ESP32 is a BLE↔CAN bridge with local ADC/digital inputs, not a direct relay/GPIO output controller;
+- service/characteristic and CAN wire behavior is inventoried;
+- historical `GPS_DATA` characteristic is generic variable-set transport;
+- legacy variable requests/responses have implicit batch/timeout behavior that must not become hidden app authority;
+- original disconnect does not provide a proven zero/release button-mask behavior;
+- ESP task watchdog is liveness only, not output-state failsafe;
+- EpicDash-JZ reconnect/stale-GATT/scan/MTU lifecycle lessons are preserved;
+- three separate characteristic write queues are rejected as final ownership; target is one connection-wide GATT operation scheduler;
+- BLE write completion is transport evidence, not downstream CAN/action confirmation;
+- future direct relay/GPIO control is a separate versioned capability requiring ACK/state/interlock/failsafe design.
 
-Direct firmware source now anchors:
+Remaining work is product/fixture/physical evidence:
 
-- shared `0483:5740` CDC transport identity;
-- generated `TS_SIGNATURE` live identity;
-- asymmetric request/response CRC framing;
-- firmware synchronization state;
-- typed `S/Q`, `O`, `R`, `C`, `B` command semantics;
-- output range validation and live-data response;
-- page read/write range validation;
-- write lock/preset-refresh behavior and board overrides;
-- distinct Burn acknowledgement.
+- choose which legacy bridge features remain clean-app requirements;
+- bench/source verify button disconnect/release consumer semantics;
+- BLE/CAN golden vectors;
+- direct-output extension only if later required.
 
-The architecture now explicitly uses separate request and response codecs rather than a generic symmetric `envelope()` abstraction.
+---
 
-### Remaining implementation-evidence gaps from this tranche
+# Completed deep-dive: tuning project persistence / recovery
 
-- build protocol golden-vector fixtures for request/response/status/error cases;
-- broaden genuine generated-INI corpus and explicit supported/unsupported construct fixtures;
-- benchmark/physically prove sustained Android USB I/O ownership: Kotlin-batched vs Android-opened FD/handle handed to Rust.
+New evidence document: `TUNING_PERSISTENCE_RECOVERY_EVIDENCE.md`.
 
-These are no longer responsibility-discovery gaps.
+Permanent state categories are now explicit:
 
-## Current inventory tranche
+1. project authority = exact generated profile source + last complete verified TuneSnapshot;
+2. derived acceleration = exact-identity-bound disposable compiled/profile/projection caches;
+3. portable user backup = validated archive representation of project authority only;
+4. operation uncertainty journal = tiny durable marker before possible `C`/`B` transmission;
+5. UI draft = unverified local edit state, never automatically ECU/project authority.
 
-Primary next target: ESP32 accessory firmware and evolved Android BLE path.
+Resolved rules:
 
-- fully inventory original ESP32 physical inputs/outputs/ADC/CAN/BLE behavior;
-- identify disconnect/reconnect/watchdog/failsafe behavior or its absence;
-- inventory original wire messages independently of GATT lifecycle;
-- compare EpicDash-JZ BLE reconnect/write-queue evolution against original semantics;
-- decide which behavior is compatibility requirement, which is historical implementation detail, and which needs a deliberately versioned EpicHub accessory extension;
-- refine action/accessory/failsafe/protocol responsibilities accordingly.
+- no semantic value sidecar/compiled cache becomes alternate authority;
+- project updates are transactional generations with rollback on incomplete proof;
+- saved/offline project does not grant hardware write authority;
+- backup import validates exact profile/snapshot identity before local commit;
+- Kotlin owns Android document/URI interaction, not tuning schema/integrity decisions;
+- operation journal is fsynced and reread before possible hardware mutation;
+- present/corrupt journal blocks further mutation and requires resynchronization;
+- journal metadata never proves ECU state and never permits blind replay;
+- T3/T6 pilot restore/power-cycle workflows are qualification evidence, not normal tuning UX.
+
+Remaining implementation/product work:
+
+- final compact project/backup format;
+- generic batch-capable operation-journal schema;
+- offline draft/reconnect conflict/reconciliation UX;
+- persistence fault-injection corpus.
+
+---
+
+# Current inventory tranche
+
+Primary next target: **Dashboard/editor/Tuner UI interaction, responsive behavior and performance responsibilities**.
+
+Review goals:
+
+- distinguish approved EpicHub visual/layout authority from old implementation mechanisms;
+- inventory Dashboard runtime vs editor state/gesture ownership;
+- inventory Tuner hierarchy, parameter/curve/table semantics, multi-cell/table editing and 3D visualization behavior;
+- inventory orientation/phone/tablet responsive rules and lifecycle state preservation;
+- review Epic-DashTune-UXUI only for features/interactions/responsive/performance techniques, not visual design transfer;
+- identify which interaction state belongs Kotlin/Compose and which data/semantic state remains Rust-owned;
+- prevent WebView-era interaction workarounds or giant state payloads from becoming new architecture.
 
 ## Subsequent tranches
 
-- tune project persistence/recovery;
-- dashboard/editor/tuner interaction inventory;
-- logging/playback/interoperability;
-- diagnostics/performance;
-- UXUI/Tune Viewer and tuning-plugin future features.
+- logging/playback/MLG/interoperability and MDF4 transition;
+- diagnostics/performance architecture;
+- Tune Viewer visualization/parsing lessons;
+- tuning plugin algorithms for future analyzer/autotune responsibilities.
