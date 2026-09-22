@@ -21,22 +21,9 @@ Repository-backed architecture/evidence work is progressing domain-by-domain. Pr
 
 # Completed deep-dive: ECU USB / protocol / generated INI
 
-Permanent responsibilities are now known for:
+Permanent responsibilities are known for Android USB/CDC, one ECU session, asymmetric request/response framing, sync/probe policy, `S/Q/O/R/C/B`, exact signature/profile authority, generated-INI parsing/support/schema/conditions, runtime output and verified tune Read/Write/Burn transactions.
 
-- Android USB discovery/permission/CDC topology/control;
-- one ECU session/generation/retry owner;
-- asymmetric request/response framing and typed protocol status;
-- synchronization/probe policy;
-- `S/Q`, `O`, `R`, `C`, `B` semantics;
-- exact live signature + generated-INI authority;
-- INI syntax parsing versus supported-subset validation;
-- runtime/tune/tuner-surface schema compilation;
-- primitive codecs;
-- INI condition parsing/evaluation/write authority;
-- runtime output polling/decoding;
-- verified TuneSnapshot/RAM-write/Burn transaction boundaries.
-
-Remaining work is fixture/benchmark evidence, not responsibility discovery:
+Remaining work is fixture/benchmark evidence:
 
 - ECU protocol golden vectors;
 - broader genuine INI corpus;
@@ -46,80 +33,86 @@ Remaining work is fixture/benchmark evidence, not responsibility discovery:
 
 # Completed deep-dive: ESP32 legacy bridge / Android BLE
 
-New evidence document: `ESP32_ACCESSORY_EVIDENCE.md`.
+Evidence: `ESP32_ACCESSORY_EVIDENCE.md`.
 
 Permanent findings:
 
 - original ESP32 is a BLE↔CAN bridge with local ADC/digital inputs, not a direct relay/GPIO output controller;
-- service/characteristic and CAN wire behavior is inventoried;
-- historical `GPS_DATA` characteristic is generic variable-set transport;
-- legacy variable requests/responses have implicit batch/timeout behavior that must not become hidden app authority;
-- original disconnect does not provide a proven zero/release button-mask behavior;
-- ESP task watchdog is liveness only, not output-state failsafe;
-- EpicDash-JZ reconnect/stale-GATT/scan/MTU lifecycle lessons are preserved;
-- three separate characteristic write queues are rejected as final ownership; target is one connection-wide GATT operation scheduler;
-- BLE write completion is transport evidence, not downstream CAN/action confirmation;
-- future direct relay/GPIO control is a separate versioned capability requiring ACK/state/interlock/failsafe design.
+- generic variable-set transport replaces historical GPS-specific protocol naming;
+- evolved scan/reconnect/stale-GATT/MTU behavior is retained as Android BLE evidence;
+- target architecture has one connection-wide GATT operation scheduler;
+- GATT completion is transport evidence, not downstream confirmation;
+- direct relay/GPIO output is a separate future versioned capability.
 
-Remaining work is product/fixture/physical evidence:
-
-- choose which legacy bridge features remain clean-app requirements;
-- bench/source verify button disconnect/release consumer semantics;
-- BLE/CAN golden vectors;
-- direct-output extension only if later required.
+Remaining work: product scope, disconnect/release bench evidence, BLE/CAN golden vectors, optional future output extension.
 
 ---
 
 # Completed deep-dive: tuning project persistence / recovery
 
-New evidence document: `TUNING_PERSISTENCE_RECOVERY_EVIDENCE.md`.
+Evidence: `TUNING_PERSISTENCE_RECOVERY_EVIDENCE.md`.
 
-Permanent state categories are now explicit:
+Permanent categories:
 
-1. project authority = exact generated profile source + last complete verified TuneSnapshot;
-2. derived acceleration = exact-identity-bound disposable compiled/profile/projection caches;
-3. portable user backup = validated archive representation of project authority only;
-4. operation uncertainty journal = tiny durable marker before possible `C`/`B` transmission;
-5. UI draft = unverified local edit state, never automatically ECU/project authority.
+1. exact profile + complete verified TuneSnapshot project authority;
+2. exact-identity-bound disposable derived caches;
+3. portable backup as validated representation of project authority;
+4. durable pre-transmission operation uncertainty journal;
+5. local UI draft as unverified edit state.
 
-Resolved rules:
+No cache/backup/journal/draft becomes alternate ECU/tune authority. Operation journals are durable before possible hardware mutation and never authorize blind replay.
 
-- no semantic value sidecar/compiled cache becomes alternate authority;
-- project updates are transactional generations with rollback on incomplete proof;
-- saved/offline project does not grant hardware write authority;
-- backup import validates exact profile/snapshot identity before local commit;
-- Kotlin owns Android document/URI interaction, not tuning schema/integrity decisions;
-- operation journal is fsynced and reread before possible hardware mutation;
-- present/corrupt journal blocks further mutation and requires resynchronization;
-- journal metadata never proves ECU state and never permits blind replay;
-- T3/T6 pilot restore/power-cycle workflows are qualification evidence, not normal tuning UX.
+Remaining work: compact project/backup format, batch-capable journal schema, offline reconciliation UX and fault-injection corpus.
 
-Remaining implementation/product work:
+---
 
-- final compact project/backup format;
-- generic batch-capable operation-journal schema;
-- offline draft/reconnect conflict/reconciliation UX;
-- persistence fault-injection corpus.
+# Completed deep-dive: Dashboard / Tuner interaction / responsive / performance
+
+Evidence: `UI_INTERACTION_EVIDENCE.md`.
+
+Sources:
+
+- EpicDash-JZ `UI_SPEC.md` and `TUNER_UI_SIDEQUEST.md` for visual/layout and integrated Tuner authority;
+- Epic-DashTune-UXUI only for interaction/responsive/performance techniques.
+
+Permanent findings:
+
+- accepted EpicDash-JZ reference family remains visual/layout authority; UXUI styling does not migrate;
+- one semantic/component model reflows by available geometry rather than device-specific application variants;
+- Rust owns runtime/tuning semantic truth, Compose owns layout/gesture/pointer/camera/presentation state;
+- semantic table selection is separate from touch gesture state;
+- X/Y reverse is presentation-only, not data reorder;
+- pinch/range selection requires explicit gesture arbitration;
+- 3D is view-only unless separately accepted for editing;
+- modal/fullscreen surfaces own their pointer streams;
+- static geometry is cached/constructed once and dynamic layers updated minimally;
+- only active UI surfaces consume high-rate display updates where practical;
+- undo/redo operates on local semantic edits, not implicit ECU rollback;
+- project/live/draft/RAM-dirty/Burn/uncertain states remain explicit in presentation.
+
+Useful performance evidence: UXUI's WebView/SVG r21 benchmark reduced synthetic gauge update cost by ~90% by replacing hundreds of dynamic segment updates with static geometry + minimal pointer transforms. The exact speedup is not a Compose forecast; the invalidation principle is what transfers.
+
+Remaining work: rich table-edit/customization product scope and real Compose interaction/frame benchmarks.
 
 ---
 
 # Current inventory tranche
 
-Primary next target: **Dashboard/editor/Tuner UI interaction, responsive behavior and performance responsibilities**.
+Primary next target: **logging/playback/MLG interoperability and the transition architecture toward MDF4**.
 
 Review goals:
 
-- distinguish approved EpicHub visual/layout authority from old implementation mechanisms;
-- inventory Dashboard runtime vs editor state/gesture ownership;
-- inventory Tuner hierarchy, parameter/curve/table semantics, multi-cell/table editing and 3D visualization behavior;
-- inventory orientation/phone/tablet responsive rules and lifecycle state preservation;
-- review Epic-DashTune-UXUI only for features/interactions/responsive/performance techniques, not visual design transfer;
-- identify which interaction state belongs Kotlin/Compose and which data/semantic state remains Rust-owned;
-- prevent WebView-era interaction workarounds or giant state payloads from becoming new architecture.
+- inventory current EpicDash-JZ MSL playback/CSV/logging state and ownership;
+- incorporate existing project decisions that live acquisition path is optimized first, then MLG writer, then MDF4 evaluation;
+- separate live acquisition/session/channel storage from concrete file format;
+- preserve MLG/MegaLogViewer interoperability without making MLG the internal measurement model;
+- define how live and file playback use the same `ChannelSource`/measurement query path;
+- inventory file-size/performance/recovery requirements for Android phones/tablets;
+- establish the writer/read/index/recovery responsibility split before implementation;
+- avoid making UI or a format parser the measurement authority.
 
 ## Subsequent tranches
 
-- logging/playback/MLG/interoperability and MDF4 transition;
 - diagnostics/performance architecture;
 - Tune Viewer visualization/parsing lessons;
 - tuning plugin algorithms for future analyzer/autotune responsibilities.
