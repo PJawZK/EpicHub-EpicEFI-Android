@@ -4,11 +4,13 @@
 
 Phase 1 cross-repository architecture archaeology is complete enough to stop broad source review.
 
-The architecture/source/test gate is **ready for explicit user acceptance** before production scaffolding begins.
+A dedicated cross-document consistency audit was then performed before acceptance. It found and reconciled several real contradictions/stale statements, especially around format-neutral logging versus MDF-specific wording, legacy ESP32 bridge versus future direct outputs, warning observation versus automation authority, JNI batching exceptions, semantic tune-draft ownership, settings ownership, locked namespace/build state and D-022 source-reimplementation methodology.
 
-This does **not** mean every future feature/format/algorithm has been implemented or physically qualified. It means the remaining unknowns are now explicit implementation, fixture, benchmark, compatibility or product-scope tasks with known owners and evidence plans rather than hidden architecture responsibilities.
+After those reconciliations, the architecture/source/test gate is **ready for explicit user acceptance** before production scaffolding begins.
 
-It also does **not** mean every historical source file has been certified as correct or reusable. Phase 1 mapped responsibilities and high-value evidence. D-022 / `SOURCE_REIMPLEMENTATION_METHOD.md` requires a deeper piece-by-piece review of the corresponding historical implementation whenever each subsystem enters implementation, followed by a clean rewrite rather than bulk source migration.
+This does **not** mean every future feature/format/algorithm has been implemented or physically qualified. It means remaining unknowns are explicit implementation, fixture, benchmark, compatibility or product-scope tasks with known owners/evidence plans rather than hidden architecture responsibilities.
+
+It also does **not** mean every historical source file has been certified as correct or reusable. Phase 1 mapped responsibilities and high-value evidence. D-022 / `SOURCE_REIMPLEMENTATION_METHOD.md` requires deeper piece-by-piece review whenever each subsystem enters implementation, followed by a clean rewrite rather than bulk source migration.
 
 ---
 
@@ -32,21 +34,29 @@ This is a responsibility-completeness statement, not a claim that every old sour
 
 - ECU USB/signature/framing/read/write/Burn authority is documented in `PROTOCOL_AUTHORITIES.md` and directly corroborated against current firmware in `ECU_PROTOCOL_DIRECT_VERIFICATION.md`.
 - legacy ESP32 bridge protocol/failsafe limits are documented in `ESP32_ACCESSORY_EVIDENCE.md`.
-- external measurement formats are deliberately isolated behind measurement/interop abstractions; MLG/MDF exact executable compatibility remains a fixture/interoperability task, not an ownership unknown.
+- external measurement formats are isolated behind `MeasurementStore`/`MeasurementWriter`/interop boundaries; MLG/MDF exact executable compatibility remains fixture/interoperability work, not ownership discovery.
+- exact live signature equality is the connected-firmware compatibility gate; the exact selected generated-profile source/fingerprint remains identity for compiled schemas, caches, project/tuning state.
 
-## 3. Kotlin/Rust boundary has no expected per-value hot-path chatter
+## 3. Kotlin/Rust boundary has no expected high-rate per-value chatter
 
 **SATISFIED.**
 
-`KOTLIN_RUST_BOUNDARY.md` requires coarse semantic operations, bounded/versioned packed snapshots, viewport-sized analysis results, batched external-source updates and bounded event drains.
+`KOTLIN_RUST_BOUNDARY.md` requires coarse semantic operations, bounded/versioned packed snapshots, viewport-sized analysis results and bounded event drains.
 
-Per-channel/per-sample JNI getters/callbacks are prohibited.
+High-rate ECU/runtime per-channel/per-sample JNI is prohibited. Low-rate discrete Android-source events may cross individually when simpler and measured acceptable; bursts/higher-rate sources are batched. That exception is explicit and cannot become the ECU streaming model.
 
 ## 4. Mutable state ownership is unambiguous
 
 **SATISFIED.**
 
-`STATE_OWNERSHIP.md` defines sole owners for Android platform resources, BLE/GATT, ECU session, profile, ChannelStore, live tune/TuneSnapshot, project authority, operation journal, logging, measurement file state, analyzer heavy state, Compose interaction state and diagnostics.
+`STATE_OWNERSHIP.md` defines sole owners for Android platform resources, BLE/GATT, ECU session, profile, ChannelStore, live tune/TuneSnapshot, semantic tune draft, project authority, operation journal, logging, measurement-file state, analyzer heavy state, Compose interaction state, settings and diagnostics.
+
+In particular:
+
+- Rust owns semantic tune draft/history;
+- Kotlin Tuner state owns selection/text-entry/gesture/presentation only;
+- Kotlin `SettingsStore` owns application/user preferences only;
+- selected measurement readers/writers own format state but never ChannelStore/logger truth.
 
 `ANALYSIS_RESPONSIBILITY_MAP.md` adds immutable completed `AnalysisSession` ownership and staging/replacement rules.
 
@@ -61,7 +71,9 @@ Per-channel/per-sample JNI getters/callbacks are prohibited.
 - dashboard-owned telemetry;
 - plugin-specific ECU writers;
 - warning/diagnostic definitions becoming hidden control policy;
-- external file formats becoming the runtime model.
+- MLG/MDF/external formats becoming the runtime model.
+
+Warning evaluation is observational. Any future automatic action based on warning state travels through a separately configured AutomationRule/ActionPolicy path.
 
 D-022 additionally prevents historical class/control-flow structure from becoming de facto architecture merely because it already exists.
 
@@ -69,19 +81,26 @@ D-022 additionally prevents historical class/control-flow structure from becomin
 
 **SATISFIED.**
 
-`CODEBASE_TOPOLOGY.md` provides descriptive Kotlin and Rust destinations without requiring premature Gradle/Cargo module proliferation.
+`CODEBASE_TOPOLOGY.md` now aligns with the locked architecture, including:
 
-`ANALYSIS_RESPONSIBILITY_MAP.md` supplements the topology with analysis-session/profile responsibilities discovered after the initial topology pass.
+- locked `com.epicefi.epichub` namespace;
+- one `Esp32BridgeGateway` with message-specific legacy codecs;
+- separate optional `Esp32DirectOutputGateway` for a future output capability;
+- Kotlin `SettingsStore`;
+- Rust semantic `tune_draft` ownership;
+- common `MeasurementStore` and `MeasurementWriter` contracts;
+- MLG-first interoperability and later MDF4 implementation;
+- shared analysis session/evidence/profile responsibilities.
 
-The topology is deliberately provisional at file/module granularity; responsibility boundaries are permanent authority.
+Exact crate/file splits remain refinable during implementation; responsibility boundaries are authority.
 
 ## 7. Remaining decisions are deliberate PoCs/fixtures/benchmarks, not unknown ownership
 
 **SATISFIED.**
 
-Remaining tasks are classified below as Phase 2 measured PoCs, feature-entry prerequisites or later/deferred product choices.
+Remaining tasks are classified as Phase 2 measured PoCs, feature-entry prerequisites or later/deferred product choices.
 
-The two previously open pre-scaffold product/build locks are now resolved by D-021 / `ANDROID_BUILD_BASELINE.md`:
+The pre-scaffold product/build locks are resolved by D-021 / `ANDROID_BUILD_BASELINE.md`:
 
 ```text
 applicationId / namespace = com.epicefi.epichub
@@ -90,6 +109,8 @@ targetSdk               = 36
 compileSdk              = 37
 production ARM ABIs     = armeabi-v7a + arm64-v8a
 ```
+
+D-022 additionally locks how historical implementations are reviewed/reimplemented when their feature enters production work.
 
 ## 8. High-risk subsystem tests/qualification paths are defined
 
@@ -101,37 +122,52 @@ production ARM ABIs     = armeabi-v7a + arm64-v8a
 - Rust parser/codec/tuning/channel tests;
 - ECU/profile/ESP32 golden vectors;
 - tuning fault injection and uncertainty;
-- independent MDF interoperability;
+- MLG ecosystem interoperability before production MLG acceptance;
+- independent MDF interoperability later;
 - JNI ABI/lifecycle;
-- USB sustained-I/O A/B measurement;
-- BLE/ESP32 physical behavior;
+- USB sustained-I/O comparison;
+- legacy BLE/ESP32 bridge behavior separately from any future direct-output physical failsafe tests;
 - Compose performance;
 - logging soak/recovery;
-- analyzer scaling/cancellation;
+- analyzer replay/scaling/cancellation;
 - staged bench/vehicle mutation qualification.
-
-Plugin archaeology adds deterministic log-replay analysis goldens.
 
 D-022 adds a source-understanding gate before implementation acceptance: old tests are candidate specifications only after their real requirement is identified, and known old bug behavior receives explicit negative/regression tests instead of blind parity.
 
 ## 9. Repository architecture documents agree
 
-**SATISFIED after this reconciliation batch.**
+**SATISFIED after the dedicated consistency audit.**
+
+The audit specifically reconciled these previous mismatches:
+
+1. generic `Esp32AccessoryGateway` / `Esp32MessageCodec` wording versus the concrete legacy `Esp32BridgeGateway` + message-specific codecs and separate direct-output gateway;
+2. warning rules appearing able to execute actions versus D-017 observational diagnostics/warnings;
+3. generic logger/thread/data-flow docs being MDF-specific despite D-014 MLG-first, format-neutral architecture;
+4. legacy ESP32 flow implying relay/GPIO authority despite firmware evidence showing a BLE↔CAN bridge;
+5. absolute “never per sample” JNI language versus the intended low-rate external-source exception;
+6. ambiguous Kotlin/Rust semantic tune-draft ownership;
+7. settings ownership marked “to be locked” despite the gate claiming state ownership was settled;
+8. MDF-specific measurement-file state where MLG and other readers/writers must share the generic contract;
+9. stale provisional namespace wording after D-021 locked `com.epicefi.epichub`;
+10. topology missing an explicit `MeasurementWriter` and the later-discovered shared analysis responsibilities;
+11. stale decision-log references stopping at D-021 after D-022 was added;
+12. legacy/direct-output test wording that could have treated the legacy task watchdog as a physical-output failsafe.
 
 Current authority documents consistently state:
 
 - Kotlin/Compose + Rust split;
 - one ECU session;
 - one ChannelStore;
-- exact profile authority;
+- exact profile source/identity authority;
 - exact verified TuneSnapshot/write/Burn safety;
 - one connection-wide BLE scheduler;
 - format-neutral live measurement path;
-- diagnostics observational only;
+- MLG first, MDF4 later after comparison/interop proof;
+- diagnostics/warnings observational only;
 - exact-profile tune comparison;
 - shared analysis engine/domain profiles;
 - initial Android package/API/ABI baseline;
-- historical implementations are mined piece-by-piece and cleanly reimplemented rather than bulk-ported.
+- historical implementations mined piece-by-piece and cleanly reimplemented rather than bulk-ported.
 
 ## 10. User explicitly accepts Phase 1 before production scaffold
 
@@ -152,13 +188,14 @@ These items have known owners and proof plans. Keeping them open does not make P
 Compare on the same ECU/profile/device workload:
 
 ```text
-A. Kotlin bulk I/O → coarse Rust batches
-B. Android open/claim → proven native FD/handle → Rust sustained I/O
+A. Kotlin USB I/O/decode reference
+B. Kotlin bulk I/O → coarse Rust batches/decode
+C. Android open/claim → proven native FD/handle → Rust sustained I/O/decode
 ```
 
 Selection remains measurement-driven. Architecture above the transport adapter is unchanged.
 
-Before either candidate becomes production code, its corresponding EpicDash-JZ/firmware transport behavior is reviewed piece-by-piece under D-022 so legacy lifecycle/retry/race behavior is understood rather than copied.
+Before a candidate becomes production code, its corresponding EpicDash-JZ/firmware transport behavior is reviewed piece-by-piece under D-022 so legacy lifecycle/retry/race behavior is understood rather than copied.
 
 ### Compose/runtime snapshot performance
 
@@ -253,7 +290,7 @@ Android app/bootstrap
 → diagnostics counters for JNI/snapshot lifecycle
 ```
 
-Even in this small slice, inherited lifecycle/state/performance lessons are reviewed under `SOURCE_REIMPLEMENTATION_METHOD.md` before substantive behavior is implemented. The scaffold itself is new; it is not a renamed EpicDash-JZ skeleton.
+Even in this small slice, inherited lifecycle/state/performance lessons are reviewed under `SOURCE_REIMPLEMENTATION_METHOD.md` before substantive inherited behavior is implemented. The scaffold itself is new; it is not a renamed EpicDash-JZ skeleton.
 
 Acceptance for that first slice should include:
 
@@ -267,7 +304,7 @@ Acceptance for that first slice should include:
 - no WebView/JSON runtime hot path;
 - no ECU writer, no Burn, no MDF writer and no plugin feature port yet.
 
-After this foundation is proven, proceed with the already locked order for live data/logging:
+After this foundation is proven, proceed with:
 
 ```text
 format-neutral live ECU path
@@ -282,7 +319,7 @@ Tuning mutation remains later and retains physically accepted EpicDash-JZ behavi
 
 # Gate result
 
-Architecture/source/test checklist result after reconciliation:
+Architecture/source/test checklist result after the consistency reconciliation:
 
 ```text
 45 / 46 review items satisfied
@@ -292,4 +329,4 @@ The single intentionally unchecked item is:
 
 > user accepts Phase 1 result before production scaffold begins.
 
-No unresolved architecture archaeology item currently blocks that decision. The deeper per-subsystem old-code review is deliberately an implementation-entry gate so it occurs immediately before each clean replacement is designed and written.
+No unresolved architecture-document contradiction currently blocks that decision. The deeper per-subsystem old-code review remains deliberately an implementation-entry gate so it occurs immediately before each clean replacement is designed and written.
