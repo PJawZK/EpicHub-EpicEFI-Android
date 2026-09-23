@@ -2,31 +2,25 @@
 
 ## Status
 
-This document describes the **current physical repository topology plus the rules for its deliberate expansion**.
+This document describes the **current physical repository topology plus the rules for deliberate expansion**.
 
-Phase 1 originally defined responsibility destinations before code existed. The first Phase-2 foundation is now real and qualified, so the actual source tree is no longer allowed to be described as if production scaffolding were still pending.
+The accepted Phase-2 Kotlin/Rust foundation and the implemented PR #3 UI/diagnostics slice are real source code. Future responsibilities are described as destinations only; empty package/crate forests are not pre-created.
 
-Detailed behaviour-to-destination mapping remains in `RESPONSIBILITY_DESTINATIONS.md`. This file defines where code exists now, which future domain homes are expected, and when a new package/crate/file is justified.
+Mandatory durable rules:
 
-D-022, D-023 and D-024 are mandatory:
-
-- inherited functionality is reviewed piece-by-piece and reimplemented cleanly;
-- production runtime code remains Kotlin/Jetpack Compose + Rust;
-- runtime/JNI state is typed/packed;
-- serialization is restricted to explicit persistence/export/interoperability boundaries;
-- historical tuning-plugin capabilities become native EpicHub Tuning Tools rather than a runtime plugin subsystem.
+- D-022 — inherited behavior is understood piece-by-piece and reimplemented cleanly;
+- D-023 — production runtime is Kotlin/Compose + Rust, with typed/packed runtime boundaries and serialization only at explicit persistence/export/interoperability boundaries;
+- D-024 — historical tuning-plugin capabilities become native EpicHub Tuning Tools, not a runtime plugin system.
 
 ---
 
 # Repository shape
 
-Current top level:
-
 ```text
 EpicHub-EpicEFI-Android/
 ├── .github/workflows/
 ├── app/                         # Kotlin / Compose Android product
-├── rust/engine/                 # current minimal Rust native engine crate
+├── rust/engine/                 # current Rust native engine crate
 ├── docs/
 │   ├── HANDOFF.md
 │   └── architecture/
@@ -35,89 +29,76 @@ EpicHub-EpicEFI-Android/
 └── README.md
 ```
 
-The repository does **not** create empty package/crate forests merely because the long-term architecture has many domains. A new package/module/crate appears when a real implementation slice creates a dependency, lifecycle, performance or test boundary that benefits from it.
+A new package/module/crate appears only when an actual dependency, lifecycle, performance or test boundary justifies it.
 
 ---
 
-# Current Kotlin foundation
+# Current Kotlin physical topology
 
-Permanent application namespace:
+Permanent namespace:
 
 ```text
 com.epicefi.epichub
 ```
 
-Current accepted physical source tree:
+Current source responsibilities include:
 
 ```text
 app/src/main/kotlin/com/epicefi/epichub/
-├── EpicHubActivity.kt
-├── EpicHubApp.kt
-└── engine/
-    ├── NativeEngine.kt
-    └── RuntimeSnapshot.kt
-```
-
-These files are deliberately small foundation owners:
-
-- `EpicHubActivity.kt` — Android Activity / Compose host only;
-- `EpicHubApp.kt` — current application/synthetic foundation surface; it is not a permanent multi-domain controller;
-- `engine/NativeEngine.kt` — Kotlin JNI/native-engine façade and lifecycle;
-- `engine/RuntimeSnapshot.kt` — Kotlin-side typed decoder/representation for the versioned packed RuntimeSnapshot ABI.
-
-As UI/diagnostics work is implemented, `EpicHubApp.kt` must decompose rather than grow into a catch-all.
-
----
-
-# Expected Kotlin expansion
-
-The target responsibility homes remain conceptually:
-
-```text
-com/epicefi/epichub/
-├── app/                 # process/application-scoped Android concerns if a split is justified
-├── navigation/          # AppRoute/NavHost and route-only state
+├── EpicHubApplication.kt        # process-scoped diagnostics + generation allocation
+├── EpicHubActivity.kt           # Android Activity / lifecycle adaptation / Compose host
+├── EpicHubApp.kt                # current app orchestration; synthetic RuntimeSnapshot polling
+├── navigation/
+│   └── AppDestination.kt
+├── diagnostics/
+│   ├── DiagnosticCaptureArchive.kt
+│   ├── DiagnosticCaptureCborEncoder.kt
+│   ├── DiagnosticClock.kt
+│   ├── DiagnosticHub.kt
+│   ├── DiagnosticLifecycleRegistry.kt
+│   ├── DiagnosticMetrics.kt
+│   ├── DiagnosticModel.kt
+│   ├── DiagnosticRing.kt
+│   └── NativeDiagnosticIngestor.kt
+├── engine/
+│   ├── NativeDiagnosticBatch.kt
+│   ├── NativeEngine.kt
+│   └── RuntimeSnapshot.kt
 ├── platform/
-│   ├── usb/             # discovery, permission, descriptor/open/close Android ownership
-│   ├── bluetooth/       # Android BLE/GATT ownership
-│   ├── location/        # Android location acquisition
-│   ├── storage/         # SAF/document URI transport only
-│   ├── lifecycle/       # Android lifecycle adaptation
-│   └── diagnostics/     # Android/platform diagnostic emitters
-├── engine/              # Kotlin NativeEngine façade / ABI adapters
-├── actions/             # semantic app action routing/policy
-├── accessory/           # legacy ESP32 bridge / future distinct direct-output gateway
-├── settings/            # typed application/user preferences
+│   └── diagnostics/             # Android diagnostic archive/share transport
 └── ui/
+    ├── EpicHubShell.kt
+    ├── components/
     ├── dashboard/
     ├── tuner/
-    ├── tuningtools/
+    ├── tools/                   # Tuning Tools presentation/workflow shell
     ├── logger/
     ├── analyzer/
     ├── diagnostics/
-    ├── settings/
-    └── components/
+    └── settings/
 ```
 
-This is a **responsibility topology, not an instruction to pre-create every directory**.
+The exact file list may grow as implementation is decomposed, but these current owners are real.
 
-The active UI foundation contract is `UI_FOUNDATION_LAYOUT.md`:
+Important ownership notes:
 
-- functional destinations: Dashboard, Tuner, Tuning Tools, Logger, Analyzer, Diagnostics;
-- Settings is a global application surface;
-- one responsive semantic screen model reflows across phone/tablet/orientation;
-- compact navigation may group destinations rather than rendering six unusably small permanent buttons;
-- global diagnostics capture remains reachable from the common shell.
+- `EpicHubApplication` owns the process-lifetime diagnostic recorder, not feature-domain state;
+- `EpicHubActivity` owns Android Activity lifecycle adaptation, not application/domain authority;
+- `EpicHubApp` is temporary composition/orchestration glue and must continue decomposing rather than becoming a catch-all controller;
+- `NativeEngine` is the Kotlin JNI façade, not the native semantic engine itself;
+- UI packages own presentation/workflow only.
 
-`TUNING_TOOLS_FOUNDATION.md` governs the guided AE/PID/TCharge/Injection-Angle tool surface. Compose owns workflow/presentation only; shared analysis/domain models remain Rust-owned.
+The current shell exposes:
 
-Compose never becomes ECU/profile/log-file authority.
+```text
+Dashboard | Tuner | Tuning Tools | Logger | Analyzer | Diagnostics
+```
+
+Settings is global. Dashboard and Logger visual detail remains deliberately provisional while the user develops HTML prototypes that may later become accepted visual/layout authority.
 
 ---
 
-# Current Rust foundation
-
-Current accepted physical Rust tree:
+# Current Rust physical topology
 
 ```text
 rust/engine/
@@ -128,169 +109,173 @@ rust/engine/
     ├── engine.rs
     ├── jni_api.rs
     ├── channel_store.rs
-    └── runtime_snapshot.rs
+    ├── runtime_snapshot.rs
+    └── diagnostics.rs
 ```
 
 Current responsibilities:
 
-- `engine.rs` — native engine lifetime/composition for the small foundation;
+- `engine.rs` — native engine lifetime/composition for the current foundation;
 - `jni_api.rs` — coarse JNI boundary with panic containment;
-- `channel_store.rs` — minimal engine-owned typed runtime channel authority;
-- `runtime_snapshot.rs` — fixed/versioned RuntimeSnapshot ABI publication;
-- `lib.rs` — crate entry only.
+- `channel_store.rs` — engine-owned typed runtime channel authority;
+- `runtime_snapshot.rs` — fixed/versioned RuntimeSnapshot ABI v1 publication;
+- `diagnostics.rs` — bounded native diagnostic ring + fixed/versioned diagnostic batch ABI;
+- `lib.rs` — crate entry/module declaration only.
 
-The current `rust/engine` crate is intentionally small. It is **not** evidence that all future ECU/profile/tuning/logging/analysis responsibilities belong in one giant crate/file.
-
----
-
-# Expected Rust domain expansion
-
-As substantive features arrive, the following permanent domains must obtain clear homes, either as modules inside the existing crate or as separate crates when dependency/test/build boundaries justify the split:
-
-```text
-engine/lifecycle
-ffi / ABI
-channels
-ECU transport/session/protocol
-profile / generated-INI compilation
-tuning / TuneSnapshot / semantic draft / write / Burn / recovery
-measurement contracts
-logging
-MLG/interop
-MDF4
-analysis shared primitives
-analysis domain profiles / native Tuning Tools models
-expressions/math
-plot preparation
-diagnostics
-project persistence / backup
-```
-
-A possible later multi-crate workspace may use descriptive domains such as:
-
-```text
-epichub-engine
-epichub-channels
-epichub-ecu
-epichub-profile
-epichub-tuning
-epichub-measurement
-epichub-logging
-epichub-analysis
-epichub-diagnostics
-epichub-interop
-```
-
-but **crate names/count are not architecture authority**. Responsibility ownership and dependency direction are.
-
-AE/PID/TCharge/Injection-Angle do not each require their own crate merely because they were separate historical plugin repositories. Their shared infrastructure belongs together; a split is justified only by a real dependency/test/build boundary.
+The current single Rust crate is not permission to grow a giant engine. Future ECU/profile/tuning/logging/analysis responsibilities split into modules/crates when real dependency/test/build boundaries justify it.
 
 ---
 
-# Kotlin ↔ Rust placement rule
+# Current Kotlin ↔ Rust boundaries
 
-Kotlin owns Android framework integration and presentation.
-
-Rust owns or is intended to own sustained/high-volume semantic engines and native data work.
-
-Normal crossing pattern:
+Runtime snapshot:
 
 ```text
-Compose / Kotlin semantic request
-→ NativeEngine façade
-→ coarse JNI operation
-→ Rust owner
-
-Rust current/runtime state
-→ bounded/versioned packed snapshot or result buffer
-→ Kotlin typed decode/projection
-→ Compose
+Rust ChannelStore
+→ fixed/versioned RuntimeSnapshot packed buffer
+→ reusable direct ByteBuffer
+→ Kotlin typed decode
+→ Compose projection
 ```
 
-Prohibited target structures:
+Diagnostics:
 
-- one JNI getter per channel;
-- JSON message bus across JNI;
-- WebView/JavaScript/DOM runtime presentation;
-- Kotlin-owned duplicate high-rate ChannelStore;
-- Rust code directly depending on Android UI framework types;
-- dynamic Java/JAR/JavaScript plugin loading for native Tuning Tools.
+```text
+Rust bounded diagnostic ring
+→ fixed/versioned bounded diagnostic batch
+→ one coarse JNI drain
+→ Kotlin typed decode/ingest
+→ process-scoped DiagnosticHub
+→ optional Compose Diagnostics projection
+```
 
-See `KOTLIN_RUST_BOUNDARY.md`, `RUNTIME_LANGUAGE_AND_SERIALIZATION.md` and `TUNING_TOOLS_FOUNDATION.md`.
+Prohibited structures:
 
----
+- one JNI getter/callback per sample/channel/event;
+- JSON/CBOR runtime message bus;
+- WebView/JavaScript/DOM production presentation;
+- duplicate Kotlin high-rate ChannelStore;
+- Rust depending on Android UI framework types;
+- dynamic JAR/JavaScript plugin loading for Tuning Tools.
 
-# UI prototype rule
-
-HTML/CSS and lightweight JavaScript may be used outside the production app to prototype Dashboard, Logger or other surfaces rapidly.
-
-An explicitly accepted prototype may define visual/layout/interaction intent. Production code is still implemented in Compose and connected to typed Kotlin/Rust state.
-
-Do not create a WebView package merely because the prototype was convenient. Prototype assets/code are design evidence, not a production source module unless independently reimplemented as native resources/components.
+CBOR currently exists only at the explicit diagnostic capture export boundary.
 
 ---
 
 # Diagnostics topology
 
-The current diagnostics design adds responsibility, not a new authority layer.
-
-Expected homes when implemented:
+Implemented current ownership:
 
 ```text
-Kotlin
-- platform diagnostic emitters
-- Compose diagnostics/capture UI
-- Android document/share transport
+Kotlin process scope
+DiagnosticHub
+├─ bounded event ring
+├─ metric summaries
+├─ lifecycle/generation registry
+├─ capture state
+└─ finalized immutable captures
 
-Rust
-- engine event ring
-- metric accumulators
-- engine lifecycle/session/correlation events
-- canonical diagnostic-capture schema/encoding owner where appropriate
+Rust NativeEngine
+└─ bounded native event ring
+   └─ bounded packed JNI drain
+
+Compose Diagnostics
+└─ Overview / Events / Metrics / Sessions / Captures
+
+Android platform/diagnostics
+└─ capture.cbor + report.txt archive / FileProvider share
 ```
 
-Crossing is a coarse bounded diagnostic drain, not one JNI callback per event.
+The expensive full diagnostics UI projection is refreshed continuously only while the Diagnostics page is visible. Recording and native drain continue independently.
 
-Canonical diagnostic archive representation is the D-023 boundary format defined in `DIAGNOSTICS_CAPTURE_FOUNDATION.md`: versioned CBOR machine data plus generated human `report.txt` in the export archive. That encoding does not become runtime state.
+Activity and NativeEngine generations are owners inside the process-scoped recorder. Destroyed-owner history is bounded; active owners are not evicted.
+
+---
+
+# Expected future Kotlin destinations
+
+Create only as implementation requires:
+
+```text
+platform/usb          Android USB discovery/permission/open/close
+platform/bluetooth    Android BLE/GATT
+platform/location     Android location
+platform/storage      SAF/document URI transport
+platform/lifecycle    shared Android lifecycle adapters when justified
+actions               semantic application action routing/policy
+accessory              ESP32 bridge / future distinct direct-output gateway
+settings               typed application/user preferences
+```
+
+Do not move ECU/profile/log-file authority into these Android packages.
+
+---
+
+# Expected future Rust domains
+
+As substantive features arrive:
+
+```text
+ECU transport/session/protocol
+profile / generated-INI compilation
+tuning / TuneSnapshot / semantic draft / write / Burn / recovery
+measurement contracts
+logging
+MLG interoperability
+MDF4
+shared analysis primitives
+Tuning Tools domain profiles/models
+expressions/math
+plot preparation
+project persistence / backup
+```
+
+Possible future crate names are descriptive implementation choices, not architecture authority. Responsibility ownership and dependency direction are authoritative.
 
 ---
 
 # Tuning Tools topology
 
-Native Tuning Tools use the same common owners as the rest of EpicHub:
-
 ```text
-Compose ui/tuningtools
-→ typed tool request / capture interaction
-→ NativeEngine coarse analysis operation
+Compose ui/tools
+→ typed guided workflow/capture request
+→ coarse NativeEngine analysis operation
 → Rust shared analysis platform
-→ Rust domain profile/model (AE/PID/TCharge/Injection Angle)
-→ typed result/recommendation/proposal
+→ Rust domain profile/model
+→ typed result / recommendation / experiment proposal
 → Compose tool workspace
 ```
 
-If a tool proposes an ECU change:
+AE/PID/TCharge/Injection Angle do not each receive their own plugin runtime, ECU transport, ChannelStore, parser stack or Burn path.
 
-```text
-Tuning Tool result
-→ semantic ExperimentProposal / requested tune change
-→ single Rust tuning authority
-→ normal identity/condition/verification transaction
-```
-
-No tool creates its own ECU transport, ChannelStore, file parser stack or Burn path.
-
-Analyzer and Tuning Tools may reuse the same plot/statistics/query primitives, but Analyzer remains generic exploration while Tuning Tools owns guided domain workflow.
+Analyzer remains generic data exploration. Tuning Tools owns guided domain workflows. Tuner owns manual semantic calibration editing. All mutation remains behind the single Rust tuning authority.
 
 ---
 
-# ECU/profile/tuning topology rule
+# UI prototype rule
 
-When the read-only live ECU slice begins, Android USB and native ECU responsibilities remain split deliberately:
+HTML/CSS/light JavaScript may be used outside production to prototype screens rapidly.
+
+```text
+prototype
+→ explicit visual/layout acceptance
+→ native Compose translation
+→ physical comparison
+```
+
+No WebView package or browser runtime is created merely because a prototype was convenient.
+
+---
+
+# Next topology expansion
+
+After PR #3 physical qualification and acceptance, the next inherited subsystem is read-only ECU acquisition. D-022 review happens before production code.
+
+Conceptual boundary remains:
 
 ```text
 Kotlin platform/usb
-→ discover / permission / descriptor / open / close
+→ discovery / permission / descriptor / open / close
 → selected transport resource
 → Rust ECU session/protocol
 → exact signature/profile gate
@@ -298,25 +283,9 @@ Kotlin platform/usb
 → ChannelStore
 ```
 
-The USB implementation may benchmark multiple sustained-I/O ownership options, but no option creates a second ECU session or a Dashboard-specific transport.
+Sustained USB I/O ownership remains benchmark-driven; no candidate creates a second ECU session or Dashboard-specific transport.
 
-Future tune mutation lives below semantic tuning authority:
-
-```text
-Compose semantic edit intent
-→ Rust tune draft / target resolution
-→ verified write plan
-→ exclusive ECU transaction
-→ ACK + exact range readback + complete expected TuneSnapshot verification
-```
-
-Burn remains a separate explicit transaction.
-
----
-
-# Logging / measurement / analyzer topology rule
-
-The live runtime model stays format-neutral:
+Logging remains format-neutral:
 
 ```text
 source
@@ -324,34 +293,9 @@ source
 → ChannelStore / sample batches
 → Logger
 → MeasurementWriter
-    ├─ MLG interoperability writer first
-    └─ MDF4 later after measurement/interop evaluation
+    ├─ MLG first
+    └─ MDF4 after evaluation
 ```
-
-Analyzer and Tuning Tools consume common channel/measurement/analysis contracts rather than file-format-specific object models.
-
-File codecs never become runtime ChannelStore authority.
-
----
-
-# Accessory topology rule
-
-Legacy ESP32 BLE↔CAN compatibility and any future direct GPIO/relay capability remain separate.
-
-Expected Kotlin semantic owners:
-
-```text
-platform/bluetooth
-→ one GATT client / one connection-wide operation scheduler
-
-accessory/Esp32BridgeGateway
-→ legacy button / variable request / variable set semantics
-
-accessory/<future direct-output gateway>
-→ only if a versioned direct-output protocol is deliberately added
-```
-
-Raw UUIDs/button masks/GPIO identifiers do not become UI semantic action IDs.
 
 ---
 
@@ -359,44 +303,12 @@ Raw UUIDs/button masks/GPIO identifiers do not become UI semantic action IDs.
 
 One production file has one primary reason to change.
 
-Avoid permanent catch-alls such as:
+Avoid permanent catch-alls such as `Utils`, `Helpers`, `Common` dumping grounds, `DataManager`, `SystemManager`, `EpicHubManager`, or giant Activity/App/engine files accumulating unrelated domains.
 
-- `Utils`;
-- `Helpers`;
-- `Common` as a dumping ground;
-- `DataManager`;
-- `SystemManager`;
-- `EpicHubManager`;
-- giant Activity/ViewModel/engine files that accumulate unrelated domains.
-
-A file approaching roughly 400–600 lines triggers a responsibility review; it is not an automatic split threshold.
+A file around 400–600 lines is a responsibility-review signal, not an automatic split threshold.
 
 Use permanent semantic names, never development-history labels such as T3/T4/T6/W4/V2/New.
 
----
-
-# Current implementation order
-
-The current active work is:
-
-```text
-accepted Kotlin/Rust synthetic foundation
-→ UI shell with Dashboard/Tuner/Tuning Tools/Logger/Analyzer/Diagnostics surfaces
-→ typed diagnostics/flight-recorder/capture foundation
-→ translate accepted Dashboard/Logger HTML prototypes into Compose as they mature
-→ physical UI/diagnostic qualification on SM-A137F + SM-T500
-→ read-only live ECU acquisition D-022 gate + implementation
-→ MLG writer/interoperability
-→ MDF4 evaluation/implementation
-→ scalable Analyzer + native Tuning Tools depth
-```
-
-Tuning mutation, BLE/accessory migration and other high-risk inherited subsystems enter later through their own D-022 review/qualification gates.
-
 ## Summary
 
-The topology rule is intentionally conservative:
-
-> preserve clear ownership and dependency direction, keep the real tree as small as the current implementation permits, expose native Tuning Tools from the ground shell without recreating plugin architecture, and split into additional packages/crates only when an actual responsibility boundary exists.
-
-The current minimal physical tree is authoritative for what exists today; `RESPONSIBILITY_DESTINATIONS.md` is authoritative for where later responsibilities belong.
+> Keep the real tree as small as the current implementation permits, make process/platform/presentation/native ownership explicit, preserve coarse typed Kotlin↔Rust boundaries, and add packages/crates only when an actual responsibility boundary exists.
