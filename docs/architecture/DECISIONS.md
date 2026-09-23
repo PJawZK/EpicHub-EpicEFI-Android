@@ -28,9 +28,11 @@ Rust is the intended owner for the runtime channel engine, high-volume ECU proce
 
 ## D-006 — Coarse Kotlin/Rust boundary
 
-The Kotlin/Rust boundary operates on semantic operations and bounded snapshots/results, not per-sample, per-channel or per-rendered-primitive calls.
+The Kotlin/Rust boundary operates on semantic operations and bounded snapshots/results. High-rate ECU/runtime traffic must not use per-sample, per-channel or per-rendered-primitive JNI calls/callbacks.
 
 A high-rate ECU stream may remain entirely inside Rust while Compose receives only the latest display-rate snapshot. Analyzer queries return viewport-sized result packets rather than raw entire datasets.
+
+Low-rate discrete Android-owned source events, such as an occasional GPS sample or accessory state transition, may cross individually when that is the simpler contract and measurements show it is harmless. Bursty or higher-rate external sources are batched. This exception must never become the ECU/runtime streaming model.
 
 ## D-007 — Legacy ESP32 bridge and future direct outputs are separate capabilities
 
