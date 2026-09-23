@@ -1,0 +1,15 @@
+[package]
+name = "epichub-engine"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+name = "epichub_engine"
+crate-type = ["cdylib", "rlib"]
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+strip = "symbols"

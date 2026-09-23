@@ -1,0 +1,14 @@
+# Android / Gradle
+.gradle/
+**/build/
+local.properties
+.idea/
+*.iml
+
+# Rust
+**/target/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
