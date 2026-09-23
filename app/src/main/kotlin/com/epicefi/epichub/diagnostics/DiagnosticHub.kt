@@ -117,6 +117,20 @@ class DiagnosticHub(
     }
 
     @Synchronized
+    fun finishRecentProblemCaptureIfDue(postTriggerNanos: Long): DiagnosticCapture? {
+        require(postTriggerNanos >= 0) { "Post-trigger duration must not be negative." }
+        val builder = activeCapture ?: return null
+        if (builder.mode != DiagnosticCaptureMode.RECENT_PROBLEM) {
+            return null
+        }
+        val triggerAt = builder.triggerAtNanos ?: return null
+        if (clock.monotonicNanos() - triggerAt < postTriggerNanos) {
+            return null
+        }
+        return finishCapture()
+    }
+
+    @Synchronized
     fun startReproductionCapture(): ActiveDiagnosticCapture {
         check(activeCapture == null) { "A diagnostic capture is already active." }
         val now = clock.monotonicNanos()
