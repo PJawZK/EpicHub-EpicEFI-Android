@@ -18,11 +18,15 @@ Activity Compose           1.12.1
 compileSdk                 37
 targetSdk                  36
 minSdk                     26
+Android 17 platform pkg    android-37.0 (Cinnamon Bun preview)
+Android Build Tools        37.0.0
 Android NDK                30.0.16248370 (r30 LTS)
 Rust                       1.98.1
 cargo-ndk                  4.1.2
 Production Android ABIs    armeabi-v7a + arm64-v8a
 ```
+
+Android 17 is still distributed as a preview SDK at this point. Its repository platform identifier is `android-37.0` even though Gradle intentionally uses `compileSdk = 37`. CI therefore installs the exact preview package and explicitly verifies `platforms/android-37.0/android.jar` before attempting the Android build.
 
 AGP 9.x built-in Kotlin is used; `org.jetbrains.kotlin.android` is intentionally not applied. The Kotlin Gradle runtime is explicitly raised to 2.4.20 so the Kotlin compiler and `org.jetbrains.kotlin.plugin.compose` remain on the same release.
 
@@ -30,7 +34,7 @@ The toolchain is a build implementation choice, not a permanent architecture dec
 
 ## First scaffold scope
 
-This commit contains only:
+This slice contains only:
 
 - one Android `app` module;
 - one Compose host Activity/surface;
