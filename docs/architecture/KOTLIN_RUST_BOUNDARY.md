@@ -4,6 +4,8 @@
 
 Use Kotlin where Android framework integration is native and direct; use Rust where sustained high-volume data/ECU/file/analysis work benefits from native control. The boundary must be narrow enough that using two languages does not create two competing application architectures.
 
+D-023 / `RUNTIME_LANGUAGE_AND_SERIALIZATION.md` is mandatory here: JNI/FFI is a typed semantic/packed ABI boundary, **not** a JSON/CBOR/document serialization boundary.
+
 ## Ownership summary
 
 Kotlin owns:
@@ -41,6 +43,18 @@ High-rate ECU/runtime traffic does **not** cross JNI per sample, per channel or 
 
 Low-rate discrete Android-source events such as ordinary GPS samples or infrequent accessory state changes may cross individually when that is simpler and measurements show no material cost. Variable bursts and any higher-rate stream should still be batched. This low-rate exception must never become the precedent for ECU/runtime per-sample JNI traffic.
 
+Prohibited internal boundary forms include:
+
+```text
+JSON strings/documents
+CBOR documents
+XML documents
+generic string-key maps used as domain state
+WebView/JavaScript bridge payloads
+```
+
+Those formats may exist only at separately justified persistence/export/external-interoperability boundaries.
+
 ## Intended semantic API shape
 
 Conceptual operations, not final JNI signatures:
@@ -68,7 +82,7 @@ Engine.previewTuneEdit(request)
 Engine.writeTune(request/plan identity)
 Engine.burnTune(request/plan identity)
 
-Engine.publishExternalSamples(batch)   # GPS/ESP32/etc when needed
+Engine.publishExternalSamples(batch)
 ```
 
 A normal UI must never need APIs such as:
@@ -86,18 +100,21 @@ when that would create repeated JNI crossings.
 
 Rust maintains full-rate runtime/channel truth. Kotlin reads a bounded display snapshot at frame/UI cadence.
 
-A snapshot ABI should contain:
+The accepted Phase-2 foundation already establishes RuntimeSnapshot ABI v1 as a fixed/versioned packed direct-buffer contract.
 
-- ABI/schema version;
+Future revisions preserve the same rules:
+
+- explicit ABI/schema version;
 - sequence/revision;
 - monotonic timestamp;
 - source/session identity or compact validity flags;
-- fixed/indexed values needed by the active UI;
-- connection/quality flags required for presentation.
+- bounded indexed values needed by the UI;
+- connection/quality flags required for presentation;
+- fixed endian/layout rules.
 
-Preferred direction: direct/packed buffer rather than JSON/object graphs.
+Packed/direct buffers are the required architecture for this hot path. JSON/object serialization is not an alternative implementation candidate.
 
-Double/triple-buffer publication should be evaluated so Rust can publish a complete snapshot and atomically advance a sequence/index while Compose reads the previous/current stable buffer.
+Double/triple-buffer publication may be evaluated when measurements justify it; the existing bounded direct-buffer ABI is the accepted starting point.
 
 ## Plot/analysis results
 
@@ -110,6 +127,14 @@ Kotlin sends semantic query information:
 - requested analysis operation.
 
 Rust returns only the bounded result needed for the UI, e.g. a few thousand prepared points per visible series rather than millions of raw samples.
+
+Result transfer uses an explicit typed/packed ABI or semantic result handle, not serialized document strings.
+
+## Diagnostics event transfer
+
+Rust diagnostic events remain typed Rust structures in the native engine. Kotlin receives them through a bounded typed/packed event batch drain.
+
+`capture.cbor` is produced only after a DiagnosticCapture is finalized for persistence/export. CBOR is never the live JNI event transport.
 
 ## External Android-source ingestion
 
@@ -127,7 +152,7 @@ A future versioned direct-output capability would use its own Kotlin semantic ga
 
 ## USB resource handoff
 
-Early Phase 2 must compare:
+When the read-only ECU slice begins, compare:
 
 1. Kotlin USB I/O + Kotlin decode reference;
 2. Kotlin USB I/O + batched Rust decode;
@@ -183,8 +208,9 @@ The boundary should expose counters sufficient to detect architectural regressio
 - JNI calls/sec by category;
 - bytes crossing JNI/sec;
 - snapshot publication/read rate;
+- diagnostic event batch rate/bytes;
 - plot result bytes/query latency;
 - external-source batch/event rate;
 - native queue depth/drop counts.
 
-The objective is not zero JNI calls. The objective is eliminating high-frequency semantic ping-pong and redundant translation/copying.
+The objective is not zero JNI calls. The objective is eliminating high-frequency semantic ping-pong, document serialization and redundant translation/copying.
