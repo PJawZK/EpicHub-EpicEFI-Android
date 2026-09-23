@@ -182,3 +182,15 @@ JSON is not the default EpicHub internal format. It may exist only when an expli
 The canonical EpicHub diagnostic capture export is a versioned CBOR document plus a human-readable text report, optionally packaged with explicitly selected attachments. CBOR is an export/persistence boundary only; live Kotlin/Rust diagnostic rings and JNI event transfer remain typed/bounded and do not serialize through CBOR.
 
 The detailed contract and review questions are defined in `RUNTIME_LANGUAGE_AND_SERIALIZATION.md`.
+
+## D-024 — Historical tuning plugins become native Tuning Tools
+
+EpicHub does not recreate a runtime TunerStudio-style plugin subsystem for AE, PID, TCharge, Injection Angle or related tuning-assistance capabilities.
+
+Retained behavior is reimplemented piece-by-piece under D-022 as native EpicHub functionality. Shared analysis/statistical/provenance/capture infrastructure lives in Rust under D-020; Compose owns the Android workflow/presentation; any ECU mutation remains behind the single semantic tuning authority defined by D-019.
+
+`Tuning Tools` is a first-class functional destination in the ground application information architecture. It exists from the initial UI shell even if individual tools are initially placeholders or explicitly marked unavailable/not-qualified. Exact compact-navigation placement may vary by screen geometry so the phone UI is not overloaded, but the capability is not treated as an optional afterthought.
+
+Analyzer remains the generic measurement exploration/query workspace. Tuning Tools provides guided domain workflows over the same shared source/channel/analysis infrastructure and may deep-link to or reuse Analyzer views without becoming a separate data engine.
+
+No dynamic JAR/JavaScript/plugin loader, per-tool ECU connection, per-tool ChannelStore or per-tool write/Burn authority is introduced merely to preserve historical plugin packaging. The detailed UI/runtime contract is defined in `TUNING_TOOLS_FOUNDATION.md`.
