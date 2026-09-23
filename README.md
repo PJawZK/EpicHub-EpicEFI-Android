@@ -8,12 +8,9 @@ Existing EpicDash, EpicDash-JZ, EpicEFI firmware, Tune Viewer, plugin and relate
 
 ## Current phase
 
-Phase 1 is at its **documentation-consistency / explicit-acceptance gate**.
+Phase 1 is at its **explicit-acceptance gate after a completed documentation-consistency audit**.
 
-The responsibility architecture, ownership, safety boundaries and target topology have been established, but production Android/Rust scaffolding remains blocked until:
-
-1. the final consistency audit confirms the architecture documents agree; and
-2. the user explicitly accepts Phase 1.
+The responsibility architecture, ownership, safety boundaries and target topology have been established and cross-reconciled. Production Android/Rust scaffolding remains blocked until the user explicitly accepts Phase 1.
 
 Current authority/index:
 
