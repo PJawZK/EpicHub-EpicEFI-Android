@@ -1,12 +1,8 @@
-# Phase 1 Architecture Review Checklist
-
-Use this checklist before declaring Phase 1 complete.
+# Phase 1 Architecture Review Checklist — Closure Record
 
 Final assessment after the dedicated documentation-consistency audit and explicit user acceptance on **2026-09-23**: **46 / 46 items satisfied**.
 
-Phase 1 is accepted and closed. Production scaffolding may now begin only through the deliberately small non-mutating Phase 2 foundation slice described in `PHASE1_GATE_ASSESSMENT.md`.
-
-See `PHASE1_GATE_ASSESSMENT.md` for the reconciliation findings and the distinction between accepted architecture, Phase 2 measured PoCs, feature-entry prerequisites and deliberately deferred product decisions.
+Phase 1 is accepted and closed. This checklist is historical closure evidence, not a current Phase-2 task list. Current work is defined by `docs/HANDOFF.md` and `GAP_ANALYSIS.md`.
 
 ## Source archaeology
 
@@ -74,19 +70,17 @@ See `PHASE1_GATE_ASSESSMENT.md` for the reconciliation findings and the distinct
 ## Workflow
 
 - [x] `docs/HANDOFF.md` is the only active handoff file.
-- [x] architecture docs agree with current repository decisions after a dedicated literal/cross-contract consistency audit and reconciliation.
-- [x] unresolved decisions are explicit, classified by when they become required, and have evidence-gathering plans.
-- [x] user accepted the reconciled Phase 1 result on 2026-09-23 before production scaffolding began.
+- [x] architecture docs agreed after the Phase-1 consistency audit/reconciliation.
+- [x] unresolved decisions were explicit, classified by when required, and had evidence-gathering plans.
+- [x] user accepted the reconciled Phase-1 result on 2026-09-23 before production scaffolding began.
 
-## Closure record
+## Completed post-closure sequence
 
-Phase 1 acceptance was given explicitly on **2026-09-23**.
+The original closure sequence has already happened:
 
-The Phase 1 result is therefore frozen as the architecture baseline. Later changes are normal architecture evolution and must be recorded deliberately; they do not retroactively reopen the Phase 1 gate.
+1. PR #1 was merged and `main` became the accepted architecture baseline;
+2. the first small non-mutating Phase-2 Kotlin/Rust foundation was implemented;
+3. that foundation was CI-qualified and physically exercised on SM-A137F and SM-T500;
+4. current work has advanced to the UI/diagnostic foundation under draft PR #3.
 
-Next sequence:
-
-1. merge/clean PR #1;
-2. establish `main` as the accepted architecture baseline;
-3. begin the small non-mutating Phase 2 foundation slice described in `PHASE1_GATE_ASSESSMENT.md`;
-4. apply `SOURCE_REIMPLEMENTATION_METHOD.md` whenever inherited behavior enters substantive implementation.
+Later durable decisions such as D-023 are normal architecture evolution. They do not invalidate this 46/46 Phase-1 closure result.
