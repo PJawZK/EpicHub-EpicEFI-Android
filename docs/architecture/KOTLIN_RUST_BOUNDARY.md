@@ -21,7 +21,7 @@ Rust owns or is intended to own:
 - ECU protocol/session processing after the selected transport handoff;
 - runtime ChannelStore;
 - profile/INI compilation;
-- MDF4;
+- measurement/logging format engines, including MLG interoperability and the later MDF4 native path;
 - logger internals;
 - analysis/expressions/plot preparation;
 - semantic tuning authority after parity/qualification.
@@ -37,7 +37,9 @@ Cross-language communication occurs at:
 - batched external-source channel ingestion;
 - bounded structured-event drains.
 
-It does **not** occur per sample, per channel or per drawing primitive.
+High-rate ECU/runtime traffic does **not** cross JNI per sample, per channel or per drawing primitive.
+
+Low-rate discrete Android-source events such as ordinary GPS samples or infrequent accessory state changes may cross individually when that is simpler and measurements show no material cost. Variable bursts and any higher-rate stream should still be batched. This low-rate exception must never become the precedent for ECU/runtime per-sample JNI traffic.
 
 ## Intended semantic API shape
 
@@ -113,17 +115,19 @@ Rust returns only the bounded result needed for the UI, e.g. a few thousand prep
 
 ESP32/GPS originate from Android APIs and therefore begin in Kotlin.
 
-When their values need logging/analysis/common-channel participation, Kotlin sends a **batch** of typed external-source updates into Rust. One JNI call per GPS sample or accessory state transition is acceptable at their low rates, but variable bursts should still be batched where natural.
+When their values need logging/analysis/common-channel participation, Kotlin publishes typed external-source updates into Rust. Batch naturally bursty values; low-rate discrete samples may use one call per event when justified by simplicity and measured cost.
 
-Accessory command transmission itself does not pass through Rust:
+Legacy accessory command transmission itself does not pass through Rust:
 
 ```text
-Compose → ActionRouter → Esp32AccessoryGateway → Android BLE → ESP32
+Compose → ActionRouter → Esp32BridgeGateway → Android BLE → ESP32 legacy bridge
 ```
+
+A future versioned direct-output capability would use its own Kotlin semantic gateway rather than reusing the legacy bridge gateway as a generic accessory owner.
 
 ## USB resource handoff
 
-Phase 1/early PoC must compare:
+Early Phase 2 must compare:
 
 1. Kotlin USB I/O + Kotlin decode reference;
 2. Kotlin USB I/O + batched Rust decode;
@@ -180,7 +184,7 @@ The boundary should expose counters sufficient to detect architectural regressio
 - bytes crossing JNI/sec;
 - snapshot publication/read rate;
 - plot result bytes/query latency;
-- external-source batch rate;
+- external-source batch/event rate;
 - native queue depth/drop counts.
 
 The objective is not zero JNI calls. The objective is eliminating high-frequency semantic ping-pong and redundant translation/copying.
