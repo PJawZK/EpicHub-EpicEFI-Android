@@ -5,8 +5,7 @@ use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{LazyLock, Mutex};
 
 static NEXT_HANDLE: AtomicI64 = AtomicI64::new(1);
-static ACTIVE_ENGINES: LazyLock<Mutex<HashSet<i64>>> =
-    LazyLock::new(|| Mutex::new(HashSet::new()));
+static ACTIVE_ENGINES: LazyLock<Mutex<HashSet<i64>>> = LazyLock::new(|| Mutex::new(HashSet::new()));
 
 fn with_active_engines<T>(operation: impl FnOnce(&mut HashSet<i64>) -> T) -> T {
     let mut guard = ACTIVE_ENGINES
