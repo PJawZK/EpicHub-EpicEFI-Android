@@ -8,7 +8,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -27,15 +26,20 @@ import com.epicefi.epichub.navigation.AppDestination
 import com.epicefi.epichub.platform.diagnostics.DiagnosticCaptureExporter
 import com.epicefi.epichub.ui.EpicHubShell
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
+
+private const val RECENT_PROBLEM_POST_TRIGGER_NANOS = 3_000_000_000L
 
 @Composable
-fun EpicHubApp() {
+fun EpicHubApp(
+    diagnostics: DiagnosticHub,
+    nativeEngineGeneration: Long,
+) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     val engine = remember { NativeEngine.create() }
-    val diagnostics = remember { DiagnosticHub() }
     val nativeDiagnostics = remember { NativeDiagnosticIngestor() }
+    val nativeEngineOwnerId = remember(nativeEngineGeneration) {
+        "native-engine-$nativeEngineGeneration"
+    }
 
     var destinationId by rememberSaveable { mutableStateOf(AppDestination.DASHBOARD.id) }
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
@@ -49,39 +53,28 @@ fun EpicHubApp() {
         diagnosticSnapshot = diagnostics.snapshotForUi()
     }
 
-    DisposableEffect(engine, diagnostics) {
+    DisposableEffect(engine, diagnostics, nativeEngineOwnerId) {
         diagnostics.createLifecycleOwner(
-            ownerId = "epichub-composition",
-            ownerKind = "ComposeRoot",
-            generation = 1,
-            initialState = "active",
-        )
-        diagnostics.createLifecycleOwner(
-            ownerId = "native-engine-1",
+            ownerId = nativeEngineOwnerId,
             ownerKind = "NativeEngine",
-            generation = 1,
+            generation = nativeEngineGeneration,
             initialState = "active",
-        )
-        diagnostics.record(
-            severity = DiagnosticSeverity.INFO,
-            domain = DiagnosticDomain.APP_UI,
-            code = DiagnosticEventCode.APP_STARTED,
         )
         refreshDiagnostics()
 
         onDispose {
-            diagnostics.destroyLifecycleOwner("native-engine-1")
             engine.close()
             diagnostics.record(
                 severity = DiagnosticSeverity.INFO,
                 domain = DiagnosticDomain.NATIVE_ENGINE,
                 code = DiagnosticEventCode.NATIVE_ENGINE_CLOSED,
+                correlationId = nativeEngineOwnerId,
                 payload = DiagnosticPayload.NativeEngineState(
                     alive = false,
                     activeEngineCount = NativeEngine.activeCount(),
                 ),
             )
-            diagnostics.destroyLifecycleOwner("epichub-composition")
+            diagnostics.destroyLifecycleOwner(nativeEngineOwnerId)
         }
     }
 
@@ -115,10 +108,13 @@ fun EpicHubApp() {
                     )
                 }
 
+            val recentCaptureFinished = diagnostics.finishRecentProblemCaptureIfDue(
+                RECENT_PROBLEM_POST_TRIGGER_NANOS,
+            ) != null
             val diagnosticsVisible =
                 AppDestination.fromId(latestDestinationId) == AppDestination.DIAGNOSTICS &&
                     !latestSettingsOpen
-            if (diagnosticsVisible) {
+            if (diagnosticsVisible || recentCaptureFinished) {
                 refreshDiagnostics()
             }
             delay(250)
@@ -152,15 +148,8 @@ fun EpicHubApp() {
             engineAlive = engine.isAlive,
             activeEngineCount = NativeEngine.activeCount(),
             onCaptureRecentProblem = {
-                val capture = diagnostics.startRecentProblemCapture()
+                diagnostics.startRecentProblemCapture()
                 refreshDiagnostics()
-                scope.launch {
-                    delay(3_000)
-                    if (diagnostics.activeCapture()?.captureId == capture.captureId) {
-                        diagnostics.finishCapture()
-                        refreshDiagnostics()
-                    }
-                }
             },
             onStartReproductionCapture = {
                 diagnostics.startReproductionCapture()
