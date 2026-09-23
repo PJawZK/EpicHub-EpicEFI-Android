@@ -168,3 +168,17 @@ The new subsystem contract is then designed independently around one permanent o
 Historical bugs are treated as evidence of missing invariants, not as control flow to reproduce. Historical tests are reviewed as candidate specifications, not blindly copied implementation-detail contracts. Differential qualification compares EpicHub against protocol truth and deliberately required behavior, so differences from old accidental/junk/buggy behavior are expected and desirable.
 
 This clean reimplementation methodology applies to the entire application and all reference repositories. Direct source reuse is exceptional and requires separate provenance/licence, correctness, representation and test review. The detailed workflow is defined in `SOURCE_REIMPLEMENTATION_METHOD.md`.
+
+## D-023 — Kotlin/Rust runtime stays typed; serialization is boundary-only
+
+EpicHub production application logic remains Kotlin/Jetpack Compose plus Rust according to D-003 through D-006. Historical JavaScript/TypeScript/React/WebView code is evidence only and does not introduce a browser/JavaScript runtime into EpicHub.
+
+Runtime/domain state is represented by explicit Kotlin or Rust types. Kotlin↔Rust communication uses semantic JNI calls, versioned packed buffers and bounded typed/binary batches. JSON, CBOR, XML or another generic document serializer must not become a live internal message bus, RuntimeSnapshot/ChannelStore representation, Compose state transport or tuning/profile authority.
+
+Serialization is allowed only at an explicit persistence, export or external-interoperability boundary. Each such boundary owns a deliberate versioned codec/schema and converts immediately to/from typed domain state. External formats such as generated INI, MSL/CSV, MLG and MDF4 retain their own justified formats; D-023 does not force one universal persistence encoding.
+
+JSON is not the default EpicHub internal format. It may exist only when an explicit external/tooling requirement justifies it, isolated to that adapter/export surface. Optional developer conversion from an authoritative format to JSON is a projection, never source truth.
+
+The canonical EpicHub diagnostic capture export is a versioned CBOR document plus a human-readable text report, optionally packaged with explicitly selected attachments. CBOR is an export/persistence boundary only; live Kotlin/Rust diagnostic rings and JNI event transfer remain typed/bounded and do not serialize through CBOR.
+
+The detailed contract and review questions are defined in `RUNTIME_LANGUAGE_AND_SERIALIZATION.md`.
