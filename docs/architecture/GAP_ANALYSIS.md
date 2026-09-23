@@ -2,9 +2,9 @@
 
 ## Purpose
 
-This document lists **current unresolved implementation, fixture, benchmark, compatibility and product-scope work** after Phase 1 architecture archaeology.
+This document lists **current unresolved implementation, fixture, benchmark, compatibility and product-scope work** after Phase 1 architecture archaeology and the documentation-consistency audit.
 
-Resolved responsibility archaeology is intentionally not repeated here. See the evidence documents and `PHASE1_GATE_ASSESSMENT.md` for closure rationale.
+Resolved responsibility archaeology is intentionally not repeated here. See `PHASE1_GATE_ASSESSMENT.md` and the indexed evidence documents.
 
 A remaining gap does not necessarily block Phase 2 scaffolding. Each item is classified by when it becomes required.
 
@@ -24,22 +24,23 @@ Resolved before the Phase 2 gate:
 - legacy ESP32 bridge vs future direct-output separation;
 - format-neutral live measurement path;
 - MLG-first then MDF4 evaluation sequence;
-- diagnostics as observational state only;
+- diagnostics/warnings as observational state only;
 - exact-profile tune-comparison authority;
 - shared analyzer infrastructure + domain profiles;
 - permanent application ID/namespace `com.epicefi.epichub`;
 - initial Android API baseline `minSdk 26`, `targetSdk 36`, `compileSdk 37`;
-- production native ABIs `armeabi-v7a` + `arm64-v8a`.
+- production native ABIs `armeabi-v7a` + `arm64-v8a`;
+- mandatory piece-by-piece source review / clean reimplementation methodology for inherited subsystems.
 
-See D-001 through D-021 and `ANDROID_BUILD_BASELINE.md`.
+See D-001 through D-022, `SOURCE_REIMPLEMENTATION_METHOD.md` and `ANDROID_BUILD_BASELINE.md`.
 
-The only Phase 1 review-checklist item still intentionally open is explicit user acceptance before production scaffolding.
+The only Phase 1 review-checklist item intentionally open after the consistency reconciliation is explicit user acceptance before production scaffolding.
 
 ---
 
-# Early Phase 2 foundation work
+# Early Phase 2 foundation implementation
 
-These are implementation tasks, not unresolved architecture ownership.
+These are implementation tasks, not unresolved ownership.
 
 ## Kotlin/Rust engine boundary
 
@@ -51,8 +52,10 @@ Still required:
 - bounded event drain;
 - stable error projection;
 - JNI metrics/counters;
-- no per-channel/per-sample JNI traffic;
+- no high-rate per-channel/per-sample JNI traffic;
 - explicit lifetime contract for any future native USB resource handoff.
+
+Low-rate discrete Android-source events may cross individually when justified; bursts/high-rate streams remain batched.
 
 Status: `PHASE 2 FOUNDATION IMPLEMENTATION`.
 
@@ -65,7 +68,7 @@ Still required:
 - timestamp/revision/source/validity;
 - live/file-backed source abstraction;
 - bounded history/cache rules;
-- coarse GPS/legacy bridge ingestion.
+- coarse GPS/legacy-bridge ingestion.
 
 Diagnostics-Core contributes naming/adapter/validity/test-vector evidence but is not a second runtime authority.
 
@@ -96,11 +99,12 @@ These are deliberately unresolved until measurement. They do **not** reopen Phas
 Candidates:
 
 ```text
-A. Kotlin bulk I/O worker → coarse Rust batches
-B. Android open/claim → proven native FD/handle → Rust sustained I/O
+A. Kotlin USB I/O/decode reference
+B. Kotlin bulk I/O → coarse Rust batches/decode
+C. Android open/claim → proven native FD/handle → Rust sustained I/O/decode
 ```
 
-Measure on identical ECU/profile/device workload:
+Measure on identical ECU/profile/device/load:
 
 - connect/signature/preflight latency;
 - sustained bytes/frames per second;
@@ -112,6 +116,8 @@ Measure on identical ECU/profile/device workload:
 - lifecycle/background/foreground behavior;
 - ownership/close correctness;
 - extended logging temperature/battery.
+
+Each production candidate also passes the D-022 source/bug/lifecycle review for the historical behavior it replaces.
 
 Status: `EARLY PHASE 2 BENCHMARK DECISION`.
 
@@ -160,7 +166,7 @@ Need executable vectors for:
 - malformed CRC/length;
 - boundary page/range cases.
 
-Current firmware behavior has been directly verified in `ECU_PROTOCOL_DIRECT_VERIFICATION.md`; this gap is executable regression evidence, not protocol discovery.
+Current firmware behavior is directly verified in `ECU_PROTOCOL_DIRECT_VERIFICATION.md`; this gap is executable regression evidence, not protocol discovery.
 
 Status: `FEATURE-ENTRY FIXTURE GAP`.
 
@@ -168,7 +174,7 @@ Status: `FEATURE-ENTRY FIXTURE GAP`.
 
 Need representative genuine generated INIs across supported boards/firmware generations, including:
 
-- exact signatures;
+- exact signatures/source fingerprints;
 - differing runtime/output geometry;
 - tune pages/primitives;
 - tables/curves/dialogs/menus;
@@ -180,9 +186,9 @@ Status: `PROFILE/TUNER FEATURE-ENTRY FIXTURE GAP`.
 
 ---
 
-# Tuning / project persistence implementation gaps
+# Tuning / project persistence gaps
 
-Authority is already resolved; concrete formats/behavior remain.
+Authority is resolved; concrete formats/behavior remain.
 
 ## Internal project store
 
@@ -210,7 +216,7 @@ Status: `TUNER FEATURE-ENTRY FORMAT DESIGN`.
 
 Need the final batch-capable schema for operation kind/phase, exact ECU/profile/session identity, baseline/expected tune fingerprints, write-plan/affected-page identity and Burn evidence where relevant.
 
-Lifecycle/authority are already locked: durable before possible mutation, present/corrupt blocks mutation, no automatic replay.
+Lifecycle/authority are locked: durable before possible mutation, present/corrupt blocks mutation, no automatic replay.
 
 Status: `TUNER FEATURE-ENTRY IMPLEMENTATION DESIGN`.
 
@@ -218,9 +224,11 @@ Status: `TUNER FEATURE-ENTRY IMPLEMENTATION DESIGN`.
 
 Need product behavior for:
 
-- saved-project edits while ECU is offline;
+- saved-project semantic draft edits while ECU is offline;
 - reconnect comparison/conflict handling;
-- software draft dirty state vs verified ECU RAM dirty pages vs Burn state.
+- semantic draft dirty state vs verified ECU RAM dirty pages vs Burn state.
+
+Rust remains semantic draft owner; Kotlin remains presentation/edit-interaction owner.
 
 Status: `TUNER PRODUCT DESIGN`.
 
@@ -271,7 +279,7 @@ Status: `DEFERRED PERFORMANCE/FORMAT DECISION`.
 
 ## Format-neutral writer path
 
-Need bounded sample/event batches, explicit pressure/drop metrics and independent writer lifecycle.
+Need bounded sample/event batches, explicit pressure/drop metrics and independent writer lifecycle through the common `MeasurementWriter` contract.
 
 Status: `LOGGER IMPLEMENTATION`.
 
@@ -298,7 +306,7 @@ Status: `LOGGER PRODUCT/PLATFORM DESIGN`.
 
 ## Writer power-loss recovery
 
-Need actual checkpoint/finalization/recovery implementation and fault-injection tests.
+Need actual checkpoint/finalization/recovery implementation and fault-injection tests for the selected writer format.
 
 Status: `LOGGER IMPLEMENTATION/TEST GAP`.
 
@@ -339,7 +347,7 @@ Status: `ANALYZER FEATURE-ENTRY IMPLEMENTATION DESIGN`.
 
 ## Domain-profile interface
 
-Need the concrete trait/API for:
+Need concrete trait/API for:
 
 - required/optional channels;
 - causal prerequisites;
@@ -447,7 +455,7 @@ Status: `ACCESSORY FEATURE-ENTRY FIXTURE GAP`.
 
 Not inherited from the legacy bridge.
 
-If ever added, requires a separate versioned capability, semantic IDs, application ACK/state/fault feedback and firmware-owned boot/interlock/watchdog/disconnect failsafe.
+If ever added, requires a separate versioned capability/gateway, semantic IDs, application ACK/state/fault feedback and firmware-owned boot/interlock/watchdog/disconnect failsafe.
 
 Status: `DEFERRED NEW CAPABILITY`.
 
@@ -476,24 +484,26 @@ Status: `DEFERRED PRODUCT-SCOPE DECISION`.
 The following are deliberately closed and must not be reopened without new contradictory evidence:
 
 - whether Kotlin/Compose or Rust owns Android APIs;
-- whether UI may own raw tune memory;
+- whether UI may own raw tune memory or semantic tune draft authority;
 - whether board name/VID/PID may replace exact profile authority;
 - whether dashboard owns telemetry;
 - whether request/response framing is symmetric;
 - whether Burn is an ordinary edit side effect;
 - whether the legacy ESP32 is already a direct relay controller;
 - whether GATT completion proves downstream action;
-- whether diagnostics can silently control transport/tuning;
+- whether diagnostics/warning evaluation can silently control transport/tuning/actions;
 - whether Tune Viewer supplies a 3D engine;
 - whether cross-profile same-name tables/curves are automatically comparable;
 - whether AE/PID/TCharge/Injection Angle should be ported as independent mini-app/plugin architectures;
 - whether guided capture is required when an existing immutable log already contains qualifying evidence;
 - whether interpolated/model guidance may count as direct observation;
 - whether arm64-only is a safe initial build assumption for the existing device matrix;
-- whether application ID/API/ABI support is still an unmade pre-Phase-2 decision.
+- whether application ID/API/ABI support is still an unmade pre-Phase-2 decision;
+- whether historical code should be bulk-ported then cleaned later;
+- whether the generic logger/analyzer architecture is MDF-specific.
 
 ## Current Phase 1 gate
 
 See `PHASE1_GATE_ASSESSMENT.md` and `REVIEW_CHECKLIST.md`.
 
-Architecture/source/test review is ready for explicit user acceptance. Production scaffolding remains blocked until that final acceptance is recorded.
+After the consistency reconciliation, architecture/source/test review is ready for explicit user acceptance. Production scaffolding remains blocked until that final acceptance is recorded.
