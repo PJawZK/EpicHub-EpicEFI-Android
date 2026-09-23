@@ -60,6 +60,24 @@ class DiagnosticCoreTest {
     }
 
     @Test
+    fun lifecycleRegistryBoundsDestroyedHistoryWithoutEvictingActiveOwners() {
+        val registry = DiagnosticLifecycleRegistry(retainedDestroyedCapacity = 2)
+        registry.create("active", "Test", 1, 1, "running")
+        repeat(3) { index ->
+            val id = "destroyed-${index + 1}"
+            registry.create(id, "Test", (index + 2).toLong(), (index + 2).toLong(), "running")
+            registry.destroy(id, (index + 10).toLong())
+        }
+
+        val owners = registry.snapshot()
+        assertTrue(owners.any { it.ownerId == "active" && it.destroyedAtNanos == null })
+        assertFalse(owners.any { it.ownerId == "destroyed-1" })
+        assertTrue(owners.any { it.ownerId == "destroyed-2" })
+        assertTrue(owners.any { it.ownerId == "destroyed-3" })
+        assertEquals(3, owners.size)
+    }
+
+    @Test
     fun recentProblemCaptureIncludesPreTriggerMarkersAndFinishEvent() {
         val clock = FakeDiagnosticClock(monotonic = 100, wall = 1_000)
         val hub = DiagnosticHub(
