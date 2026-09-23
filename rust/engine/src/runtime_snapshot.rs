@@ -11,21 +11,21 @@ pub const RUNTIME_SOURCE_SYNTHETIC: u32 = 1;
 pub const RUNTIME_FLAG_SOURCE_VALID: u32 = 1 << 0;
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct RuntimeSnapshot {
+pub struct RuntimeSnapshot<'a> {
     pub sequence: u64,
     pub monotonic_nanos: u64,
     pub session_id: u64,
     pub source_kind: u32,
     pub flags: u32,
-    pub channels: Vec<ChannelSample>,
+    pub channels: &'a [ChannelSample],
 }
 
-impl RuntimeSnapshot {
+impl<'a> RuntimeSnapshot<'a> {
     pub fn from_channel_store(
         sequence: u64,
         monotonic_nanos: u64,
         session_id: u64,
-        store: &ChannelStore,
+        store: &'a ChannelStore,
     ) -> Self {
         Self {
             sequence,
@@ -33,17 +33,13 @@ impl RuntimeSnapshot {
             session_id,
             source_kind: RUNTIME_SOURCE_SYNTHETIC,
             flags: RUNTIME_FLAG_SOURCE_VALID,
-            channels: store
-                .samples()
-                .iter()
-                .copied()
-                .take(RUNTIME_SNAPSHOT_MAX_CHANNELS)
-                .collect(),
+            channels: store.samples(),
         }
     }
 
     pub fn encode(&self) -> [u8; RUNTIME_SNAPSHOT_SIZE] {
         let mut bytes = [0_u8; RUNTIME_SNAPSHOT_SIZE];
+        let channel_count = self.channels.len().min(RUNTIME_SNAPSHOT_MAX_CHANNELS);
 
         write_u32(&mut bytes, 0, RUNTIME_SNAPSHOT_ABI_VERSION);
         write_u32(&mut bytes, 4, RUNTIME_SNAPSHOT_SIZE as u32);
@@ -52,15 +48,10 @@ impl RuntimeSnapshot {
         write_u64(&mut bytes, 24, self.session_id);
         write_u32(&mut bytes, 32, self.source_kind);
         write_u32(&mut bytes, 36, self.flags);
-        write_u32(&mut bytes, 40, self.channels.len() as u32);
+        write_u32(&mut bytes, 40, channel_count as u32);
         write_u32(&mut bytes, 44, 0);
 
-        for (index, sample) in self
-            .channels
-            .iter()
-            .take(RUNTIME_SNAPSHOT_MAX_CHANNELS)
-            .enumerate()
-        {
+        for (index, sample) in self.channels.iter().take(channel_count).enumerate() {
             let offset = RUNTIME_SNAPSHOT_HEADER_SIZE + (index * RUNTIME_SNAPSHOT_CHANNEL_SIZE);
             write_u32(&mut bytes, offset, sample.id.0);
             write_u32(&mut bytes, offset + 4, sample.validity as u32);
@@ -116,7 +107,8 @@ mod tests {
 
     #[test]
     fn unused_channel_slot_is_zero_filled() {
-        let snapshot = RuntimeSnapshot::from_channel_store(1, 2, 3, &ChannelStore::new_synthetic());
+        let store = ChannelStore::new_synthetic();
+        let snapshot = RuntimeSnapshot::from_channel_store(1, 2, 3, &store);
         let bytes = snapshot.encode();
         let unused_offset = RUNTIME_SNAPSHOT_HEADER_SIZE + (3 * RUNTIME_SNAPSHOT_CHANNEL_SIZE);
 
