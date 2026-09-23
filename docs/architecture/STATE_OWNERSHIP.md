@@ -4,6 +4,8 @@
 
 EpicHub has one clear mutable authority for each important state. Snapshots/projections/caches may be copied for presentation/performance, but they never silently become competing authorities.
 
+D-023 applies across all state below: live/current state is typed Kotlin/Rust state. A serialized file representation exists only at an explicit persistence/export/interoperability boundary and never becomes a second runtime authority.
+
 ---
 
 ## Android application state
@@ -58,8 +60,6 @@ Tracks where useful:
 - transport completion/failure;
 - bridge availability;
 - downstream state as `unknown` unless independently observed.
-
-Important invariant:
 
 A successful GATT write is not a downstream CAN/action acknowledgement.
 
@@ -134,6 +134,8 @@ Tracks typed observations including:
 
 Dashboard, logger, analyzer, warnings and calculations consume snapshots/queries. Compose never becomes high-rate channel authority.
 
+The accepted Phase-2 foundation already establishes a minimal engine-owned Rust ChannelStore and packed RuntimeSnapshot projection.
+
 ## Live tune state
 
 Owner: Rust tuning domain once migrated/qualified.
@@ -166,7 +168,7 @@ exact generated INI/profile source
 + version/identity metadata required to validate the tuple
 ```
 
-The new app may use a different storage format/path from EpicDash-JZ, but this authority principle is permanent.
+The app may use a different storage format/path from EpicDash-JZ, but this authority principle is permanent. The eventual storage codec must be selected deliberately under D-023 rather than defaulting to JSON.
 
 A project with only a valid INI is definition-only. A saved snapshot is accepted only when it belongs to that exact profile identity.
 
@@ -206,6 +208,8 @@ Restoring a backup must:
 5. roll back on incomplete commit/verification.
 
 Selecting/importing a backup never grants live ECU mutation authority.
+
+The concrete archive representation remains a feature-entry decision governed by D-023.
 
 ## 4. Tuning operation uncertainty journal
 
@@ -308,19 +312,47 @@ Owner: Kotlin dashboard/editor domain, persisted through an explicit versioned l
 
 Bound runtime channel values remain Rust ChannelStore-owned.
 
+The persisted layout schema is a deliberate UI persistence boundary; its eventual encoding must follow D-023 and cannot become runtime ChannelStore state.
+
 ## Settings state
 
 Owner: Kotlin `SettingsStore` (typed application/user preferences).
 
-The concrete Android persistence backend is a Phase 2 implementation choice, but ownership is already locked. Preferences cannot duplicate authoritative ECU/profile/tune values or become a hidden domain-state store.
+The concrete Android persistence backend is an implementation choice, but ownership is locked. Preferences cannot duplicate authoritative ECU/profile/tune values or become a hidden domain-state store.
 
-## Diagnostics state
+## Diagnostics live state
 
-Engine event history: bounded Rust diagnostics.
+Rust engine diagnostic event/metric history: bounded Rust diagnostics.
 
-Android/platform diagnostics: Kotlin platform diagnostics.
+Android/platform diagnostic event/metric history: bounded Kotlin diagnostics.
 
-Diagnostics UI combines projections only.
+Lifecycle owner/generation records remain with the diagnostic layer that observes those owners.
+
+Diagnostics UI combines immutable projections only and never reconstructs subsystem authority from log strings.
+
+Rust→Kotlin diagnostic transfer uses bounded typed/packed batches; neither side stores live diagnostics as JSON/CBOR documents.
+
+## Diagnostic capture state
+
+Owner: Kotlin diagnostic capture coordinator for capture lifecycle/assembly because the finalized capture combines Android/platform facts with bounded Rust diagnostic projections and ultimately uses Android document/export facilities.
+
+Inputs remain typed projections from their actual owners. The coordinator does not become ECU/ChannelStore/tuning authority.
+
+Capture lifecycle:
+
+```text
+Idle
+→ recent-problem or reproduction capture staging
+→ bounded pre/post-trigger evidence assembled
+→ immutable DiagnosticCapture finalized
+→ optional persistence/export
+```
+
+A finalized `DiagnosticCapture` is immutable. Later live events do not mutate it.
+
+The canonical persisted/exported representation is versioned `capture.cbor` plus generated `report.txt`; that serialized representation is produced only at the persistence/export boundary and does not replace the typed capture model in memory.
+
+Explicit optional attachments remain separate artifacts and do not silently enter the capture.
 
 ---
 
@@ -337,4 +369,4 @@ Examples:
 - `DirectOutputConfirmed` — event only if a versioned protocol actually supplied confirmation;
 - `LoggerStarted` — event.
 
-Events must not become a second mutable state model through callback accumulation.
+Events must not become a second mutable state model through callback accumulation or generic serialized-document accumulation.
