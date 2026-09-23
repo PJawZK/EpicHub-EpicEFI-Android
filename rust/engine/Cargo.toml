@@ -9,7 +9,7 @@ name = "epichub_engine"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-jni = { version = "0.21.1", default-features = false }
+jni = { version = "=0.21.1", default-features = false }
 
 [profile.release]
 lto = "thin"
