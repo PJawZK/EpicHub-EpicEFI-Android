@@ -511,7 +511,7 @@ Normal high-rate recording should target app-controlled file access with predict
 
 Avoid putting Storage Access Framework callbacks into the hot writer loop.
 
-The exact internal/external directory policy is locked with Android storage/product requirements before Phase 2.
+The exact internal/external directory, retention/quota and export policy is a logger product/platform decision that must be locked and qualified before production live logging is accepted. It is **not** a prerequisite for the Phase 2 foundation scaffold.
 
 ---
 
