@@ -2,258 +2,205 @@
 
 ## Status
 
-Phase 1 is active on `phase1/architecture-inventory`.
+Phase 1 architecture archaeology and pre-implementation design are complete enough for explicit acceptance.
 
-Repository-backed architecture/evidence work is progressing domain-by-domain. Production Android/Rust scaffolding has **not** started.
+Production Android/Rust scaffolding has **not** started.
 
-## Completed architecture foundation
+Current review gate: **45 / 46 checklist items satisfied**. The sole remaining item is explicit user acceptance before production scaffolding begins.
 
-- clean-slate workflow/handoff rules;
-- durable decision log and permanent naming rules;
-- source and responsibility inventories;
-- protocol authorities and gap analysis;
-- provisional concrete codebase topology;
-- responsibility destination mapping;
-- dependency/state/data/threading/FFI/action/safety contracts;
-- test strategy/review gate.
+See:
 
----
-
-# Completed deep-dive: ECU USB / protocol / generated INI
-
-Permanent responsibilities are known for Android USB/CDC, one ECU session, asymmetric request/response framing, sync/probe policy, `S/Q/O/R/C/B`, exact signature/profile authority, generated-INI parsing/support/schema/conditions, runtime output and verified tune Read/Write/Burn transactions.
-
-Remaining work is fixture/benchmark evidence:
-
-- ECU protocol golden vectors;
-- broader genuine INI corpus;
-- Kotlin-batched vs Android-opened-native-FD sustained USB benchmark.
+- `PHASE1_GATE_ASSESSMENT.md`
+- `REVIEW_CHECKLIST.md`
+- `GAP_ANALYSIS.md`
+- `ANDROID_BUILD_BASELINE.md`
+- `../HANDOFF.md`
 
 ---
 
-# Completed deep-dive: ESP32 legacy bridge / Android BLE
+# Architecture foundation completed
 
-Evidence: `ESP32_ACCESSORY_EVIDENCE.md`.
+The Phase 1 branch now establishes:
 
-Permanent findings:
+- clean-slate development/handoff workflow;
+- durable decision log through D-021;
+- permanent naming rules;
+- source/provenance inventory;
+- responsibility inventory and destinations;
+- target Kotlin/Rust file/package/crate topology;
+- dependency, state-ownership, data-flow, threading, FFI, action and safety contracts;
+- testing/qualification strategy;
+- current gap classification by implementation phase rather than historical archaeology status.
 
-- original ESP32 is a BLE↔CAN bridge with local ADC/digital inputs, not a direct relay/GPIO output controller;
-- generic variable-set transport replaces historical GPS-specific protocol naming;
-- evolved scan/reconnect/stale-GATT/MTU behavior is retained as Android BLE evidence;
-- target architecture has one connection-wide GATT operation scheduler;
-- GATT completion is transport evidence, not downstream confirmation;
-- direct relay/GPIO output is a separate future versioned capability.
+The initial Android product/build baseline is locked to:
 
-Remaining work: product scope, disconnect/release bench evidence, BLE/CAN golden vectors, optional future output extension.
+```text
+applicationId / namespace = com.epicefi.epichub
+minSdk                  = 26
+targetSdk               = 36
+compileSdk              = 37
+production ARM ABIs     = armeabi-v7a + arm64-v8a
+```
 
----
-
-# Completed deep-dive: tuning project persistence / recovery
-
-Evidence: `TUNING_PERSISTENCE_RECOVERY_EVIDENCE.md`.
-
-Permanent categories:
-
-1. exact profile + complete verified TuneSnapshot project authority;
-2. exact-identity-bound disposable derived caches;
-3. portable backup as validated representation of project authority;
-4. durable pre-transmission operation uncertainty journal;
-5. local UI draft as unverified edit state.
-
-No cache/backup/journal/draft becomes alternate ECU/tune authority. Operation journals are durable before possible hardware mutation and never authorize blind replay.
-
-Remaining work: compact project/backup format, batch-capable journal schema, offline reconciliation UX and fault-injection corpus.
+The dual-ABI decision deliberately preserves the existing SM-A137F phone as a physical target while supporting the arm64 SM-T500 tablet.
 
 ---
 
-# Completed deep-dive: Dashboard / Tuner interaction / responsive / performance
+# Completed evidence/deep-dive domains
 
-Evidence: `UI_INTERACTION_EVIDENCE.md`.
+## ECU USB / protocol / generated INI
 
-Sources:
+Completed responsibility decomposition covers Android USB/CDC setup, one ECU session, asymmetric request/response framing, sync/probe policy, exact signature/profile authority, runtime polling/decoding, generated-INI compilation/conditions and verified Read/Write/Burn transactions.
 
-- EpicDash-JZ `UI_SPEC.md` and `TUNER_UI_SIDEQUEST.md` for visual/layout and integrated Tuner authority;
-- Epic-DashTune-UXUI only for interaction/responsive/performance techniques.
+Current firmware authority was directly checked in `ECU_PROTOCOL_DIRECT_VERIFICATION.md`.
 
-Permanent findings:
+Remaining items are implementation/golden/physical evidence, not ownership discovery.
 
-- accepted EpicDash-JZ reference family remains visual/layout authority; UXUI styling does not migrate;
-- one semantic/component model reflows by available geometry rather than device-specific application variants;
-- Rust owns runtime/tuning semantic truth, Compose owns layout/gesture/pointer/camera/presentation state;
-- semantic table selection is separate from touch gesture state;
-- X/Y reverse is presentation-only, not data reorder;
-- pinch/range selection requires explicit gesture arbitration;
-- 3D is view-only unless separately accepted for editing;
-- modal/fullscreen surfaces own their pointer streams;
-- static geometry is cached/constructed once and dynamic layers updated minimally;
-- only active UI surfaces consume high-rate display updates where practical;
-- undo/redo operates on local semantic edits, not implicit ECU rollback;
-- project/live/draft/RAM-dirty/Burn/uncertain states remain explicit in presentation.
+## ESP32 legacy bridge / Android BLE
 
-Useful performance evidence: UXUI's WebView/SVG r21 benchmark reduced synthetic gauge update cost by ~90% by replacing hundreds of dynamic segment updates with static geometry + minimal pointer transforms. The exact speedup is not a Compose forecast; the invalidation principle is what transfers.
+`ESP32_ACCESSORY_EVIDENCE.md` establishes the original device as a BLE↔CAN bridge with local inputs rather than an inherited relay/GPIO controller.
 
-Remaining work: rich table-edit/customization product scope and real Compose interaction/frame benchmarks.
+Target architecture uses one connection-wide GATT operation scheduler and does not treat GATT completion as downstream action confirmation.
 
----
+Any future direct-output controller is a separately versioned capability with firmware-owned failsafes.
 
-# Completed deep-dive: logging / playback / MLG interoperability / MDF transition
+## Tuning persistence / recovery
 
-Evidence: `LOGGING_INTEROP_EVIDENCE.md`.
+`TUNING_PERSISTENCE_RECOVERY_EVIDENCE.md` separates:
 
-Permanent findings:
+- exact profile + verified TuneSnapshot project authority;
+- rebuildable derived caches;
+- portable project backup;
+- durable pre-transmission uncertainty journal;
+- unverified UI draft state.
 
-- live acquisition, decode, timestamping and ChannelStore publication are format-neutral;
-- the implementation order is deliberately **live path first → MLG writer → MLG optimization → MDF4 comparison/implementation → large analyzer**;
-- MLG is the first writer because it gives fast TunerStudio/MegaLogViewer interoperability, not because it becomes EpicHub's runtime model;
-- MDF4 remains the long-term native measurement-format candidate behind EpicHub's own measurement abstraction;
-- MSL/CSV/MLG/MDF readers feed common file-backed channel/source semantics rather than Dashboard-specific JSON;
-- the current MSL player contributes useful techniques: primitive columnar arrays, background parse, generation cancellation, binary-search playback and decoupled UI cadence;
-- the current MSL player's hardcoded channel aliases, full selected-log materialization and JSON callback model do **not** transfer as architecture;
-- writer/UI/analyzer paths remain independent and communicate through bounded sample/query contracts;
-- mobile writer decisions prioritize file size first, then sustained read/write efficiency, CPU/thermal cost and recoverability;
-- large-log analysis is lazy/range-based with rebuildable indexes/caches and viewport-sized spike-preserving min/max results;
-- recovery/journal metadata never fabricates missing measurement data.
+No cache/backup/journal/draft becomes a second tune authority.
 
-Remaining work:
+## Dashboard / Tuner interaction / responsive / performance
 
-- genuine executable MLG format/golden-vector corpus and compatibility qualification;
-- MDF version/compression interoperability benchmarks;
-- Android storage-path policy;
-- writer power-loss/recovery implementation proof;
-- identical-workload file-size/CPU/read/write benchmarking on target devices.
+`UI_INTERACTION_EVIDENCE.md` preserves the accepted EpicDash-JZ visual/layout references while using Epic-DashTune-UXUI only for proven interaction/responsive/performance lessons.
 
----
+Compose owns presentation/gesture/layout/camera state; Rust owns semantic runtime/tuning truth.
 
-# Completed deep-dive: diagnostics / performance / lifecycle tracing
+## Logging / playback / MLG / MDF
 
-Evidence: `DIAGNOSTICS_EVIDENCE.md`.
+`LOGGING_INTEROP_EVIDENCE.md` locks the order:
 
-Permanent findings:
+```text
+format-neutral live acquisition/channel path
+→ MLG writer + optimization
+→ MDF4 evaluation/implementation on identical workload
+→ scalable Analyzer
+```
 
-- diagnostics are **observational**; production domains remain decision/action authority;
-- structured events, warning incidents, performance metrics and lifecycle-owner traces are separate data types;
-- event/metric histories are bounded;
-- hot-path metric recording stays cheap/primitive while percentile aggregation/serialization is out-of-band;
-- explicit units/kinds/stable metric IDs replace name-based unit inference;
-- monotonic time owns durations/order; wall clock owns human chronology;
-- p50/p95/p99/max matter for latency/jank/transport/analyzer qualification;
-- warning acknowledgement never alters underlying rule/channel truth;
-- correlation/session/generation IDs link Kotlin and Rust evidence without merging subsystem ownership;
-- Kotlin owns Android/platform diagnostics, Rust owns engine diagnostics;
-- Rust diagnostics cross JNI in bounded snapshots/batches rather than callbacks per event/sample;
-- measurement logging and diagnostics remain distinct, with only explicit event integration;
-- support export should offer both human-readable and stable machine-readable forms.
+Mobile log size is the first format decision metric, followed by I/O/CPU/thermal/recovery cost.
 
-Remaining work: final typed event/metric schema, retention/persistence policy and export schema/format.
+## Diagnostics
+
+`DIAGNOSTICS_EVIDENCE.md` and `DIAGNOSTICS_CORE_EVIDENCE.md` establish stable semantic channel/warning/test-vector lessons while keeping diagnostics observational rather than control authority.
+
+## Tune Viewer
+
+`TUNE_VIEWER_EVIDENCE.md` establishes exact-profile interpretation/comparison rules, explicit semantic tuner types and conservative cross-profile behavior.
+
+Changed table axes are non-comparable by default unless a separately specified transform is introduced.
+
+The viewer is evidence for identity/comparison behavior, not a second parser authority or 3D-renderer source.
+
+## AE / PID / TCharge / Injection Angle
+
+`ANALYZER_AUTOTUNE_PLUGIN_EVIDENCE.md` and `ANALYSIS_RESPONSIBILITY_MAP.md` normalize the historical plugins into one future Rust analysis platform with domain profiles.
+
+Permanent rules include:
+
+- observation, derived analysis, recommendation and ECU mutation are separate authority levels;
+- evidence is source/profile/relevant-calibration/version bound;
+- missing/stale evidence is not zero;
+- interpolation/model guidance cannot fabricate direct evidence;
+- independent event/visit blocks matter more than raw sample count;
+- valid evidence can still be non-comparable or unidentified;
+- existing logs may be reused across compatible analyses;
+- Guided Capture is optional where existing evidence is sufficient;
+- all temporary candidate Apply/Restore work must use the one semantic tuning authority;
+- analyzers never own raw ECU writes or Burn.
 
 ---
 
-# Completed deep-dive: EpicEFI Tune Viewer parsing / comparison / visualization
+# Current open work classification
 
-Evidence: `TUNE_VIEWER_EVIDENCE.md`.
+`GAP_ANALYSIS.md` is now the authoritative unresolved-work list.
 
-Reviewed source: `PJawZK/PJawZK-EpicEFI-Tune-Viewer` main `abfa325597d16cb362623c260ec92ed5bf5f37f1`, V1.0 RC1.
+## Early Phase 2 measured PoCs
 
-Permanent findings:
+- Kotlin USB bulk I/O vs Android-opened native resource → Rust sustained I/O;
+- packed RuntimeSnapshot/JNI lifecycle and performance;
+- dual-ABI physical qualification on SM-A137F and SM-T500;
+- Compose rendering/jank under representative runtime load.
 
-- exact profile identity gates semantic interpretation; no nearest-version or board-name fallback;
-- scalar/bits/array/table/curve/dialog/menu are explicit semantic types, preventing accidental UI fallback to the wrong editor surface;
-- the viewer's MSQ/INI parsers are useful capability/fixture evidence but do **not** become parallel EpicHub tuning/profile authority;
-- compact gzip definition packs with SHA-256, exact-signature registry identity and count/signature revalidation are a useful model for optional **derived** compiled-profile projections;
-- asynchronous definition/project-style loads reject stale completion through generation/active guards;
-- full scalar/table/curve tune comparison is permitted only under exact matching firmware/definition identity in the viewer; EpicHub strengthens this to exact authoritative profile fingerprint/compiled identity;
-- cross-profile comparison is informational and conservative, never edit/migration/write authority;
-- arrays/tables/curves are not cross-profile comparable without an explicit qualified compatibility contract;
-- positional table deltas become ambiguous when axes differ; EpicHub should default such tables to non-comparable unless an explicit regridding transform is requested and qualified;
-- structural profile-definition diffing is useful diagnostics/migration evidence but not migration authorization;
-- the reviewed viewer contains 2D calibration tables and SVG curves, **not** a separate Plotly/3D engine; its semantic/render-validation rules transfer, its React/browser renderer does not;
-- comparison JSON is derived evidence only, not project/tune/ECU authority.
+## Feature-entry prerequisites
 
-Durable decision: `D-018 — Full semantic tune comparison requires exact authoritative profile identity`.
+Examples:
 
-Remaining work:
+- ECU protocol/genuine generated-INI golden corpora;
+- project/backup/journal concrete schemas before tuning persistence ships;
+- MLG executable interoperability corpus before production MLG acceptance;
+- MDF4 independent interoperability and compression benchmarks before selecting the native baseline;
+- concrete AnalysisSession/domain-profile/ExperimentProposal schemas before Analyzer/autotune feature rollout;
+- structured diagnostic event/metric/export schemas.
 
-- exact saved-project/tune comparison identity schema;
-- same-profile and cross-profile executable comparison goldens;
-- changed-axis table comparison/regridding policy;
-- decision whether a persisted compact compiled-profile projection provides worthwhile Android startup/search benefit;
-- versioned comparison-report schema if retained as a product feature.
+## Deliberately deferred product decisions
 
----
+Examples:
 
-# Completed deep-dive: AE / PID / TCharge / Injection Angle analyzer/autotune plugins
+- rich table-edit operation scope;
+- dashboard customization/presets;
+- future direct ESP32 GPIO/relay capability;
+- cross-profile table regridding;
+- later analyzer profile rollout order;
+- specialized GPU renderer unless Compose measurements prove a need.
 
-Evidence: `ANALYZER_AUTOTUNE_PLUGIN_EVIDENCE.md`.
-
-Reviewed authorities:
-
-- AE Tuner private `main` `9ac4f5be9508972bb6c2be6396dc9527ca16842b`;
-- PID Autotune private `main` `a224e75aeb10f36939b34f33db244daab56cc7bf`, authority `0.5.31-RC1` and still vehicle-validation candidate;
-- TCharge Autotune `main` `79777ff4318027f2a874a365cfc78a3ee9bf3dc5`;
-- Injection Angle private `main` `bedee364528bfa5fe87afe4584d0ddaf9c4cc1f3`, version `1.7.1`.
-
-Permanent findings:
-
-- observations, derived analysis, recommendation and ECU mutation are distinct authority levels;
-- evidence binds to source/session, exact profile identity, relevant calibration fingerprint, semantic channel binding and analysis-profile version;
-- missing/stale data remains unknown and rejected/contaminated samples retain explicit reasons;
-- direct observations, derived values, interpolation/model guidance and reference-only evidence are distinct; interpolated coverage can guide capture but cannot create observed evidence or Apply eligibility;
-- independent events/visit blocks matter more than callback sample count; held-out validation must avoid adjacent-sample leakage;
-- segmentation, transition exclusion/settling windows and context-keyed grouping are common analysis primitives;
-- valid events can still be non-comparable; typed comparison dispositions include improved/similar/regressed/insufficient/not-comparable rather than forcing every result into a ranking;
-- boundary-limited search optima, one-sided support and unexcited dynamics are unidentifiable rather than valid merely because they have the best numerical score;
-- active experiments resolve requested values through the controller's real writable quantization/representation and are bounded by step/timeout/retry/abort policy;
-- completed analysis sessions are immutable and distinct from temporary ECU Apply/Restore state;
-- a qualifying existing log/session may be reused by multiple compatible analyses instead of forcing a new drive for every analysis;
-- live passive capture, Guided Capture, existing-log analysis and bounded active experiments are distinct acquisition modes over one analysis contract;
-- AE/PID/TCharge/Injection Angle should become domain profiles on shared Rust analysis infrastructure, not independent plugin ports;
-- profile maturity is explicit: correct observation/measurement does not imply qualified numerical recommendation;
-- all ECU candidate tests hand semantic proposals to the one EpicHub tuning authority; analyzers never gain raw write or Burn authority.
-
-Durable decisions:
-
-- `D-019 — Observation, analysis, recommendation and ECU mutation are separate authority levels`;
-- `D-020 — One shared analysis platform, multiple domain analysis profiles`.
-
-Remaining work:
-
-- concrete `AnalysisSession`/provenance and relevant-calibration fingerprint schema;
-- domain-profile interface and typed status/disposition vocabulary;
-- persistence/indexing policy for completed analysis sessions;
-- semantic `ExperimentProposal` handoff to the tuning authority;
-- deterministic replay/golden fixtures from validated historical logs/evidence where storage/licensing permits;
-- initial product prioritization of which analysis profiles enter early EpicHub releases.
+These deferred choices do not block the clean foundation.
 
 ---
 
-# Broad archaeology status
+# Recommended Phase 2 entry slice
 
-The planned high-value cross-repository responsibility archaeology is now substantially complete for:
+After explicit Phase 1 acceptance, begin only the small non-mutating foundation:
 
-- ECU transport/protocol/generated profile authority;
-- accessory/BLE bridge behavior;
-- tune persistence/recovery;
-- Dashboard/Tuner interaction/responsive/performance;
-- logging/playback/MLG/MDF transition;
-- diagnostics/performance/lifecycle;
-- Tune Viewer identity/comparison/definition behavior;
-- existing analyzer/autotune plugin algorithms/evidence workflows.
+```text
+Android application/bootstrap
+→ Compose host
+→ Rust shared library for both production ARM ABIs
+→ NativeEngine create/close/recreate
+→ versioned packed RuntimeSnapshot ABI
+→ minimal Rust ChannelStore
+→ synthetic/native test-channel publication
+→ Compose display of snapshot
+→ bounded native event drain
+→ JNI/snapshot lifecycle diagnostics
+```
 
-Phase 1 should **not** continue broad source archaeology by default from this point.
+Initial slice explicitly excludes:
 
-## Current next step
+- ECU mutation;
+- Burn;
+- MDF writer;
+- full Tuner migration;
+- independent plugin ports.
 
-Evaluate the explicit Phase 1 review gate and close the remaining architecture/design decisions that block Phase 2 scaffolding.
+After the foundation is proven, continue with the already locked measurement path: live ECU acquisition first, then MLG, then MDF4 evaluation, then large-scale Analyzer work.
 
-Priority review items are the unresolved entries in `GAP_ANALYSIS.md` and `REVIEW_CHECKLIST.md`, especially:
+Tuning mutation remains later and uses the physically accepted EpicDash-JZ behavior as the safety oracle until equivalent or deliberately improved EpicHub behavior is qualified.
 
-- minimum Android API/ABI/device baseline and permanent application ID;
-- initial Phase 2 Kotlin/Rust module/file topology required for a minimal proof without over-scaffolding;
-- concrete JNI engine-handle/snapshot/error contract;
-- initial ChannelStore/channel-ID/schema contract;
-- format-neutral live acquisition benchmark plan and USB sustained-I/O A/B experiment;
-- first executable ECU/generated-INI/log/analysis golden fixtures;
-- concrete `AnalysisSession`/domain-profile contracts where needed for early logger/analyzer architecture;
-- explicit Phase 2 entry/acceptance criteria.
+---
 
-Some documented choices—MDF4 compression baseline, rich product-scope features, future accessory outputs and later analyzer profiles—may remain deliberately deferred if they do not block Phase 2 foundation work.
+# Exact current next action
+
+Do **not** perform more broad repository archaeology by default.
+
+Present the Phase 1 gate result for explicit user acceptance. If accepted:
+
+1. mark the final `REVIEW_CHECKLIST.md` item;
+2. record Phase 1 acceptance;
+3. merge/clean PR #1 as deliberately directed;
+4. begin the non-mutating Phase 2 foundation slice above.
