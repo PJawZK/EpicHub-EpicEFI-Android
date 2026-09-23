@@ -6,12 +6,11 @@ import android.os.Build
 import androidx.core.content.FileProvider
 import com.epicefi.epichub.BuildConfig
 import com.epicefi.epichub.diagnostics.DiagnosticCapture
+import com.epicefi.epichub.diagnostics.DiagnosticCaptureArchive
 import com.epicefi.epichub.diagnostics.DiagnosticCaptureCborEncoder
 import com.epicefi.epichub.diagnostics.DiagnosticExportMetadata
 import java.io.File
 import java.io.FileOutputStream
-import java.util.zip.ZipEntry
-import java.util.zip.ZipOutputStream
 
 object DiagnosticCaptureExporter {
     fun exportToCache(
@@ -31,14 +30,8 @@ object DiagnosticCaptureExporter {
         val cbor = DiagnosticCaptureCborEncoder.encode(capture, metadata)
         val report = buildReport(capture, metadata).toByteArray(Charsets.UTF_8)
 
-        ZipOutputStream(FileOutputStream(outputFile)).use { zip ->
-            zip.putNextEntry(ZipEntry("capture.cbor"))
-            zip.write(cbor)
-            zip.closeEntry()
-
-            zip.putNextEntry(ZipEntry("report.txt"))
-            zip.write(report)
-            zip.closeEntry()
+        FileOutputStream(outputFile).use { output ->
+            DiagnosticCaptureArchive.write(output, cbor, report)
         }
         return outputFile
     }
