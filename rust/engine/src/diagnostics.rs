@@ -47,14 +47,7 @@ impl EngineDiagnostics {
         diagnostics
     }
 
-    pub fn record(
-        &mut self,
-        elapsed_nanos: u64,
-        code: u32,
-        severity: u32,
-        arg0: u64,
-        arg1: u64,
-    ) {
+    pub fn record(&mut self, elapsed_nanos: u64, code: u32, severity: u32, arg0: u64, arg1: u64) {
         if self.events.len() == DIAGNOSTIC_RING_CAPACITY {
             self.events.pop_front();
             self.dropped_total = self.dropped_total.saturating_add(1);
