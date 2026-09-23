@@ -25,7 +25,39 @@ Historical React/TypeScript/JavaScript/WebView implementations remain evidence o
 
 ---
 
-# 2. Runtime state is typed
+# 2. Design/prototyping languages are not production runtime
+
+HTML/CSS, and lightweight JavaScript where useful for mock interaction, may be used **outside the production application** to prototype layouts, visual systems and interaction ideas quickly.
+
+This is explicitly allowed because a prototype can be cheaper to iterate than repeatedly rebuilding the Android application while visual direction is still being decided.
+
+An accepted prototype may become visual/layout authority for a screen, but production implementation is translated into Compose and the relevant typed Kotlin/Rust contracts.
+
+Prototype code must not quietly become runtime code by:
+
+- embedding the prototype in a WebView;
+- keeping a JavaScript state engine behind the Compose shell;
+- serializing normal runtime state into browser messages;
+- treating DOM/CSS layout structure as domain ownership;
+- copying prototype-only shortcuts into production safety/state paths.
+
+The correct relationship is:
+
+```text
+HTML/CSS prototype / screenshot / interaction mock
+            │
+            ▼
+accepted visual + interaction intent
+            │
+            ▼
+Compose implementation over typed Kotlin/Rust state
+```
+
+This prototype allowance does not weaken any D-023 runtime rule.
+
+---
+
+# 3. Runtime state is typed
 
 In-memory application/domain state uses explicit Kotlin or Rust types.
 
@@ -46,7 +78,7 @@ Do not replace typed domain state with generic dictionaries/maps whose meaning i
 
 ---
 
-# 3. No serialization message bus inside the application
+# 4. No serialization message bus inside the application
 
 The following are prohibited as ordinary internal runtime communication:
 
@@ -72,7 +104,7 @@ Serialization codecs do not sit in the RuntimeSnapshot hot path merely because t
 
 ---
 
-# 4. Serialization exists only at explicit boundaries
+# 5. Serialization exists only at explicit boundaries
 
 A serialized format is justified when bytes must outlive or leave the in-memory runtime model, or when an external ecosystem mandates a format.
 
@@ -95,7 +127,7 @@ A file format never becomes the internal runtime state model.
 
 ---
 
-# 5. JSON policy
+# 6. JSON policy
 
 JSON is **not** an EpicHub default application format.
 
@@ -115,9 +147,11 @@ Historical files such as EpicDash-JZ `values.json`, WebView workspace JSON, Diag
 
 Optional developer tooling may convert an authoritative EpicHub format to JSON for inspection. The converted JSON is a projection, never the canonical source.
 
+A design-only HTML prototype may naturally contain JavaScript objects or JSON-like mock data. That does not grant those representations any production authority; they are discarded when the design is translated to Compose/typed runtime state.
+
 ---
 
-# 6. Diagnostic capture format
+# 7. Diagnostic capture format
 
 EpicHub diagnostic runtime state remains typed Kotlin/Rust state and bounded packed/batched JNI data.
 
@@ -151,7 +185,7 @@ If a developer or external tool later needs JSON/NDJSON, conversion happens expl
 
 ---
 
-# 7. Other persistence formats are not automatically CBOR
+# 8. Other persistence formats are not automatically CBOR
 
 D-023 does not replace all storage formats with CBOR.
 
@@ -167,7 +201,7 @@ The rule is **typed runtime first, explicit serializer only at a justified bound
 
 ---
 
-# 8. Schema and compatibility requirements
+# 9. Schema and compatibility requirements
 
 Every persisted/exported internal EpicHub schema must define as applicable:
 
@@ -183,7 +217,7 @@ Unsupported versions fail explicitly. A decoder must never silently reinterpret 
 
 ---
 
-# 9. Performance rule
+# 10. Performance rule
 
 A serialization format must not be inserted into a hot path without measurement proving it is necessary and acceptable.
 
@@ -209,9 +243,9 @@ Diagnostics, logging and analysis measure their own serialization/export cost ou
 
 ---
 
-# 10. Review rule
+# 11. Review rule
 
-Any proposal that introduces JSON, CBOR, protobuf, MessagePack, XML or another generic serializer must answer:
+Any proposal that introduces JSON, CBOR, protobuf, MessagePack, XML or another generic serializer into production code must answer:
 
 1. What explicit file/interoperability boundary requires serialization?
 2. Why cannot typed Kotlin/Rust state or the existing packed ABI satisfy the runtime need?
@@ -222,6 +256,8 @@ Any proposal that introduces JSON, CBOR, protobuf, MessagePack, XML or another g
 
 If there is no explicit boundary, the serializer does not belong in the production runtime architecture.
 
+Design prototypes are reviewed separately: the question is whether the visual/interaction intent should be accepted and translated into Compose, not whether the prototype's browser implementation should be retained.
+
 ## Summary
 
-> EpicHub application logic is Kotlin/Compose + Rust. Runtime state and cross-language communication remain typed/packed. Serialization is isolated to explicit persistence/export/interoperability boundaries. JSON is never the default internal representation, and the canonical diagnostic capture is versioned CBOR + human-readable text.
+> EpicHub application logic is Kotlin/Compose + Rust. Runtime state and cross-language communication remain typed/packed. Serialization is isolated to explicit persistence/export/interoperability boundaries. JSON is never the default internal representation, and the canonical diagnostic capture is versioned CBOR + human-readable text. HTML/CSS/JavaScript may be used for rapid design prototypes, but accepted prototypes are translated into Compose rather than embedded as a third runtime architecture.
