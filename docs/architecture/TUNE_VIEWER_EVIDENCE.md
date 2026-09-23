@@ -389,7 +389,9 @@ Do not migrate:
 
 ---
 
-# Remaining Phase 1 gaps exposed by this review
+# Remaining feature-entry/deferred work exposed by this review
+
+These items are intentionally classified by `GAP_ANALYSIS.md`; they are not unresolved Phase 1 ownership questions.
 
 1. Define the exact comparison identity contract for saved projects/tunes: source profile fingerprint, compiled-profile fingerprint, tune fingerprint and project generation.
 2. Define table comparison behavior when axes differ. Default should be non-comparable unless a separately qualified regridding mode is requested.
