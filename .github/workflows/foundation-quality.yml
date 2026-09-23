@@ -44,9 +44,13 @@ jobs:
 
           yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses >/dev/null || true
           "$ANDROID_CLI" --sdk="$SDK_ROOT" sdk install --canary \
-            platforms/android-37 \
-            build-tools/36.0.0 \
+            platforms/android-37.0 \
+            build-tools/37.0.0 \
             ndk/30.0.16248370
+
+          test -f "$SDK_ROOT/platforms/android-37.0/android.jar"
+          test -x "$SDK_ROOT/build-tools/37.0.0/aapt2"
+          test -d "$SDK_ROOT/ndk/30.0.16248370"
 
       - name: Set up Gradle 9.6
         uses: gradle/actions/setup-gradle@v4
