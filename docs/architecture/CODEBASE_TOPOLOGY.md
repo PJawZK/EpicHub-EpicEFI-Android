@@ -8,12 +8,13 @@ Phase 1 originally defined responsibility destinations before code existed. The 
 
 Detailed behaviour-to-destination mapping remains in `RESPONSIBILITY_DESTINATIONS.md`. This file defines where code exists now, which future domain homes are expected, and when a new package/crate/file is justified.
 
-D-022 and D-023 are mandatory:
+D-022, D-023 and D-024 are mandatory:
 
 - inherited functionality is reviewed piece-by-piece and reimplemented cleanly;
 - production runtime code remains Kotlin/Jetpack Compose + Rust;
 - runtime/JNI state is typed/packed;
-- serialization is restricted to explicit persistence/export/interoperability boundaries.
+- serialization is restricted to explicit persistence/export/interoperability boundaries;
+- historical tuning-plugin capabilities become native EpicHub Tuning Tools rather than a runtime plugin subsystem.
 
 ---
 
@@ -90,6 +91,7 @@ com/epicefi/epichub/
 └── ui/
     ├── dashboard/
     ├── tuner/
+    ├── tuningtools/
     ├── logger/
     ├── analyzer/
     ├── diagnostics/
@@ -101,10 +103,13 @@ This is a **responsibility topology, not an instruction to pre-create every dire
 
 The active UI foundation contract is `UI_FOUNDATION_LAYOUT.md`:
 
-- primary destinations: Dashboard, Tuner, Logger, Analyzer, Diagnostics;
+- functional destinations: Dashboard, Tuner, Tuning Tools, Logger, Analyzer, Diagnostics;
 - Settings is a global application surface;
 - one responsive semantic screen model reflows across phone/tablet/orientation;
+- compact navigation may group destinations rather than rendering six unusably small permanent buttons;
 - global diagnostics capture remains reachable from the common shell.
+
+`TUNING_TOOLS_FOUNDATION.md` governs the guided AE/PID/TCharge/Injection-Angle tool surface. Compose owns workflow/presentation only; shared analysis/domain models remain Rust-owned.
 
 Compose never becomes ECU/profile/log-file authority.
 
@@ -153,7 +158,8 @@ measurement contracts
 logging
 MLG/interop
 MDF4
-analysis
+analysis shared primitives
+analysis domain profiles / native Tuning Tools models
 expressions/math
 plot preparation
 diagnostics
@@ -177,7 +183,7 @@ epichub-interop
 
 but **crate names/count are not architecture authority**. Responsibility ownership and dependency direction are.
 
-Do not split a crate simply to make the tree resemble a Phase-1 sketch.
+AE/PID/TCharge/Injection-Angle do not each require their own crate merely because they were separate historical plugin repositories. Their shared infrastructure belongs together; a split is justified only by a real dependency/test/build boundary.
 
 ---
 
@@ -207,9 +213,20 @@ Prohibited target structures:
 - JSON message bus across JNI;
 - WebView/JavaScript/DOM runtime presentation;
 - Kotlin-owned duplicate high-rate ChannelStore;
-- Rust code directly depending on Android UI framework types.
+- Rust code directly depending on Android UI framework types;
+- dynamic Java/JAR/JavaScript plugin loading for native Tuning Tools.
 
-See `KOTLIN_RUST_BOUNDARY.md` and `RUNTIME_LANGUAGE_AND_SERIALIZATION.md`.
+See `KOTLIN_RUST_BOUNDARY.md`, `RUNTIME_LANGUAGE_AND_SERIALIZATION.md` and `TUNING_TOOLS_FOUNDATION.md`.
+
+---
+
+# UI prototype rule
+
+HTML/CSS and lightweight JavaScript may be used outside the production app to prototype Dashboard, Logger or other surfaces rapidly.
+
+An explicitly accepted prototype may define visual/layout/interaction intent. Production code is still implemented in Compose and connected to typed Kotlin/Rust state.
+
+Do not create a WebView package merely because the prototype was convenient. Prototype assets/code are design evidence, not a production source module unless independently reimplemented as native resources/components.
 
 ---
 
@@ -235,6 +252,35 @@ Rust
 Crossing is a coarse bounded diagnostic drain, not one JNI callback per event.
 
 Canonical diagnostic archive representation is the D-023 boundary format defined in `DIAGNOSTICS_CAPTURE_FOUNDATION.md`: versioned CBOR machine data plus generated human `report.txt` in the export archive. That encoding does not become runtime state.
+
+---
+
+# Tuning Tools topology
+
+Native Tuning Tools use the same common owners as the rest of EpicHub:
+
+```text
+Compose ui/tuningtools
+→ typed tool request / capture interaction
+→ NativeEngine coarse analysis operation
+→ Rust shared analysis platform
+→ Rust domain profile/model (AE/PID/TCharge/Injection Angle)
+→ typed result/recommendation/proposal
+→ Compose tool workspace
+```
+
+If a tool proposes an ECU change:
+
+```text
+Tuning Tool result
+→ semantic ExperimentProposal / requested tune change
+→ single Rust tuning authority
+→ normal identity/condition/verification transaction
+```
+
+No tool creates its own ECU transport, ChannelStore, file parser stack or Burn path.
+
+Analyzer and Tuning Tools may reuse the same plot/statistics/query primitives, but Analyzer remains generic exploration while Tuning Tools owns guided domain workflow.
 
 ---
 
@@ -282,7 +328,7 @@ source
     └─ MDF4 later after measurement/interop evaluation
 ```
 
-Analyzer uses common channel/measurement contracts rather than one file-format-specific object model.
+Analyzer and Tuning Tools consume common channel/measurement/analysis contracts rather than file-format-specific object models.
 
 File codecs never become runtime ChannelStore authority.
 
@@ -335,13 +381,14 @@ The current active work is:
 
 ```text
 accepted Kotlin/Rust synthetic foundation
-→ UI shell/placeholder surfaces
+→ UI shell with Dashboard/Tuner/Tuning Tools/Logger/Analyzer/Diagnostics surfaces
 → typed diagnostics/flight-recorder/capture foundation
+→ translate accepted Dashboard/Logger HTML prototypes into Compose as they mature
 → physical UI/diagnostic qualification on SM-A137F + SM-T500
 → read-only live ECU acquisition D-022 gate + implementation
 → MLG writer/interoperability
 → MDF4 evaluation/implementation
-→ scalable Analyzer
+→ scalable Analyzer + native Tuning Tools depth
 ```
 
 Tuning mutation, BLE/accessory migration and other high-risk inherited subsystems enter later through their own D-022 review/qualification gates.
@@ -350,6 +397,6 @@ Tuning mutation, BLE/accessory migration and other high-risk inherited subsystem
 
 The topology rule is intentionally conservative:
 
-> preserve clear ownership and dependency direction, keep the real tree as small as the current implementation permits, and split into additional packages/crates only when an actual responsibility boundary exists.
+> preserve clear ownership and dependency direction, keep the real tree as small as the current implementation permits, expose native Tuning Tools from the ground shell without recreating plugin architecture, and split into additional packages/crates only when an actual responsibility boundary exists.
 
 The current minimal physical tree is authoritative for what exists today; `RESPONSIBILITY_DESTINATIONS.md` is authoritative for where later responsibilities belong.
