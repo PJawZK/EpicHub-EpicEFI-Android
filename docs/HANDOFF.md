@@ -22,7 +22,7 @@ Do not reconstruct current architecture from EpicDash-JZ or other historical rep
 - active design branch: `phase2/ui-diagnostics-foundation`
 - active draft PR: **#3 — Phase 2: establish UI and diagnostics foundations**
 
-Always verify the actual branch/PR head when resuming. The foundation merge SHA above is a milestone, not a claim that it remains the latest `main` commit after documentation updates.
+Always verify the actual branch/PR head when resuming. The foundation merge SHA above is a milestone, not a claim that it remains the latest `main` commit after later documentation work.
 
 ---
 
@@ -51,7 +51,7 @@ No real ECU transport, ECU mutation, Burn, BLE/accessory migration, logger/MLG/M
 
 # Qualification evidence
 
-Automated qualification passed rustfmt, Clippy with warnings-as-errors, Rust unit tests, Kotlin/JVM RuntimeSnapshot ABI tests, Android assembly, both production ARM Rust builds and APK native-library inspection.
+Automated foundation qualification passed rustfmt, Clippy with warnings-as-errors, Rust unit tests, Kotlin/JVM RuntimeSnapshot ABI tests, Android assembly, both production ARM Rust builds and APK native-library inspection.
 
 Physical qualification of the exact qualified APK passed on both reference devices:
 
@@ -90,48 +90,70 @@ D-023 / `docs/architecture/RUNTIME_LANGUAGE_AND_SERIALIZATION.md` is also mandat
 - canonical diagnostic capture export is versioned `capture.cbor` + `report.txt`, optionally packaged with explicitly selected attachments;
 - JSON is optional external/developer tooling only when deliberately justified, never runtime/source truth.
 
+CBOR is **not** a universal EpicHub storage format. Other domains retain their deliberately selected external/persistence formats.
+
 ---
 
 # Current Phase 2 design slice
 
-Before real ECU/USB acquisition, establish the application skeleton and bug-capture tooling so later subsystems enter a stable UI and diagnostic environment.
+Draft PR #3 establishes the UI skeleton and bug-capture architecture **before** real ECU/USB acquisition.
 
-Current design authority under draft PR #3:
+Current design authority:
 
 - `docs/architecture/UI_FOUNDATION_LAYOUT.md`
 - `docs/architecture/DIAGNOSTICS_CAPTURE_FOUNDATION.md`
 - `docs/architecture/RUNTIME_LANGUAGE_AND_SERIALIZATION.md`
 
-Proposed primary application destinations:
+Primary application destinations:
 
 ```text
 Dashboard | Tuner | Logger | Analyzer | Diagnostics
 ```
 
-Settings remains globally accessible rather than a sixth high-frequency destination.
+Settings is globally accessible rather than a sixth high-frequency destination.
 
-The diagnostic foundation provides:
+The diagnostic foundation specifies:
 
 - always-on bounded typed diagnostic flight recorder;
 - stable events/metrics/lifecycle owners/correlation IDs;
 - global recent-problem capture;
-- guided reproduction capture with user markers;
+- reproduction capture with user markers;
 - previous-exit/crash context where Android permits;
 - immutable DiagnosticCapture sessions;
-- versioned CBOR + human text export;
-- routine privacy-bounded bundles with explicit optional attachments.
+- canonical versioned CBOR + human text export;
+- privacy-bounded routine bundles with explicit optional attachments;
+- observational behavior only under D-017.
 
-Diagnostics remain observational under D-017.
+---
+
+# Documentation consistency status
+
+The repository-wide consistency pass for this design slice is complete.
+
+It reconciled current-state and cross-domain documentation so that:
+
+- Phase 1 files are historical closure records, not active gate instructions;
+- the already-qualified Kotlin/Rust foundation is not described as unimplemented;
+- `CODEBASE_TOPOLOGY.md` reflects the actual minimal source tree and deliberate future expansion;
+- D-023 consistently prohibits JSON/WebView/browser/runtime-message-bus architecture;
+- diagnostic export consistently uses `capture.cbor` + `report.txt` at the explicit export boundary;
+- historical JSON/JavaScript/React/WebView references remain only where they accurately describe source evidence;
+- the old four-destination EpicDash-JZ shell is historical evidence only; the current five-destination shell is authoritative;
+- test strategy distinguishes already-proven foundation evidence from future UI/diagnostics/USB/tuning gates;
+- Tune Viewer JSON export is historical evidence, not EpicHub's default report-format decision;
+- current gap/protocol/state/threading/action/dependency/source/responsibility documents agree with the active Phase-2 state.
+
+PR #3's description has also been reconciled to the same contracts.
 
 ---
 
 # Exact next action
 
-1. complete the repository-wide documentation consistency pass for D-023 and the new UI/diagnostic design;
-2. iterate/accept PR #3's screen structure and diagnostic capture workflow;
-3. implement the responsive application shell and placeholder surfaces for Dashboard, Tuner, Logger, Analyzer and Diagnostics using the existing synthetic RuntimeSnapshot foundation;
-4. implement the typed/bounded diagnostic event, metric, lifecycle and capture path without JSON/CBOR runtime communication;
-5. physically qualify UI reflow and capture/export on SM-A137F + SM-T500;
+1. review/iterate and explicitly accept the PR #3 UI shell + diagnostics design contracts;
+2. once accepted, implement the responsive application shell and placeholder surfaces for Dashboard, Tuner, Logger, Analyzer and Diagnostics using the existing synthetic RuntimeSnapshot foundation;
+3. implement the typed/bounded diagnostic event, metric, lifecycle and capture path without JSON/CBOR runtime communication;
+4. implement canonical diagnostic export only at the explicit persistence/export boundary;
+5. CI- and physically qualify UI reflow plus capture/export on SM-A137F + SM-T500;
 6. only then begin the D-022 source-understanding gate for the read-only live ECU acquisition path.
 
-ECU writes, Burn, BLE/accessory migration, production logging formats and analyzer/autotune algorithms remain out of this current slice.
+ECU writes, Burn, BLE/accessory migration, production logging formats and analyzer/autotune algorithms remain outside the current slice.
