@@ -45,24 +45,28 @@ Avoid vague dumping-ground names such as:
 - `Plan` — immutable description of intended work, not execution.
 - `Verifier` — validates observed result against an expected contract.
 - `Screen` — Compose screen/presentation surface.
-- `ViewModel` — screen-facing orchestration/state owner.
+- `ViewModel` — screen-facing presentation orchestration/state owner.
 - `UiState` — immutable Compose-facing state.
 
 ## Domain before transport
 
 Name a concept after what it means, not merely how it is transported.
 
-Prefer:
+For the reviewed existing ESP32 BLE↔CAN bridge, prefer:
 
-`Esp32AccessoryGateway`
+`Esp32BridgeGateway`
 
 instead of:
 
 `BleButtonManager`
 
-when the responsibility is accessory semantics.
+or an over-broad `Esp32AccessoryGateway` that could blur legacy bridge semantics with a future direct-output protocol.
 
-Transport-specific classes should remain transport-specific, for example:
+If a future versioned relay/GPIO capability is added, give it a separate semantic owner such as:
+
+`Esp32DirectOutputGateway`
+
+Transport-specific classes remain transport-specific, for example:
 
 `AndroidBleScanner`, `Esp32GattClient`, `BleWriteScheduler`.
 
@@ -74,25 +78,25 @@ A production file should have one primary reason to change. There is no rigid li
 
 Prefer small cohesive private support types inside the same file when they exist solely to implement that file's responsibility. Split when another responsibility, lifecycle, state authority or test boundary appears.
 
-## Historical terminology
+## Historical / compatibility terminology
 
 Historical names may appear in:
 
 - source/reference citations;
-- migration/responsibility mapping documents;
+- responsibility mapping documents;
 - tests specifically describing historical behaviour;
 - Git history.
 
 They should not dictate new production names.
 
-If an old protocol is still the current required protocol, name its new implementation after its actual role rather than calling it `Legacy`. Use `Legacy` only when compatibility with obsolete data/devices is itself the reason the code exists.
+`Legacy` is allowed in production only when distinguishing a concrete compatibility protocol/data/device generation is part of the responsibility itself. For example, `LegacyButtonBridgeCodec` is acceptable because it explicitly separates the existing bridge wire protocol from any future versioned direct-output protocol. Do not use `Legacy` merely to mean “old implementation we have not cleaned up.”
 
 ## Rust conventions
 
 Rust crate/module/file names use descriptive snake_case domain terms, for example:
 
 - `channel_store.rs`;
-- `frame_codec.rs`;
+- `request_codec.rs`;
 - `tune_snapshot.rs`;
 - `write_transaction.rs`;
 - `burn_verifier.rs`;
@@ -102,6 +106,10 @@ Avoid crates that merely collect unrelated helpers.
 
 ## Kotlin conventions
 
-Kotlin package names follow domain ownership rather than historical Activities/classes. A likely root namespace is `com.epicefi.epichub`; the final application ID/namespace is locked before production scaffold creation.
+The locked Android application ID and Kotlin root namespace are:
+
+`com.epicefi.epichub`
+
+Kotlin package names follow domain ownership rather than historical Activities/classes.
 
 Compose presentation types should not use transport/protocol terminology unless the UI is explicitly a diagnostics surface for that transport/protocol.
