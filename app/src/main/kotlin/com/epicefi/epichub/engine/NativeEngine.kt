@@ -7,6 +7,7 @@ import java.util.concurrent.atomic.AtomicLong
 class NativeEngine private constructor(initialHandle: Long) : Closeable {
     private val handle = AtomicLong(initialHandle)
     private val snapshotBuffer = RuntimeSnapshotBuffer()
+    private val diagnosticBuffer = NativeDiagnosticBatchBuffer()
 
     val isAlive: Boolean
         get() {
@@ -19,6 +20,13 @@ class NativeEngine private constructor(initialHandle: Long) : Closeable {
         val current = handle.get()
         check(current != 0L) { "Native engine is closed." }
         return snapshotBuffer.read(current)
+    }
+
+    @Synchronized
+    fun drainDiagnosticEvents(): NativeDiagnosticBatch {
+        val current = handle.get()
+        check(current != 0L) { "Native engine is closed." }
+        return diagnosticBuffer.read(current)
     }
 
     @Synchronized
@@ -50,4 +58,5 @@ object NativeEngineBridge {
     external fun isAlive(handle: Long): Boolean
     external fun activeCount(): Int
     external fun fillRuntimeSnapshot(handle: Long, buffer: ByteBuffer): Int
+    external fun fillDiagnosticEvents(handle: Long, buffer: ByteBuffer): Int
 }
