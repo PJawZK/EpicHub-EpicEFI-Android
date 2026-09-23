@@ -37,7 +37,7 @@ ActionResult
 └── correlation ID
 ```
 
-The exact Kotlin types are defined in Phase 2 after the inventory is complete.
+The exact Kotlin/Rust types are introduced when the action subsystem enters implementation. The semantic boundary here is already authoritative; implementation must not invent a raw transport-oriented action API instead.
 
 ## UI rule
 
@@ -66,7 +66,8 @@ Examples:
 - acknowledge warning;
 - open analyzer;
 - start/stop a local UI mode;
-- request logging start/stop through the logging domain.
+- request logging start/stop through the logging domain;
+- start/mark/stop a diagnostic capture through the diagnostics domain.
 
 The router dispatches these directly to the appropriate Kotlin/app or NativeEngine API. They do not traverse unrelated transports.
 
