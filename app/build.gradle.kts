@@ -99,6 +99,7 @@ abstract class CargoNdkBuildTask @Inject constructor(
         execOperations.exec {
             workingDir(crateDirectory.get().asFile)
             environment("ANDROID_NDK_HOME", ndkDirectory.absolutePath)
+            environment("ANDROID_NDK_ROOT", ndkDirectory.absolutePath)
             commandLine(arguments)
         }
     }
