@@ -9,6 +9,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
@@ -40,6 +41,9 @@ fun EpicHubApp() {
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
     var runtimeSnapshot by remember(engine) { mutableStateOf<RuntimeSnapshot?>(null) }
     var diagnosticSnapshot by remember { mutableStateOf(diagnostics.snapshotForUi()) }
+
+    val latestDestinationId by rememberUpdatedState(destinationId)
+    val latestSettingsOpen by rememberUpdatedState(settingsOpen)
 
     fun refreshDiagnostics() {
         diagnosticSnapshot = diagnostics.snapshotForUi()
@@ -111,7 +115,12 @@ fun EpicHubApp() {
                     )
                 }
 
-            refreshDiagnostics()
+            val diagnosticsVisible =
+                AppDestination.fromId(latestDestinationId) == AppDestination.DIAGNOSTICS &&
+                    !latestSettingsOpen
+            if (diagnosticsVisible) {
+                refreshDiagnostics()
+            }
             delay(250)
         }
     }
@@ -132,7 +141,12 @@ fun EpicHubApp() {
             },
             settingsOpen = settingsOpen,
             onOpenSettings = { settingsOpen = true },
-            onCloseSettings = { settingsOpen = false },
+            onCloseSettings = {
+                settingsOpen = false
+                if (AppDestination.fromId(destinationId) == AppDestination.DIAGNOSTICS) {
+                    refreshDiagnostics()
+                }
+            },
             runtimeSnapshot = runtimeSnapshot,
             diagnostics = diagnosticSnapshot,
             engineAlive = engine.isAlive,
