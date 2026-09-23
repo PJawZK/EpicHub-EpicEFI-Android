@@ -41,7 +41,7 @@ EpicHub should model four distinct categories:
    └─ tiny durable marker written before a command may change ECU state
 ```
 
-UI drafts/editor selections are a fifth category but are not tuning authority and are not automatically part of recovery.
+Semantic tune drafts/history are a separate Rust tuning-domain state category and are not verified project/live-ECU authority. Kotlin editor selection, text-entry, gesture and other presentation state are separate again. Neither category is automatically part of recovery/project authority merely because it exists locally.
 
 ---
 
