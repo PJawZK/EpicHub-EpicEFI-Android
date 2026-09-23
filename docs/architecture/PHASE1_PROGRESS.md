@@ -1,90 +1,57 @@
-# Phase 1 Progress
+# Phase 1 Progress — Final Record
 
 ## Final status
 
-**Phase 1 is accepted and closed as of 2026-09-23.**
+**Phase 1 was accepted and closed on 2026-09-23 with 46 / 46 review items satisfied.**
 
-The dedicated architecture archaeology, responsibility mapping, source-evidence review and cross-document consistency audit completed with **46 / 46 review items satisfied**. Explicit user acceptance was given before production Android/Rust scaffolding began.
+The architecture archaeology, responsibility mapping, source-evidence review and cross-document consistency audit completed before production scaffolding began.
 
-The accepted architecture baseline includes:
+Accepted Phase-1 baseline included:
 
-- clean-slate Kotlin/Jetpack Compose + Rust direction;
-- Android/platform ownership in Kotlin;
-- high-volume runtime/channel/logging/analysis ownership in Rust;
+- clean Kotlin/Jetpack Compose + Rust ownership split;
 - one ECU protocol/session authority and one runtime ChannelStore;
 - exact profile/signature/TuneSnapshot authority rules;
 - guarded semantic Write/Burn/recovery contracts;
-- legacy ESP32 BLE↔CAN bridge separation from any future direct-output capability;
-- format-neutral live acquisition with the locked sequence **live path → MLG interoperability → MDF4 evaluation/implementation → scalable Analyzer**;
-- one shared analysis/evidence platform with domain profiles;
+- legacy ESP32 bridge separation from future direct outputs;
+- format-neutral measurement architecture with live path → MLG → MDF4 evaluation → Analyzer order;
+- shared analysis/evidence platform with domain profiles;
 - semantic tune-draft ownership in Rust and interaction/presentation state in Kotlin;
-- mandatory D-022 piece-by-piece historical-source review and clean reimplementation at each inherited subsystem's implementation-entry gate;
-- initial Android identity/support baseline:
-  - `com.epicefi.epichub`;
-  - `minSdk 26`;
-  - `targetSdk 36`;
-  - `compileSdk 37`;
-  - production `armeabi-v7a` + `arm64-v8a`.
+- D-022 piece-by-piece historical-source review and clean reimplementation;
+- Android identity/API/ABI support baseline.
 
-## Closure authority
+This file is historical progress/closure evidence. Current Phase-2 work is defined by `docs/HANDOFF.md` and `GAP_ANALYSIS.md`.
 
-Primary Phase 1 authority remains:
+---
 
-- `DECISIONS.md`;
-- `PHASE1_GATE_ASSESSMENT.md`;
-- `REVIEW_CHECKLIST.md`;
-- `GAP_ANALYSIS.md`;
-- `SOURCE_REIMPLEMENTATION_METHOD.md`;
-- the domain contract/evidence documents referenced by those files.
+# What happened next
 
-`REVIEW_CHECKLIST.md` is the formal closure record. Git history preserves the detailed pre-acceptance progression and audit history.
-
-## Work intentionally carried forward
-
-Acceptance does **not** mean every implementation detail is preselected. `GAP_ANALYSIS.md` intentionally carries forward measured and feature-entry work including:
-
-- USB runtime ownership PoCs;
-- packed RuntimeSnapshot/JNI lifecycle and performance;
-- dual-ABI physical qualification on SM-A137F and SM-T500;
-- Compose frame/jank measurements;
-- genuine ECU/INI/MLG/MDF qualification corpora;
-- concrete persistence/analyzer/diagnostic schemas when those features enter implementation;
-- deliberately deferred product scope such as rich table operations, dashboard customization, direct ESP32 outputs and specialized GPU rendering.
-
-Those items no longer block Phase 1 because their ownership, evidence requirement and implementation-entry gates are already defined.
-
-## Phase 2 entry
-
-The first production slice is deliberately small and non-mutating:
+The original first Phase-2 foundation described at closure has now been completed and accepted:
 
 ```text
-Android application/bootstrap
-→ Compose host
+Android/Compose host
 → dual-ABI Rust shared library
-→ NativeEngine create/close/recreate
-→ versioned packed RuntimeSnapshot ABI
+→ NativeEngine lifecycle
+→ versioned packed RuntimeSnapshot ABI v1
 → minimal Rust ChannelStore
-→ synthetic/native test-channel publication
-→ Compose display of snapshot
-→ bounded native event drain
-→ JNI/snapshot lifecycle diagnostics
+→ synthetic test-channel publication
+→ Compose display
 ```
 
-Explicitly excluded from this first slice:
+It was CI-qualified and physically exercised on both reference devices:
 
-- ECU mutation;
-- Burn;
-- MDF writer;
-- full Tuner migration;
-- plugin ports.
+- SM-A137F phone;
+- SM-T500 tablet.
 
-After the foundation is qualified, continue with the accepted sequence:
+Therefore packed RuntimeSnapshot/JNI lifecycle, minimal ChannelStore and dual-ABI physical foundation qualification are **not current gaps**.
 
-```text
-format-neutral live ECU path
-→ MLG writer/interoperability
-→ MDF4 evaluation/implementation
-→ scalable Analyzer
-```
+---
 
-Every inherited subsystem continues to pass D-022 at implementation entry. Phase 1 is not reopened merely because later measured evidence causes a deliberate Phase 2 architecture refinement.
+# Later architecture evolution
+
+Phase 1 is not reopened when later evidence produces a deliberate Phase-2 refinement.
+
+Current notable later decision:
+
+- **D-023** — production runtime remains Kotlin/Compose + Rust; runtime/JNI communication stays typed/packed; serialization is boundary-only; JSON is not the default internal representation; canonical diagnostic capture export is versioned CBOR + text.
+
+See current `DECISIONS.md`, `RUNTIME_LANGUAGE_AND_SERIALIZATION.md`, `UI_FOUNDATION_LAYOUT.md`, `DIAGNOSTICS_CAPTURE_FOUNDATION.md` and `GAP_ANALYSIS.md` for active work.
