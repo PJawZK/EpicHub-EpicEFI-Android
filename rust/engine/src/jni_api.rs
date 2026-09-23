@@ -4,19 +4,45 @@ use jni::JNIEnv;
 use jni::objects::{JByteBuffer, JObject};
 use jni::sys::{JNI_FALSE, JNI_TRUE, jboolean, jint, jlong};
 
+use crate::diagnostics::DIAGNOSTIC_BATCH_SIZE;
 use crate::engine::{
-    active_engine_count, close_engine, create_engine, engine_is_alive, runtime_snapshot,
+    active_engine_count, close_engine, create_engine, diagnostic_batch, engine_is_alive,
+    runtime_snapshot,
 };
 use crate::runtime_snapshot::RUNTIME_SNAPSHOT_SIZE;
 
-const SNAPSHOT_STATUS_OK: jint = 0;
-const SNAPSHOT_STATUS_INVALID_HANDLE: jint = 1;
-const SNAPSHOT_STATUS_NOT_DIRECT: jint = 2;
-const SNAPSHOT_STATUS_BUFFER_TOO_SMALL: jint = 3;
-const SNAPSHOT_STATUS_PANIC: jint = 255;
+const BUFFER_STATUS_OK: jint = 0;
+const BUFFER_STATUS_INVALID_HANDLE: jint = 1;
+const BUFFER_STATUS_NOT_DIRECT: jint = 2;
+const BUFFER_STATUS_TOO_SMALL: jint = 3;
+const BUFFER_STATUS_PANIC: jint = 255;
 
 fn ffi_guard<T: Copy>(fallback: T, operation: impl FnOnce() -> T) -> T {
     catch_unwind(AssertUnwindSafe(operation)).unwrap_or(fallback)
+}
+
+fn copy_to_direct_buffer(
+    env: &JNIEnv,
+    buffer: &JByteBuffer,
+    bytes: &[u8],
+) -> jint {
+    let capacity = match env.get_direct_buffer_capacity(buffer) {
+        Ok(capacity) => capacity,
+        Err(_) => return BUFFER_STATUS_NOT_DIRECT,
+    };
+    if capacity < bytes.len() {
+        return BUFFER_STATUS_TOO_SMALL;
+    }
+
+    let address = match env.get_direct_buffer_address(buffer) {
+        Ok(address) => address,
+        Err(_) => return BUFFER_STATUS_NOT_DIRECT,
+    };
+
+    unsafe {
+        std::ptr::copy_nonoverlapping(bytes.as_ptr(), address, bytes.len());
+    }
+    BUFFER_STATUS_OK
 }
 
 #[unsafe(no_mangle)]
@@ -66,28 +92,29 @@ pub extern "system" fn Java_com_epicefi_epichub_engine_NativeEngineBridge_fillRu
     handle: jlong,
     buffer: JByteBuffer,
 ) -> jint {
-    ffi_guard(SNAPSHOT_STATUS_PANIC, || {
+    ffi_guard(BUFFER_STATUS_PANIC, || {
         let snapshot = match runtime_snapshot(handle) {
             Some(snapshot) => snapshot,
-            None => return SNAPSHOT_STATUS_INVALID_HANDLE,
+            None => return BUFFER_STATUS_INVALID_HANDLE,
         };
+        debug_assert_eq!(snapshot.len(), RUNTIME_SNAPSHOT_SIZE);
+        copy_to_direct_buffer(&env, &buffer, &snapshot)
+    })
+}
 
-        let capacity = match env.get_direct_buffer_capacity(&buffer) {
-            Ok(capacity) => capacity,
-            Err(_) => return SNAPSHOT_STATUS_NOT_DIRECT,
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_epicefi_epichub_engine_NativeEngineBridge_fillDiagnosticEvents(
+    env: JNIEnv,
+    _object: JObject,
+    handle: jlong,
+    buffer: JByteBuffer,
+) -> jint {
+    ffi_guard(BUFFER_STATUS_PANIC, || {
+        let batch = match diagnostic_batch(handle) {
+            Some(batch) => batch,
+            None => return BUFFER_STATUS_INVALID_HANDLE,
         };
-        if capacity < RUNTIME_SNAPSHOT_SIZE {
-            return SNAPSHOT_STATUS_BUFFER_TOO_SMALL;
-        }
-
-        let address = match env.get_direct_buffer_address(&buffer) {
-            Ok(address) => address,
-            Err(_) => return SNAPSHOT_STATUS_NOT_DIRECT,
-        };
-
-        unsafe {
-            std::ptr::copy_nonoverlapping(snapshot.as_ptr(), address, RUNTIME_SNAPSHOT_SIZE);
-        }
-        SNAPSHOT_STATUS_OK
+        debug_assert_eq!(batch.len(), DIAGNOSTIC_BATCH_SIZE);
+        copy_to_direct_buffer(&env, &buffer, &batch)
     })
 }
