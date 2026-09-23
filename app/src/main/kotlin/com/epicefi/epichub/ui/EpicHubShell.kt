@@ -32,6 +32,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.epicefi.epichub.diagnostics.ActiveDiagnosticCapture
 import com.epicefi.epichub.diagnostics.DiagnosticCapture
 import com.epicefi.epichub.diagnostics.DiagnosticsSnapshot
 import com.epicefi.epichub.engine.RuntimeSnapshot
@@ -76,6 +77,7 @@ fun EpicHubShell(
                     diagnostics = diagnostics,
                     engineAlive = engineAlive,
                     activeEngineCount = activeEngineCount,
+                    compact = !wide,
                     onOpenSettings = onOpenSettings,
                     onCaptureRecentProblem = onCaptureRecentProblem,
                     onStartReproductionCapture = onStartReproductionCapture,
@@ -127,81 +129,149 @@ private fun SystemStatusHeader(
     diagnostics: DiagnosticsSnapshot,
     engineAlive: Boolean,
     activeEngineCount: Int,
+    compact: Boolean,
     onOpenSettings: () -> Unit,
     onCaptureRecentProblem: () -> Unit,
     onStartReproductionCapture: () -> Unit,
     onAddCaptureMarker: () -> Unit,
     onStopCapture: () -> Unit,
 ) {
-    var captureMenuExpanded by remember { mutableStateOf(false) }
-    val activeCapture = diagnostics.activeCapture
-
     Surface(
         color = MaterialTheme.colorScheme.surfaceContainer,
         tonalElevation = 2.dp,
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Text(
-                text = "EpicHub",
-                style = MaterialTheme.typography.titleLarge,
-            )
-            Text(
-                text = if (engineAlive) "Engine active ($activeEngineCount)" else "Engine unavailable",
-                style = MaterialTheme.typography.bodySmall,
-            )
-            Text(
-                text = snapshot?.let { "Source ${it.sourceKind} · #${it.sequence}" } ?: "Source waiting",
-                style = MaterialTheme.typography.bodySmall,
-            )
-            Spacer(modifier = Modifier.weight(1f))
-
-            if (activeCapture == null) {
-                Box {
-                    Button(onClick = { captureMenuExpanded = true }) {
-                        Text("Capture")
-                    }
-                    DropdownMenu(
-                        expanded = captureMenuExpanded,
-                        onDismissRequest = { captureMenuExpanded = false },
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("Capture recent problem") },
-                            onClick = {
-                                captureMenuExpanded = false
-                                onCaptureRecentProblem()
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Start reproduction capture") },
-                            onClick = {
-                                captureMenuExpanded = false
-                                onStartReproductionCapture()
-                            },
-                        )
+        if (compact) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(
+                        text = "EpicHub",
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Spacer(modifier = Modifier.weight(1f))
+                    HeaderCaptureControls(
+                        activeCapture = diagnostics.activeCapture,
+                        compact = true,
+                        onCaptureRecentProblem = onCaptureRecentProblem,
+                        onStartReproductionCapture = onStartReproductionCapture,
+                        onAddCaptureMarker = onAddCaptureMarker,
+                        onStopCapture = onStopCapture,
+                    )
+                    TextButton(onClick = onOpenSettings) {
+                        Text("Settings")
                     }
                 }
-            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text(
+                        text = if (engineAlive) {
+                            "Engine active ($activeEngineCount)"
+                        } else {
+                            "Engine unavailable"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Text(
+                        text = snapshot?.let { "Source ${it.sourceKind} · #${it.sequence}" }
+                            ?: "Source waiting",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+        } else {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
                 Text(
-                    text = "Capture #${activeCapture.captureId}",
-                    style = MaterialTheme.typography.labelMedium,
+                    text = "EpicHub",
+                    style = MaterialTheme.typography.titleLarge,
                 )
-                TextButton(onClick = onAddCaptureMarker) {
-                    Text("Mark")
-                }
-                Button(onClick = onStopCapture) {
-                    Text("Stop")
+                Text(
+                    text = if (engineAlive) "Engine active ($activeEngineCount)" else "Engine unavailable",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Text(
+                    text = snapshot?.let { "Source ${it.sourceKind} · #${it.sequence}" } ?: "Source waiting",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                HeaderCaptureControls(
+                    activeCapture = diagnostics.activeCapture,
+                    compact = false,
+                    onCaptureRecentProblem = onCaptureRecentProblem,
+                    onStartReproductionCapture = onStartReproductionCapture,
+                    onAddCaptureMarker = onAddCaptureMarker,
+                    onStopCapture = onStopCapture,
+                )
+                TextButton(onClick = onOpenSettings) {
+                    Text("Settings")
                 }
             }
+        }
+    }
+}
 
-            TextButton(onClick = onOpenSettings) {
-                Text("Settings")
+@Composable
+private fun HeaderCaptureControls(
+    activeCapture: ActiveDiagnosticCapture?,
+    compact: Boolean,
+    onCaptureRecentProblem: () -> Unit,
+    onStartReproductionCapture: () -> Unit,
+    onAddCaptureMarker: () -> Unit,
+    onStopCapture: () -> Unit,
+) {
+    var captureMenuExpanded by remember { mutableStateOf(false) }
+
+    if (activeCapture == null) {
+        Box {
+            Button(onClick = { captureMenuExpanded = true }) {
+                Text(if (compact) "Capture" else "Capture")
             }
+            DropdownMenu(
+                expanded = captureMenuExpanded,
+                onDismissRequest = { captureMenuExpanded = false },
+            ) {
+                DropdownMenuItem(
+                    text = { Text("Capture recent problem") },
+                    onClick = {
+                        captureMenuExpanded = false
+                        onCaptureRecentProblem()
+                    },
+                )
+                DropdownMenuItem(
+                    text = { Text("Start reproduction capture") },
+                    onClick = {
+                        captureMenuExpanded = false
+                        onStartReproductionCapture()
+                    },
+                )
+            }
+        }
+    } else {
+        Text(
+            text = if (compact) "#${activeCapture.captureId}" else "Capture #${activeCapture.captureId}",
+            style = MaterialTheme.typography.labelMedium,
+        )
+        TextButton(onClick = onAddCaptureMarker) {
+            Text("Mark")
+        }
+        Button(onClick = onStopCapture) {
+            Text("Stop")
         }
     }
 }
