@@ -18,11 +18,7 @@ Active branch: `phase1/architecture-inventory`
 
 Open draft PR: **#1 — Phase 1: architecture and responsibility inventory**
 
-Branch head immediately before this handoff update:
-
-`aab3227837e7c619b6d38221f9d1356d0ae3cfd3`
-
-This handoff update itself advances the branch. Always verify the actual current head before making changes.
+The branch head changes as these documentation updates are committed. Always verify the actual current head before making changes.
 
 `main` still contains the clean-slate bootstrap; Phase 1 architecture documentation remains on PR #1 until explicitly accepted/merged.
 
@@ -34,13 +30,13 @@ No production Android/Rust scaffold exists yet.
 
 **Phase 1 is at its explicit acceptance gate.**
 
-Architecture/source/test review result:
+Architecture/source/test review result before final user acceptance:
 
 ```text
 45 / 46 checklist items satisfied
 ```
 
-The only unchecked item is:
+The only unchecked checklist item remains:
 
 > user accepts Phase 1 result before production scaffold begins.
 
@@ -55,9 +51,55 @@ Do not start production scaffolding until the user explicitly accepts Phase 1.
 
 ---
 
+# How historical source is used
+
+Phase 1 performed **responsibility archaeology**, not exhaustive line-by-line certification of every historical source file.
+
+EpicDash-JZ and the other reference repositories have been used through:
+
+- architecture/project documentation;
+- tests and qualification evidence;
+- targeted high-value implementation paths;
+- known large/problematic classes;
+- firmware/protocol source verification;
+- historical bug/fix evidence where relevant;
+- cross-repository behavior/algorithm comparison.
+
+This does **not** authorize direct migration of those implementations.
+
+D-022 and `docs/architecture/SOURCE_REIMPLEMENTATION_METHOD.md` now make the permanent implementation method explicit:
+
+```text
+semantic behavior slice
+→ trace old implementation + callers + state + threads/lifecycle + errors + tests + bug history
+→ classify required / safety / compatibility / useful / accidental / buggy / obsolete / unknown behavior
+→ design one clean permanent owner and contract
+→ implement from scratch in EpicHub
+→ qualify against protocol truth / proven behavior / focused fixtures
+→ benchmark hot paths
+→ accept the narrow slice
+→ continue to the next slice
+```
+
+The prohibited workflow is:
+
+```text
+copy old subsystem
+→ make it compile
+→ rename/refactor it later
+```
+
+Historical bugs are mined for the invariant they reveal, not for control flow to reproduce. Old tests are reviewed as candidate behavioral specifications; accidental/junk behavior is not preserved merely to make the new app match the old implementation.
+
+This methodology applies to the entire project, including Android platform code, ECU/profile/tuning, BLE/accessory, logger/formats, analyzer/autotune, diagnostics and Compose UI.
+
+Therefore a subsystem must undergo its deeper piece-by-piece source review **when that subsystem enters implementation**, while the relevant details are still actionable. Phase 1 does not require reading every historical line months before the corresponding clean replacement is written.
+
+---
+
 # Durable architecture
 
-Read `docs/architecture/DECISIONS.md` for D-001 through D-021.
+Read `docs/architecture/DECISIONS.md` for D-001 through D-022.
 
 Important locked decisions:
 
@@ -83,7 +125,8 @@ Important locked decisions:
 - full semantic tune comparison requires exact authoritative profile identity;
 - historical AE/PID/TCharge/Injection Angle plugins become domain profiles on one shared analysis platform, not independent ports;
 - observations, analysis, recommendations and ECU mutation are separate authority levels;
-- a qualifying recorded session may be reused across compatible analyses instead of forcing new Guided Capture.
+- a qualifying recorded session may be reused across compatible analyses instead of forcing new Guided Capture;
+- historical code is reviewed piece-by-piece per subsystem and cleanly reimplemented rather than bulk-ported.
 
 ---
 
@@ -127,8 +170,9 @@ Completed reviews include:
 - EpicEFI Tune Viewer exact-profile comparison/definition behavior;
 - AE/PID/TCharge/Injection Angle analysis/autotune evidence.
 
-Important deep-dive docs:
+Important deep-dive/method docs:
 
+- `SOURCE_REIMPLEMENTATION_METHOD.md`
 - `ECU_PROTOCOL_DIRECT_VERIFICATION.md`
 - `ESP32_ACCESSORY_EVIDENCE.md`
 - `TUNING_PERSISTENCE_RECOVERY_EVIDENCE.md`
@@ -164,6 +208,8 @@ Examples:
 - concrete AnalysisSession/domain-profile/ExperimentProposal schemas before Analyzer/autotune rollout;
 - diagnostic event/metric/export schemas.
 
+Every such feature entry also requires the D-022 piece-by-piece historical-source review for the corresponding subsystem before implementation is accepted.
+
 ## Deliberately deferred product decisions
 
 Examples:
@@ -181,7 +227,10 @@ These do not block the clean foundation.
 
 # Do not regress
 
+- Do not bulk-copy historical subsystems and clean them later.
 - Do not copy historical large classes wholesale.
+- Do not treat old tests as automatic specifications until the requirement they prove is understood.
+- Do not preserve accidental/junk/buggy behavior simply for old-code parity.
 - Do not reintroduce WebView/JSON as the runtime hot path.
 - Do not create `T3`/`B2`/`New`-style permanent names.
 - Do not create a second generated-INI/parser/condition authority.
@@ -214,6 +263,8 @@ Android app/bootstrap
 → JNI/snapshot lifecycle diagnostics
 ```
 
+Before each component in that slice is implemented beyond trivial scaffolding, apply the clean source reimplementation method to any historical behavior being inherited.
+
 First slice excludes:
 
 - ECU writes;
@@ -231,7 +282,7 @@ format-neutral live ECU path
 → scalable Analyzer
 ```
 
-Tuning mutation remains later and uses physically accepted EpicDash-JZ behavior as its oracle until EpicHub parity/improvement is qualified.
+Tuning mutation remains later and uses physically accepted EpicDash-JZ behavior as a behavioral oracle while its implementation is independently redesigned and qualified.
 
 ---
 
@@ -243,6 +294,7 @@ If the user explicitly accepts Phase 1:
 2. record Phase 1 acceptance in repository docs;
 3. merge/clean draft PR #1 as directed;
 4. establish `main` as the accepted architecture baseline;
-5. begin Phase 2 with only the non-mutating foundation slice above.
+5. begin Phase 2 with only the non-mutating foundation slice above;
+6. for every inherited subsystem entering implementation, apply `SOURCE_REIMPLEMENTATION_METHOD.md` before accepting its code.
 
 If the user does **not** accept Phase 1 yet, discuss/revise the specific concern only. Do not restart broad source archaeology without a concrete evidence gap.
