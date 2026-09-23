@@ -25,12 +25,14 @@ Rust ChannelStore
         │
         ├──► RuntimeSnapshot ─► FFI buffer ─► Compose Dashboard/Tuner
         │
-        ├──► Logger ─► measurement writer ─► MDF4
+        ├──► Logger ─► MeasurementWriter ─► selected recording format
         │
         ├──► Expressions / warnings
         │
         └──► Analyzer/live queries where useful
 ```
+
+The recording format is intentionally not part of ChannelStore/runtime authority. The locked implementation sequence is live path first, then MLG interoperability, then MDF4 evaluation/implementation on the same workload.
 
 The UI is not in the acquisition/logging path.
 
@@ -44,10 +46,12 @@ live signature query
         │
         ├──► diagnostic firmware recognition
         │
-        └──► exact complete signature comparison
+        └──► exact complete signature compatibility gate
                     │
                     ▼
               imported generated INI
+                    │
+                    ├──► exact source fingerprint
                     │
                     ▼
             accepted compiled profile
@@ -57,7 +61,7 @@ live signature query
        runtime schema   tune schema
 ```
 
-A board-name match alone never enters the authority path.
+Signature equality is a necessary live compatibility gate. The selected profile source/fingerprint remains the exact source identity for compiled schemas, caches, project state and tuning plans. A board-name match alone never enters the authority path.
 
 ## Tune read flow
 
@@ -143,48 +147,78 @@ exclusive BurnTransaction
 
 Burn is never implicit after RAM editing.
 
-## ESP32 accessory command flow
+## Legacy ESP32 bridge command flow
+
+The reviewed legacy device is a BLE↔CAN bridge, not a direct relay/GPIO controller.
 
 ```text
-Compose / physical input / approved rule
+Compose / physical input / approved automation request
         │
         ▼
-semantic ActionRequest
+semantic ActionRequest(target = AccessoryBridge)
         │
         ▼
 Kotlin ActionRouter
         │
         ▼
-Esp32AccessoryGateway
+Esp32BridgeGateway
         │
         ▼
-Esp32MessageCodec
+message-specific legacy codec
         │
         ▼
 BleWriteScheduler / GATT
         │
         ▼
-ESP32 firmware
+ESP32 legacy bridge
         │
         ▼
-relay/GPIO/CAN action under firmware failsafe authority
+CAN forwarding / legacy bridge behavior
 ```
 
-Rust is not in this command path unless the semantic event is separately published for logging/analysis.
+Android GATT completion proves only transport completion. It does not prove that the downstream CAN consumer applied a semantic action. Rust is not in this command path unless the semantic event is separately published for logging/analysis.
 
-## ESP32 state/variable return flow
+## Future direct ESP32 output flow
+
+Only if a versioned direct-output capability is deliberately added:
 
 ```text
-ESP32
-  │ BLE notification/state response
+semantic ActionRequest(target = AccessoryOutput)
+        │
+        ▼
+Kotlin ActionRouter
+        │
+        ▼
+Esp32DirectOutputGateway
+        │
+        ▼
+versioned output codec/protocol
+        │
+        ▼
+BleWriteScheduler / GATT
+        │
+        ▼
+ESP32 direct-output firmware capability
+        │
+        ▼
+physical relay/GPIO under firmware mapping/interlock/failsafe authority
+```
+
+This path must not be inferred from or merged into legacy bridge compatibility.
+
+## ESP32 bridge state/variable return flow
+
+```text
+ESP32 legacy bridge
+  │ BLE notification / variable response
   ▼
 Esp32GattClient
   ▼
-Esp32MessageCodec
+message-specific legacy decoder
   ▼
-Esp32AccessoryGateway
+Esp32BridgeGateway
   │
-  ├──► AccessoryStateStore ─► Compose
+  ├──► bridge request/transport state ─► Compose where useful
   │
   └──► batched AccessoryChannelPublisher
                  │
@@ -193,10 +227,10 @@ Esp32AccessoryGateway
                  │
         ┌────────┼────────┐
         ▼        ▼        ▼
-      MDF4    Analyzer  warnings/math
+     Logger   Analyzer  warnings/math
 ```
 
-Requested state and confirmed/reported state remain distinguishable.
+Legacy downstream state remains unknown unless independently observed. A future direct-output capability, if added, has its own explicitly acknowledged/reported state model.
 
 ## GPS flow
 
@@ -211,7 +245,7 @@ validated LocationSample
         │
         ├──► batched runtime-channel publication ─► Rust ChannelStore
         │
-        └──► Esp32GpsEncoder ─► accessory BLE ─► ESP32/CAN (when enabled)
+        └──► GpsVariableEncoder ─► generic variable-set codec ─► BLE ─► ESP32/CAN (when enabled)
 ```
 
 Dashboard rendering never owns GPS acquisition truth.
@@ -226,16 +260,15 @@ logging Recorder
         │
         ├──► LogSession status/metrics
         │
-        └──► MeasurementStore writer abstraction
+        └──► MeasurementWriter abstraction
                          │
-                         ▼
-                       MDF4
-                         │
-                    optional sidecar
-                    index/recovery state
+             ┌───────────┴───────────┐
+             ▼                       ▼
+      MLG interoperability       MDF4 native candidate
+       writer/reader path        after benchmark/interop proof
 ```
 
-The MDF writer is a file-format implementation, not the logging-session owner.
+The logger owns recording-session orchestration. Format writers own only their format encoding/finalization/recovery mechanics. No writer format becomes runtime channel authority.
 
 ## Offline analyzer flow
 
@@ -249,7 +282,7 @@ NativeEngine
 Rust Analyzer
         │
         ▼
-MeasurementStore / MDF reader + index
+MeasurementStore / source-specific reader + optional index
         │
         ├─► required block/range reads only
         ├─► conversions/expressions
@@ -263,7 +296,7 @@ MeasurementStore / MDF reader + index
                Compose render
 ```
 
-Whole-file raw sample arrays should not cross into Kotlin for ordinary graph display.
+MDF4 may provide the long-term native large-log reader/index path, but the analyzer contract is not MDF-specific. Whole-file raw sample arrays should not cross into Kotlin for ordinary graph display.
 
 ## Interoperability import flow
 
