@@ -67,7 +67,7 @@ The reviewed original bridge does not expose confirmed physical relay/GPIO outpu
 
 ## Future direct ESP32 output state
 
-Owner only if a versioned direct-output capability is deliberately added: Kotlin direct-output semantic state store backed by explicit protocol acknowledgement/state feedback.
+Owner only if a versioned direct-output capability is deliberately added: Kotlin direct-output semantic state store/gateway backed by explicit protocol acknowledgement/state feedback.
 
 Tracks:
 
@@ -113,6 +113,8 @@ Authoritative source:
 
 - exact imported generated INI bytes/content;
 - its exact source fingerprint/signature identity.
+
+Signature equality is the live compatibility gate; the exact source fingerprint identifies the selected profile source used for compiled schemas/caches/project/tuning state.
 
 Compiled schemas/caches are immutable derived projections tied to that source identity.
 
@@ -246,17 +248,33 @@ A clean saved TuneSnapshot does not silently clear an uncertainty journal. Conve
 
 After uncertainty, a fresh live complete read/status verification establishes what the ECU actually contains before any new write/Burn.
 
-## 5. UI edit/draft state
+## 5. Semantic tune draft state
 
-Owner: Kotlin Tuner ViewModel for transient presentation interaction, with Rust semantic draft/model state where calculations or persistent local edits require it.
+Owner: Rust tuning domain.
 
-Draft values are explicitly distinct from:
+This is the authoritative local unverified semantic edit set when EpicHub supports staged tune edits, calculations, batch table operations or semantic undo/redo. It is explicitly distinct from:
 
 - saved project snapshot;
 - verified live ECU RAM;
 - operation journal.
 
-Whether user drafts survive process death is a product decision; persistence of a draft must never promote it to verified tune authority.
+A semantic draft may be derived from a verified/saved baseline, but it never becomes ECU or project authority until the corresponding explicit verification/persistence flow succeeds.
+
+Whether semantic drafts survive process death is a product decision; persistence of a draft must never promote it to verified tune authority.
+
+## 6. Tuner presentation/edit interaction state
+
+Owner: Kotlin Tuner ViewModel/Compose.
+
+Examples:
+
+- selected target/cell/range;
+- focused text field and in-progress textual input before semantic validation;
+- zoom/pan/panel/camera state;
+- dialog/modal state;
+- transient gesture state.
+
+Kotlin submits semantic edit intent to Rust; it does not retain a second authoritative semantic tune draft/history.
 
 ---
 
@@ -268,11 +286,13 @@ Tracks session identity, configuration, writer state, samples/events received/wr
 
 Logger Compose state is a projection only.
 
-## MDF/file state
+## Measurement-file state
 
-Owner: Rust MDF/measurement reader/writer for each opened file.
+Owner: the Rust measurement/source reader or selected `MeasurementWriter` for each opened/active file.
 
-Sidecar indexes/caches are derived/rebuildable unless explicitly documented otherwise. Stale/corrupt sidecars never override validated measurement data.
+Format-specific owners such as MLG interop or MDF may hold their own validated format state. Sidecar indexes/caches are derived/rebuildable unless explicitly documented otherwise. Stale/corrupt sidecars never override validated measurement data.
+
+No measurement-file reader/writer becomes ChannelStore or logging-session authority.
 
 ## Analyzer state
 
@@ -290,9 +310,9 @@ Bound runtime channel values remain Rust ChannelStore-owned.
 
 ## Settings state
 
-Owner: typed Kotlin settings store/repository to be locked before Phase 2.
+Owner: Kotlin `SettingsStore` (typed application/user preferences).
 
-Preferences cannot duplicate authoritative ECU/profile/tune values.
+The concrete Android persistence backend is a Phase 2 implementation choice, but ownership is already locked. Preferences cannot duplicate authoritative ECU/profile/tune values or become a hidden domain-state store.
 
 ## Diagnostics state
 
