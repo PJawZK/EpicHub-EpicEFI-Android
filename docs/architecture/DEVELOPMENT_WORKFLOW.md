@@ -4,7 +4,7 @@
 
 EpicHub is developed as a clean-slate product. Earlier EpicDash, EpicDash-JZ, EpicEFI firmware and related projects are evidence sources, not source-tree templates.
 
-The repository must preserve a clear distinction between:
+The repository preserves a clear distinction between:
 
 - product requirements and proven behaviour;
 - protocol/file-format authority;
@@ -14,118 +14,130 @@ The repository must preserve a clear distinction between:
 
 ## Repository workflow
 
-`main` is the integration branch. Substantial work is performed on descriptive feature/task branches and reviewed before integration.
+`main` is the integration branch.
 
-Phase 1 architecture work uses:
+Substantial work uses descriptive feature/task branches and PRs. The first Phase-2 foundation is already merged; current work uses `phase2/ui-diagnostics-foundation` / draft PR #3.
 
-`phase1/architecture-inventory`
+Generated binaries, signing material, secrets, personal paths, device identifiers and local build state are not committed.
 
-Generated binaries, signing material, secrets, personal paths, device identifiers and local build state must not be committed.
+## Historical Phase-1 classification
 
-## Phase 1 rule
+Phase 1 is closed. Its responsibility classifications remain useful vocabulary:
 
-Phase 1 is architecture and repository archaeology only. Do not add production Android or Rust implementation until the Phase 1 architecture contracts establish the intended ownership, boundaries, naming and topology.
+- `PRESERVE`
+- `REDESIGN`
+- `MERGE`
+- `SPLIT`
+- `REFERENCE`
+- `REMOVE`
 
-Reference repositories are inspected by domain. Findings are normalized into responsibilities rather than copied as historical files/classes.
+Evidence confidence remains:
 
-Every discovered responsibility is classified as one of:
+- `PROVEN`
+- `SUPPORTED`
+- `PROPOSED`
 
-- `PRESERVE` — required behaviour should remain;
-- `REDESIGN` — requirement remains but implementation should be replaced;
-- `MERGE` — several historical mechanisms should become one responsibility;
-- `SPLIT` — one historical implementation contains several responsibilities;
-- `REFERENCE` — useful evidence but not a production requirement;
-- `REMOVE` — historical behaviour/structure should not be carried forward.
-
-Evidence confidence is recorded as:
-
-- `PROVEN` — physically or otherwise explicitly qualified behaviour;
-- `SUPPORTED` — strongly evidenced by source/tests/protocol documentation but not necessarily requalified physically;
-- `PROPOSED` — new EpicHub architecture/design.
+Those labels describe responsibility/evidence disposition; they do not replace D-022's finer implementation-entry classification of individual historical behavior.
 
 ## Source authority
 
-When historical/external sources disagree, use the following default authority order unless a responsibility-specific protocol document establishes a stronger source:
+When historical/external sources disagree, default authority is:
 
-1. Firmware/protocol reality.
-2. Physically verified EpicDash-JZ behaviour.
-3. Exact generated INI/profile behaviour.
-4. Original EpicDash protocol/function intent.
-5. Other experimental, UI, tool and plugin repositories.
+1. firmware/protocol reality;
+2. physically verified EpicDash-JZ behaviour;
+3. exact generated INI/profile behaviour;
+4. original EpicDash protocol/function intent;
+5. other experimental/UI/tool/plugin repositories.
 
-UI/UX repositories may be authoritative for explicitly accepted interaction or visual behaviour, but never for ECU protocol, tune-memory or firmware truth.
+UI/UX references may be authoritative for explicitly accepted interaction/visual behavior, never ECU/tune-memory/firmware truth.
 
-Within EpicHub itself, follow the authority interpretation in `docs/architecture/README.md`: durable decisions and cross-domain contracts override older/local evidence wording; topology maps those contracts but does not supersede them.
+Within EpicHub, follow `docs/architecture/README.md` authority ordering. Durable decisions and cross-domain contracts override older/local evidence wording.
 
-## Clean reimplementation rule
+## Clean reimplementation rule — D-022
 
-Phase 1 responsibility archaeology does **not** certify historical source files as production-quality code and does not authorize bulk source migration.
-
-Before implementing any inherited subsystem or feature, follow `SOURCE_REIMPLEMENTATION_METHOD.md`:
+Before implementing inherited behavior, follow `SOURCE_REIMPLEMENTATION_METHOD.md`:
 
 ```text
 semantic behavior slice
-→ trace historical implementation/callers/tests/failure history
-→ classify required/safety/compatibility/useful/bug/obsolete/unknown behavior
-→ define clean owner + API + state/thread/lifetime/failure contract
-→ implement from scratch in EpicHub
-→ qualify against protocol truth / proven behavior / focused goldens
+→ trace old implementation/callers/state/lifecycle/errors/tests/bug history
+→ classify required/safety/compatibility/useful/accidental/buggy/obsolete/unknown behavior
+→ define clean owner/API/state/thread/lifetime/failure contract
+→ implement from scratch
+→ qualify against protocol truth/required behavior/focused fixtures
+→ regression-test historical failures
 → benchmark hot paths
-→ accept the narrow slice
-→ move to the next slice
+→ accept narrow slice
 ```
 
-The prohibited migration pattern is:
+Prohibited:
 
 ```text
 copy old subsystem
 → make it compile
-→ rename/refactor it later
+→ rename/refactor later
 ```
 
-Historical bugs and awkward fixes are mined for the invariant they reveal, not for the old control flow that implemented them.
+Substantial replacement PRs should record historical evidence reviewed, required invariants, old bugs/technical debt excluded, new owner/contract, tests/goldens, performance/physical evidence and deliberate differences.
 
-Old tests are reviewed as candidate behavioral specifications. Implementation-detail assertions and accidental/junk behavior are not transferred merely to make the new implementation match the old code.
+## Runtime language / serialization rule — D-023
 
-A substantial implementation PR that replaces historical behavior should identify:
+Production application logic remains Kotlin/Jetpack Compose + Rust.
 
-- historical evidence reviewed;
-- required behavior and safety invariants;
-- old bugs/technical debt deliberately excluded;
-- new permanent owner/contract;
-- test/golden evidence;
-- performance/physical evidence where applicable;
-- deliberate behavior differences from the old implementation.
+Do not introduce JavaScript/WebView/DOM application runtime or serialized-document messaging as a convenience architecture.
 
-This methodology applies to the entire project, including Android platform integration, ECU/profile/tuning, BLE/accessory, logging, MDF/MLG interoperability, analyzer/autotune, diagnostics and Compose UI.
+Before adding JSON, CBOR, XML, protobuf, MessagePack or another generic serializer, identify the explicit persistence/export/external-interoperability boundary that requires it.
+
+Runtime/JNI/domain communication remains typed/packed. Serializer dependencies stay isolated behind their boundary codecs.
+
+Current canonical diagnostic export is versioned `capture.cbor` + `report.txt`; CBOR is not the live diagnostic transport.
 
 ## Architecture changes
 
-Architecture documents are part of the implementation contract. A change that moves responsibility, state authority, dependency direction, transport ownership, safety policy or the Kotlin/Rust boundary must update the corresponding architecture documents in the same workstream.
+Architecture documents are implementation contracts. A change in responsibility, authority, dependency direction, transport ownership, safety policy, runtime-language policy, serialization boundary or Kotlin/Rust boundary updates the corresponding documents in the same workstream.
 
-New code should have an obvious permanent home before it is implemented. If it does not, resolve the ownership/topology question before adding production code.
+New code must have an obvious permanent owner/home before implementation.
 
 ### Cross-document consistency rule
 
-A durable architecture change is not complete merely because `DECISIONS.md` or one domain document was updated.
+Before accepting any durable architecture change:
 
-Before accepting that workstream:
+1. identify every document restating the changed concept;
+2. update them together, or explicitly mark old text as historical evidence;
+3. search the active branch/PR for superseded names, ownership statements, old phase status, provisional values, old implementation order and serialization/runtime leakage;
+4. resolve contradictions rather than relying on chronology;
+5. verify `GAP_ANALYSIS.md`, current handoff and active implementation contracts remain truthful.
 
-1. identify every document that restates the changed concept, including decision, ownership, dependency, data-flow, threading/FFI, action/safety, topology, test/gap, progress/handoff material where relevant;
-2. update those documents in the same workstream, or clearly mark a document as historical evidence that does not override the current contract;
-3. search the active branch/PR for superseded names, ownership statements, provisional values and old implementation-order phrases;
-4. resolve contradictory wording instead of relying on readers to infer which statement is newer;
-5. verify `REVIEW_CHECKLIST.md`, `GAP_ANALYSIS.md`, progress and handoff status remain truthful.
+Required stale-term checks now include, where relevant:
 
-Examples of useful stale-term checks include old gateway/class names, old decision ranges, provisional values that have since been locked, file-format-specific wording inside generic contracts and previous state-owner names.
+- old Phase-1 pending/acceptance wording;
+- old foundation-as-future wording;
+- old top-level navigation counts/destinations;
+- `JSON`, `NDJSON`, `JSONObject`, `WebView`, `JavaScript`, `React`, `TypeScript` when used as current target instructions rather than historical evidence;
+- JSON/CBOR document payloads over JNI;
+- serializers imported into runtime/domain state packages;
+- file-format-specific wording inside generic logging/analysis contracts;
+- old state-owner/gateway names.
 
-Evidence documents may intentionally describe historical behavior that differs from the target architecture, but they must label that behavior as evidence/history rather than a current production instruction.
+Historical evidence may legitimately contain those terms, but must not present them as current target architecture.
 
 ## Experiments
 
-Competing implementations may temporarily use explicit experimental names such as `UsbTransportT2` or `UsbTransportExperimental` when a permanent implementation already exists.
+Competing implementations may temporarily use explicit experiment names when comparing real alternatives. Accepted code receives permanent descriptive names; rejected variants are removed or retained only as deliberate test/reference material.
 
-Experimental names must not survive acceptance. The selected implementation receives the permanent descriptive name before integration, and rejected variants are removed or retained only as deliberate test/reference material.
+## Testing/qualification discipline
+
+Every accepted slice gets the cheapest strong proof available before adding more complexity:
+
+- pure unit/golden tests;
+- ABI/schema tests;
+- fault-injection/lifecycle tests;
+- CI build/lint/static checks;
+- device/bench qualification where behavior depends on Android/hardware;
+- performance measurement for hot paths.
+
+Do not stack multiple unqualified subsystems and attempt to debug the combined result later.
+
+The current UI/diagnostics slice must be qualified with the existing synthetic RuntimeSnapshot foundation before live ECU transport is attached.
 
 ## Chat handoff workflow
 
@@ -133,14 +145,14 @@ There is exactly one current handoff file:
 
 `docs/HANDOFF.md`
 
-Git history is the handoff archive. Do not create numbered or dated handoff files.
+Git history is the archive. Do not create numbered/dated handoff files.
 
 When the user requests **"Create the EpicHub handoff"**:
 
-1. inspect the actual repository state, including active branch, head SHA, PR state and relevant CI/qualification state;
-2. incorporate only durable decisions, completed work, unresolved issues and the next concrete action from the current chat;
-3. replace/update `docs/HANDOFF.md` so stale branch/PR/task information does not accumulate;
-4. point to authoritative repository documents instead of duplicating them;
+1. inspect actual branch/head/PR/CI/qualification state;
+2. incorporate only durable decisions, completed work, unresolved issues and next action;
+3. replace/update `docs/HANDOFF.md` rather than append stale history;
+4. point to repository authority docs instead of duplicating them;
 5. commit the handoff update;
 6. return a minimal continuation instruction.
 
@@ -148,22 +160,17 @@ Preferred continuation instruction:
 
 `Read PJawZK/EpicHub-EpicEFI-Android/docs/HANDOFF.md, verify the repository state, and continue from there.`
 
-A new chat must read the handoff first, verify the branch/SHA/PR it names, then read the specifically referenced documents/source files before modifying the project.
+## Current development gate
 
-## Phase 1 completion gate
+Phase 1 is closed and the first Phase-2 foundation is qualified.
 
-Phase 1 is complete only when the repository can answer, with documented ownership:
+Current gate:
 
-- what every meaningful inherited responsibility is;
-- whether it is preserved, redesigned, merged, split, reference-only or removed;
-- what major new EpicHub responsibilities have no historical owner;
-- where each retained/new responsibility will live;
-- which language/runtime owns each subsystem;
-- which source is authoritative for each important protocol/schema;
-- who owns each mutable state;
-- what crosses the Kotlin/Rust boundary;
-- what the dependency direction is;
-- what tests qualify each major subsystem;
-- whether the current architecture documents agree after a cross-document consistency pass.
+```text
+accept PR #3 UI + diagnostic contracts
+→ implement responsive shell + typed diagnostics/capture on synthetic foundation
+→ CI + SM-A137F + SM-T500 qualification
+→ only then start D-022 review/implementation of read-only live ECU acquisition
+```
 
-Only after this gate and explicit user acceptance should production Android/Rust scaffolding begin.
+ECU mutation/Burn/logger formats/BLE migration/analyzer-autotune remain outside the current slice.
