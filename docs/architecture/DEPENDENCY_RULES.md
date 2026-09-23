@@ -4,7 +4,9 @@
 
 The topology only works if dependency direction prevents domains from silently absorbing each other's responsibilities.
 
-These are Phase 1 rules. Exact crate/package visibility is finalized during the Phase 2 scaffold while preserving these boundaries.
+These are accepted architecture rules carried from Phase 1 into Phase 2. Exact physical crate/package splits may evolve, but the ownership/dependency boundaries do not change implicitly.
+
+D-023 / `RUNTIME_LANGUAGE_AND_SERIALIZATION.md` is also part of this contract: generic serializers are boundary codecs, not runtime/domain dependencies.
 
 ## Core direction
 
@@ -49,7 +51,8 @@ Compose must not depend directly on:
 - measurement-file block/record structures;
 - BLE characteristic objects for semantic actions;
 - CAN IDs/button masks/raw GPIO as user-facing identity;
-- historical WebView/JS bridge contracts.
+- historical WebView/JS bridge contracts;
+- JSON/CBOR codecs as a way to obtain live domain state.
 
 A UI draft is not verified ECU or persisted project authority.
 
@@ -60,9 +63,31 @@ Android platform packages may use Android framework APIs and expose narrow resou
 - `platform/usb` does not parse tunes or decide profile compatibility.
 - `platform/bluetooth` does not interpret downstream CAN/action success.
 - `platform/location` does not own dashboard widgets or generic ESP32 variable-set semantics.
-- `platform/storage` does not implement measurement/tune/profile serialization or decide whether a project generation is valid.
+- `platform/storage` does not implement measurement/tune/profile semantic authority or decide whether a project generation is valid.
 
-Android SAF/document code moves validated/imported/exported bytes and URI permissions; Rust project/tuning/measurement code owns format/schema and identity validation.
+Android SAF/document code moves validated/imported/exported bytes and URI permissions; domain codecs own format/schema and identity validation.
+
+## Serialization boundary rules
+
+Runtime/domain packages must not depend on generic document serialization merely to communicate internally.
+
+Prohibited dependency patterns include:
+
+```text
+Compose → JSON parser → runtime state
+NativeEngine → JSON/CBOR document → Compose
+ChannelStore → generic serialized document
+Diagnostics event ring → CBOR/JSON per event
+Tuning domain → JSON-shaped authority/cache by convenience
+```
+
+Serializer/codec dependencies belong only in explicit persistence/export/interoperability packages.
+
+Examples:
+
+- diagnostic CBOR codec depends on typed `DiagnosticCapture`, not vice versa;
+- MLG/MDF codecs depend on common measurement contracts, not ChannelStore on MLG/MDF internals;
+- optional JSON tooling converter depends on canonical export schema, never the reverse.
 
 ## Legacy bridge rules
 
@@ -97,11 +122,12 @@ Physical output mapping/defaults/interlocks/watchdog/disconnect fail-safe remain
 
 Normal Kotlin production code calls Rust only through `nativeengine`.
 
-FFI is coarse and semantic. Prohibited hot-path patterns include:
+FFI is coarse, typed and semantic. Prohibited patterns include:
 
 - one JNI getter per channel;
 - one JNI call per high-rate ECU sample;
 - callbacks per high-rate sample/channel;
+- JSON/CBOR/XML documents used as JNI payloads;
 - huge object graphs where packed/shared buffers fit;
 - exposing internal Rust pointers/layout without versioned ABI.
 
@@ -120,9 +146,10 @@ It must not import:
 - Compose/Android;
 - tuner UI concepts;
 - measurement-format block/record structures;
-- ESP32 GATT types.
+- ESP32 GATT types;
+- JSON/CBOR serialization as its state representation.
 
-ECU/GPS/bridge sources adapt observations into sample/channel contracts.
+ECU/GPS/bridge sources adapt observations into typed sample/channel contracts.
 
 ## ECU rules
 
@@ -145,7 +172,7 @@ Other domains consume typed compiled schemas; there is no second parser in Tuner
 
 Profile condition compatibility/write authority remains independently tested from the general analyzer expression language.
 
-Derived compiled profile/schema caches depend on exact source identity and are disposable.
+Derived compiled profile/schema caches depend on exact source identity and are disposable. Their future persisted representation must be selected deliberately under D-023 rather than defaulting to JSON.
 
 ## Tuning rules
 
@@ -186,7 +213,7 @@ Android document bytes
 → transactional local project-generation commit
 ```
 
-Export reverses this without exposing tune mutation authority.
+Export reverses this without exposing tune mutation authority. The concrete archive encoding remains a feature-entry decision and must satisfy D-023.
 
 ### Operation journal rule
 
@@ -226,21 +253,28 @@ Diagnostics observe/report but do not become subsystem decision authority.
 
 Instrumentation must not change queue/transport/tuning decisions merely for convenience.
 
+Live events/metrics/lifecycle state are typed Kotlin/Rust state. Rust→Kotlin diagnostics use bounded typed/packed batches.
+
+The diagnostic CBOR serializer depends on a finalized immutable `DiagnosticCapture` and is invoked only for persistence/export. The live diagnostic rings do not depend on CBOR/JSON serializers.
+
 Warning evaluation emits warning state/incidents only. If a future automation reacts to warning state, that action is owned by a separate explicit AutomationRule/ActionPolicy path rather than by diagnostics/warning evaluation itself.
 
 ## Interop rules
 
 MSL/MLG/CSV adapters translate external formats into/out of EpicHub common measurement/channel contracts. External formats do not become the internal runtime model.
 
+JSON, if ever required by a third-party tool, follows the same rule: isolated adapter/export projection only.
+
 ## Enforcement direction
 
-During the Phase 2 foundation and as each subsystem is introduced, translate important rules into practical enforcement where useful:
+As each Phase-2 subsystem is introduced, translate important rules into practical enforcement where useful:
 
 - Rust crate dependency graph;
 - Kotlin visibility/package rules;
-- architecture tests for prohibited imports;
+- architecture tests for prohibited imports/serialization leaks;
 - FFI ABI tests;
+- diagnostic CBOR codec tests;
 - persistence/operation-journal fault-injection tests;
 - review checklist.
 
-Architecture ownership is locked in Phase 1; the executable enforcement is added alongside the code it can actually validate.
+Architecture ownership is locked; executable enforcement is added alongside the code it can actually validate.
