@@ -4,7 +4,7 @@
 
 The topology only works if dependency direction prevents domains from silently absorbing each other's responsibilities.
 
-These are Phase 1 rules. Exact crate/package visibility is finalized before implementation.
+These are Phase 1 rules. Exact crate/package visibility is finalized during the Phase 2 scaffold while preserving these boundaries.
 
 ## Core direction
 
@@ -19,15 +19,19 @@ Compose UI
                          ▼            ▼            ▼
                        ECU/Profile  Channels      Tuning
                                       │             │
-                           ┌──────────┼──────┐      ├─ project authority
-                           ▼          ▼      ▼      └─ operation journal
-                         Logging     MDF   Analysis
-                                               │
-                                               ▼
-                                            Plotting
+                           ┌──────────┴─────────┐   ├─ project authority
+                           ▼                    ▼   └─ operation journal
+                        Logging             Analysis
+                           │                    │
+                           ▼                    ├─► Plotting
+                    MeasurementWriter          │
+                    /              \           ▼
+               MLG/interop          MDF   MeasurementStore
+                                           /           \
+                                      interop readers   MDF reader
 ```
 
-Dependencies point toward lower-level domain contracts, never toward presentation consumers.
+Dependencies point toward lower-level domain contracts, never toward presentation consumers. MLG/MDF are format implementations at the measurement boundary; neither becomes ChannelStore/runtime authority.
 
 ## Kotlin UI rules
 
@@ -42,7 +46,7 @@ Compose must not depend directly on:
 
 - ECU framing/CRC;
 - raw tune pages/offsets/encoded bytes;
-- MDF block structures;
+- measurement-file block/record structures;
 - BLE characteristic objects for semantic actions;
 - CAN IDs/button masks/raw GPIO as user-facing identity;
 - historical WebView/JS bridge contracts.
@@ -56,9 +60,9 @@ Android platform packages may use Android framework APIs and expose narrow resou
 - `platform/usb` does not parse tunes or decide profile compatibility.
 - `platform/bluetooth` does not interpret downstream CAN/action success.
 - `platform/location` does not own dashboard widgets or generic ESP32 variable-set semantics.
-- `platform/storage` does not implement MDF/tune/profile serialization or decide whether a project generation is valid.
+- `platform/storage` does not implement measurement/tune/profile serialization or decide whether a project generation is valid.
 
-Android SAF/document code moves validated/imported/exported bytes and URI permissions; Rust project/tuning code owns archive/project schema and identity validation.
+Android SAF/document code moves validated/imported/exported bytes and URI permissions; Rust project/tuning/measurement code owns format/schema and identity validation.
 
 ## Legacy bridge rules
 
@@ -72,7 +76,7 @@ Legacy ESP32 bridge code may depend on:
 It must not depend on:
 
 - ECU tune-memory internals;
-- MDF internals;
+- measurement-format internals;
 - Dashboard-specific state.
 
 The generic variable-set codec must not import location; GPS is only one producer.
@@ -93,13 +97,15 @@ Physical output mapping/defaults/interlocks/watchdog/disconnect fail-safe remain
 
 Normal Kotlin production code calls Rust only through `nativeengine`.
 
-FFI is coarse and semantic. Prohibited patterns include:
+FFI is coarse and semantic. Prohibited hot-path patterns include:
 
 - one JNI getter per channel;
-- one JNI call per ECU sample;
-- callbacks per sample/channel;
+- one JNI call per high-rate ECU sample;
+- callbacks per high-rate sample/channel;
 - huge object graphs where packed/shared buffers fit;
 - exposing internal Rust pointers/layout without versioned ABI.
+
+Low-rate discrete Android-source events may cross individually when batching would add complexity without material benefit, but this is an explicit low-rate exception rather than a pattern for ECU/runtime streaming.
 
 ## Rust engine rules
 
@@ -113,7 +119,7 @@ It must not import:
 
 - Compose/Android;
 - tuner UI concepts;
-- MDF block structures;
+- measurement-format block/record structures;
 - ESP32 GATT types.
 
 ECU/GPS/bridge sources adapt observations into sample/channel contracts.
@@ -125,7 +131,7 @@ ECU protocol code may depend on transport/profile/channel primitives needed for 
 It must not depend on:
 
 - Dashboard/Tuner Compose packages;
-- MDF writer internals;
+- measurement writer/reader format internals;
 - BLE/GATT accessory code;
 - arbitrary UI settings.
 
@@ -190,25 +196,29 @@ It must be durable before possible hardware mutation, and its presence/corruptio
 
 No saved project cache may automatically clear an uncertainty journal.
 
-## Logging / MDF rules
+## Logging / measurement-format rules
 
-`logging` orchestrates recording and writes sample/event batches through a measurement-writer abstraction.
+`logging` orchestrates recording and writes sample/event batches through a `MeasurementWriter` abstraction.
 
-`mdf` implements MDF mechanics.
+Format implementations own their own mechanics:
+
+- MLG reader/writer lives in interoperability code for the first ecosystem-compatible writer path;
+- MDF implements MDF block/metadata/compression/index/recovery mechanics when the native MDF4 path is introduced.
 
 Therefore:
 
-- logging does not duplicate MDF blocks;
-- MDF knows no Compose/dashboard/tune semantics;
-- Dashboard is not in the writer path.
+- logging does not duplicate MLG records or MDF blocks;
+- format codecs know no Compose/dashboard/tune semantics;
+- Dashboard is not in the writer path;
+- selecting MLG or MDF does not change ChannelStore/runtime ownership.
 
 ## Analysis / plotting rules
 
-`analysis` operates on measurement/channel sources and produces semantic results.
+`analysis` operates on `MeasurementStore`/channel sources and produces semantic results.
 
 `plotting` produces viewport-sized trace packets.
 
-Neither depends on Compose. Compose owns interaction/cursors/viewport requests only.
+Neither depends on Compose or on one mandatory file format. Compose owns interaction/cursors/viewport requests only.
 
 ## Diagnostics rules
 
@@ -216,13 +226,15 @@ Diagnostics observe/report but do not become subsystem decision authority.
 
 Instrumentation must not change queue/transport/tuning decisions merely for convenience.
 
+Warning evaluation emits warning state/incidents only. If a future automation reacts to warning state, that action is owned by a separate explicit AutomationRule/ActionPolicy path rather than by diagnostics/warning evaluation itself.
+
 ## Interop rules
 
 MSL/MLG/CSV adapters translate external formats into/out of EpicHub common measurement/channel contracts. External formats do not become the internal runtime model.
 
 ## Enforcement direction
 
-Before Phase 2, translate important rules into practical enforcement where useful:
+During the Phase 2 foundation and as each subsystem is introduced, translate important rules into practical enforcement where useful:
 
 - Rust crate dependency graph;
 - Kotlin visibility/package rules;
@@ -230,3 +242,5 @@ Before Phase 2, translate important rules into practical enforcement where usefu
 - FFI ABI tests;
 - persistence/operation-journal fault-injection tests;
 - review checklist.
+
+Architecture ownership is locked in Phase 1; the executable enforcement is added alongside the code it can actually validate.
