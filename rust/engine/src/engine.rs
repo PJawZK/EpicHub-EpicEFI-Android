@@ -3,20 +3,26 @@ use std::sync::{LazyLock, Mutex};
 use std::time::Instant;
 
 use crate::channel_store::ChannelStore;
+use crate::diagnostics::{
+    DIAGNOSTIC_BATCH_SIZE, DIAGNOSTIC_CODE_RUNTIME_SNAPSHOT_PUBLISHED,
+    DIAGNOSTIC_SEVERITY_TRACE, EngineDiagnostics,
+};
 use crate::runtime_snapshot::{RUNTIME_SNAPSHOT_SIZE, RuntimeSnapshot};
 
 struct EngineState {
     started_at: Instant,
     sequence: u64,
     channels: ChannelStore,
+    diagnostics: EngineDiagnostics,
 }
 
 impl EngineState {
-    fn new() -> Self {
+    fn new(handle: i64) -> Self {
         Self {
             started_at: Instant::now(),
             sequence: 0,
             channels: ChannelStore::new_synthetic(),
+            diagnostics: EngineDiagnostics::new(u64::try_from(handle).unwrap_or(0)),
         }
     }
 
@@ -26,6 +32,16 @@ impl EngineState {
         self.sequence = self.sequence.saturating_add(1);
 
         let monotonic_nanos = u64::try_from(elapsed.as_nanos()).unwrap_or(u64::MAX);
+        if self.sequence == 1 || self.sequence.is_multiple_of(20) {
+            self.diagnostics.record(
+                monotonic_nanos,
+                DIAGNOSTIC_CODE_RUNTIME_SNAPSHOT_PUBLISHED,
+                DIAGNOSTIC_SEVERITY_TRACE,
+                self.sequence,
+                self.channels.samples().len() as u64,
+            );
+        }
+
         RuntimeSnapshot::from_channel_store(
             self.sequence,
             monotonic_nanos,
@@ -33,6 +49,10 @@ impl EngineState {
             &self.channels,
         )
         .encode()
+    }
+
+    fn drain_diagnostics(&mut self) -> [u8; DIAGNOSTIC_BATCH_SIZE] {
+        self.diagnostics.drain_batch()
     }
 }
 
@@ -56,7 +76,7 @@ impl EngineRegistry {
         }
 
         self.next_handle += 1;
-        self.engines.insert(handle, EngineState::new());
+        self.engines.insert(handle, EngineState::new(handle));
         handle
     }
 
@@ -79,6 +99,12 @@ impl EngineRegistry {
         self.engines
             .get_mut(&handle)
             .map(|engine| engine.next_snapshot(session_id))
+    }
+
+    fn diagnostic_batch(&mut self, handle: i64) -> Option<[u8; DIAGNOSTIC_BATCH_SIZE]> {
+        self.engines
+            .get_mut(&handle)
+            .map(EngineState::drain_diagnostics)
     }
 }
 
@@ -112,9 +138,17 @@ pub fn runtime_snapshot(handle: i64) -> Option<[u8; RUNTIME_SNAPSHOT_SIZE]> {
     with_registry(|registry| registry.snapshot(handle))
 }
 
+pub fn diagnostic_batch(handle: i64) -> Option<[u8; DIAGNOSTIC_BATCH_SIZE]> {
+    with_registry(|registry| registry.diagnostic_batch(handle))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::diagnostics::{
+        DIAGNOSTIC_BATCH_ABI_VERSION, DIAGNOSTIC_CODE_ENGINE_CREATED,
+        DIAGNOSTIC_CODE_RUNTIME_SNAPSHOT_PUBLISHED,
+    };
     use crate::runtime_snapshot::{RUNTIME_SNAPSHOT_ABI_VERSION, RUNTIME_SNAPSHOT_SIZE};
 
     fn read_u32(bytes: &[u8], offset: usize) -> u32 {
@@ -158,12 +192,30 @@ mod tests {
     }
 
     #[test]
-    fn closed_or_unknown_handle_cannot_publish_snapshot() {
+    fn native_diagnostics_are_bounded_and_drainable() {
+        let mut registry = EngineRegistry::new();
+        let handle = registry.create();
+        let _ = registry.snapshot(handle).unwrap();
+
+        let first = registry.diagnostic_batch(handle).unwrap();
+        let second = registry.diagnostic_batch(handle).unwrap();
+
+        assert_eq!(read_u32(&first, 0), DIAGNOSTIC_BATCH_ABI_VERSION);
+        assert_eq!(read_u32(&first, 8), 2);
+        assert_eq!(read_u32(&first, 32), DIAGNOSTIC_CODE_ENGINE_CREATED);
+        assert_eq!(read_u32(&first, 72), DIAGNOSTIC_CODE_RUNTIME_SNAPSHOT_PUBLISHED);
+        assert_eq!(read_u32(&second, 8), 0);
+    }
+
+    #[test]
+    fn closed_or_unknown_handle_cannot_publish_state() {
         let mut registry = EngineRegistry::new();
         let handle = registry.create();
         registry.close(handle);
 
         assert!(registry.snapshot(handle).is_none());
+        assert!(registry.diagnostic_batch(handle).is_none());
         assert!(registry.snapshot(i64::MAX).is_none());
+        assert!(registry.diagnostic_batch(i64::MAX).is_none());
     }
 }
