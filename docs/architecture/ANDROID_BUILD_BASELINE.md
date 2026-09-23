@@ -1,67 +1,42 @@
-# EpicHub Initial Android Build Baseline
+# EpicHub Android Build Baseline
 
 ## Purpose
 
-This document locks the product/build assumptions needed to begin Phase 2 without turning toolchain versions into permanent architecture.
+This document locks the supported Android/API/ABI envelope and records the first physically qualified Kotlin/Rust foundation baseline.
 
-Checked against current Android platform guidance and the known physical EpicHub test-device family on 2026-09-22.
+The support contract is architecture; exact toolchain patch versions are reproducible implementation pins and may be maintained without reopening the architecture unless support behavior changes.
 
 ---
 
 # Application identity
 
-Initial permanent Android application ID and Kotlin namespace:
+Permanent Android application ID and Kotlin namespace:
 
 ```text
 com.epicefi.epichub
 ```
 
-Rationale:
-
-- EpicHub is a clean-slate application with no package/update continuity requirement from `com.buttonbox.ble.jz`;
-- the selected public product name is EpicEFI – EpicHub / EpicHub;
-- no current public search collision for the exact application ID was found during Phase 1 review;
-- changing `applicationId` after public distribution creates a new Android application identity, so it is better to lock this before production scaffolding.
-
-`namespace` should initially match `applicationId` unless a concrete build reason later requires otherwise.
+EpicHub is a clean-slate application with no package/update continuity requirement from `com.buttonbox.ble.jz`.
 
 ---
 
 # Android API baseline
 
-Initial baseline:
-
 ```text
-minSdk      = 26   # Android 8.0+
-targetSdk   = 36   # Android 16 behaviour target / current Play submission baseline
-compileSdk  = 37   # current Compose/AndroidX compilation requirement baseline
+minSdk      = 26
+ targetSdk   = 36
+compileSdk  = 37
 ```
 
-## Why minSdk 26
+`minSdk 26` is a deliberate EpicHub support/maintenance baseline rather than a Compose limitation.
 
-Compose itself can support older Android versions, so API 26 is a deliberate EpicHub product/maintenance baseline rather than a Compose limitation.
-
-It keeps support substantially broader than the current physical test devices while avoiding carrying compatibility complexity for very old Android generations that are not part of the intended in-car hardware matrix.
-
-Raising `minSdk` later is possible but removes installability for older devices; lowering it later requires actual compatibility work. Therefore API 26 is treated as the initial support contract and is tested rather than assumed.
-
-## Why targetSdk 36
-
-As of 2026-09-22, Google Play requires new apps and updates submitted from 2026-08-31 onward to target Android 16 / API 36 or higher for ordinary phone/tablet apps.
-
-Target API is an evolving platform/distribution requirement, not a permanent architecture constant. Phase 2 may raise it after qualification; it must not be silently lowered below current distribution requirements.
-
-## Why compileSdk 37
-
-Current stable Compose 1.12.x adopted API 37 compilation requirements. `compileSdk` is independent from `targetSdk`, so EpicHub can compile against API 37 while deliberately targeting the qualified API-36 behaviour contract.
-
-The exact Compose/AndroidX/AGP versions are pinned in the repository when Phase 2 creates the build; architecture only requires using mutually compatible current stable versions and keeping those pins reproducible.
+Target/compile SDK values may advance with Android distribution/platform requirements; they must not be silently lowered in a way that breaks the accepted support/distribution contract.
 
 ---
 
 # Native ABI baseline
 
-Production ARM ABIs initially supported:
+Production ARM ABIs:
 
 ```text
 armeabi-v7a
@@ -75,108 +50,103 @@ armv7-linux-androideabi
 aarch64-linux-android
 ```
 
-Do **not** begin as arm64-only.
+Arm64-only remains rejected for the initial product because the SM-A137F reference phone must remain supported.
 
-## Physical-device reason
+No x86 ABI is part of the production-device contract. A test-only x86_64 build may later be added if useful for CI/emulators, but it does not redefine release support.
 
-The actual EpicHub reference family includes:
+---
 
-- Samsung SM-A137F phone;
-- Samsung SM-T500 tablet.
+# Accepted foundation toolchain
 
-Phase 1 review found stock-firmware evidence that SM-A137F variants may expose a 32-bit Android userspace / `armeabi-v7a` despite a 64-bit-capable SoC. The SM-T500 has evidence exposing `arm64-v8a` and `armeabi-v7a`.
+The first Phase-2 foundation established and CI-qualified a reproducible toolchain including:
 
-Therefore an arm64-only Rust `.so` would risk making the clean EpicHub app uninstallable on the existing SM-A137F physical test phone.
+- Android Gradle Plugin 9.4.0;
+- Gradle 9.6;
+- JDK 17;
+- Kotlin/Compose compiler 2.4.20;
+- Compose BOM 2026.09.00;
+- Android API 37 preview platform/build tools required by the selected Compose/AndroidX stack;
+- Android NDK r30 / `30.0.16248370`;
+- Rust 1.98.1;
+- `cargo-ndk` 4.1.2;
+- committed Cargo.lock with Rust builds/checks using `--locked`.
 
-The first Phase 2 diagnostic build must record the real `Build.SUPPORTED_ABIS` from each physical target and retain it with qualification evidence. Until the 32-bit A13 requirement is deliberately retired, both ARM ABIs remain supported.
-
-## x86/x86_64
-
-No x86 ABI is part of the production-device support contract.
-
-An emulator/test-only x86_64 native build may be added if it materially improves CI/development, but it must not be confused with the production ABI matrix or impose unnecessary release size.
+Exact pins remain source-controlled build facts. Later compatible maintenance updates are normal Phase-2 work and do not require an architecture decision unless they change API/ABI/device support or runtime ownership.
 
 ---
 
 # Packaging and application-size rule
 
-Because EpicHub contains Rust native libraries for two ARM ABIs, do not force every direct-install user to carry both copies unnecessarily.
-
-Preferred release packaging:
+Preferred user packaging remains ABI-split where distribution permits it:
 
 ```text
 Google Play / bundle distribution
 → Android App Bundle ABI split
 
 Direct APK distribution
-→ ABI-specific APKs:
-   EpicHub-armeabi-v7a.apk
-   EpicHub-arm64-v8a.apk
+→ ABI-specific APKs where practical
 ```
 
-A universal dual-ABI APK may exist for bench/internal convenience, but it is not the preferred end-user artifact when size matters.
+A universal dual-ABI APK is acceptable for bench/internal qualification.
 
-This application packaging decision is separate from the much more important measurement-log file-size requirement in D-015.
-
----
-
-# Toolchain policy
-
-Phase 2 should pin exact reproducible versions in source control rather than depend on developer-machine defaults.
-
-Current 2026-09-22 reference points include:
-
-- Android Gradle Plugin 9.4 stable family;
-- JDK 17 compatibility;
-- API 37 compilation support;
-- Android NDK r30 as the current LTS NDK;
-- both `armeabi-v7a` and `arm64-v8a` remain Android NDK-supported ABIs.
-
-The exact NDK/Rust/cargo-ndk combination is an implementation compatibility decision. It may be pinned to the newest combination that passes both ARM builds and JNI tests; selecting that exact patch version does not require reopening Phase 1 architecture.
+This APK-size concern is separate from D-015's much larger measurement-log storage requirement.
 
 ---
 
-# Initial physical support matrix
+# Physical support matrix
 
-Minimum Phase 2 physical matrix:
+Current reference devices:
 
 ```text
 SM-A137F
 - phone
-- 32-bit ARM Android userspace must be assumed until measured otherwise
-- portrait + landscape
-- USB host/OTG ECU workflow
-- BLE/GPS/lifecycle/logger performance
+- portrait + landscape target
+- USB host/OTG ECU workflow target
+- BLE/GPS/lifecycle/logger performance target
 
 SM-T500
 - tablet
-- arm64-v8a-capable Android userspace
-- portrait + landscape
-- USB host/OTG ECU workflow
-- BLE/GPS/lifecycle/logger/analyzer performance
+- portrait + landscape target
+- USB host/OTG ECU workflow target
+- BLE/GPS/lifecycle/logger/analyzer performance target
 ```
 
-Additional devices/head units can expand the matrix later without changing the base architecture.
+Additional devices/head units may expand the matrix later without changing the base architecture.
 
 ---
 
-# Phase 2 acceptance checks for this baseline
+# Foundation qualification status
 
-Before declaring the scaffold baseline qualified:
+The first Kotlin/Rust foundation is **qualified**, not pending.
 
-1. both production ARM native libraries build in CI;
-2. ABI-specific APK/AAB contents are inspected and contain the intended `.so` only;
-3. each physical reference device reports and records `SUPPORTED_ABIS`;
-4. both devices install/launch the correct ABI build;
-5. JNI engine create/close/recreate smoke tests pass on both;
-6. foreground/background and orientation recreation do not duplicate native engine ownership;
-7. Compose renders correctly at the physical display sizes/densities;
-8. USB/BLE permissions can be exercised under each device's current Android permission model.
+Automated qualification proved:
 
-## Phase 1 conclusion
+- Rust format/lint/tests;
+- Kotlin/JVM RuntimeSnapshot ABI tests;
+- Android assembly;
+- Rust build for both production ARM ABIs;
+- APK inspection containing both `libepichub_engine.so` variants;
+- reproducible locked Rust dependency graph.
 
-The build identity and initial Android support envelope are sufficiently locked to begin scaffolding after Phase 1 acceptance:
+Physical execution of the same qualified foundation APK passed on:
 
-> `com.epicefi.epichub`, Android API 26+, current target API 36, compile API 37, and dual ARM `armeabi-v7a` + `arm64-v8a` production support with ABI-split release artifacts.
+- Samsung SM-A137F phone;
+- Samsung SM-T500 tablet.
 
-Future target/compile SDK increases and toolchain patch updates are normal maintenance, not architecture changes.
+Observed on both: installation succeeds, the app remains running, RuntimeSnapshot sequence advances, synthetic channel values remain valid/active and no native/lifecycle crash was observed during the reported checks.
+
+Future UI/diagnostic/USB/logger qualification extends this baseline; it does not make the already-qualified foundation "unimplemented" again.
+
+---
+
+# Current use of the baseline
+
+The active Phase-2 UI/diagnostics slice must continue to build and run under both production ABIs and on both reference devices.
+
+The next inherited ECU/USB slice must not alter the API/ABI support contract merely to simplify native transport implementation.
+
+D-023 also applies to all new foundation work: Kotlin/Compose + Rust remain the production runtime languages, and serialized document formats are restricted to explicit persistence/export/interoperability boundaries.
+
+## Summary
+
+> EpicHub currently targets `com.epicefi.epichub`, Android API 26+, target API 36, compile API 37, and dual `armeabi-v7a` + `arm64-v8a` production support. The first Kotlin/Rust foundation is already CI- and device-qualified on the SM-A137F and SM-T500.
