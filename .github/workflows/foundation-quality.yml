@@ -53,9 +53,10 @@ jobs:
           test -d "$SDK_ROOT/ndk/30.0.16248370"
 
       - name: Set up Gradle 9.6
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: '9.6.0'
+          cache-provider: basic
 
       - name: Set up Rust 1.98.1
         shell: bash
@@ -80,3 +81,24 @@ jobs:
 
       - name: Android debug build
         run: gradle :app:assembleDebug --stacktrace
+
+      - name: Verify production ARM libraries in APK
+        shell: bash
+        run: |
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          test -f "$APK"
+          unzip -Z1 "$APK" > "$RUNNER_TEMP/apk-contents.txt"
+          grep -Fxq "lib/armeabi-v7a/libepichub_engine.so" "$RUNNER_TEMP/apk-contents.txt"
+          grep -Fxq "lib/arm64-v8a/libepichub_engine.so" "$RUNNER_TEMP/apk-contents.txt"
+
+          mapfile -t EPICHUB_LIBS < <(grep '/libepichub_engine\.so$' "$RUNNER_TEMP/apk-contents.txt")
+          test "${#EPICHUB_LIBS[@]}" -eq 2
+          printf 'Verified packaged native libraries:\n%s\n' "${EPICHUB_LIBS[@]}"
+
+      - name: Publish qualified foundation APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: epichub-foundation-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
