@@ -83,6 +83,14 @@ jobs:
       - name: Rust tests
         run: cargo test --manifest-path rust/engine/Cargo.toml
 
+      - name: Publish generated Rust lockfile
+        uses: actions/upload-artifact@v7
+        with:
+          name: epichub-rust-lockfile
+          path: rust/engine/Cargo.lock
+          if-no-files-found: error
+          retention-days: 2
+
       - name: Android JVM tests
         run: gradle :app:testDebugUnitTest --stacktrace
 
