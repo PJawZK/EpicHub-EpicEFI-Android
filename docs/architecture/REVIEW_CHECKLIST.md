@@ -2,7 +2,9 @@
 
 Use this checklist before declaring Phase 1 complete.
 
-Current assessment after the dedicated documentation-consistency audit: **45 / 46 items satisfied**. Production scaffolding remains blocked only by explicit user acceptance.
+Final assessment after the dedicated documentation-consistency audit and explicit user acceptance on **2026-09-23**: **46 / 46 items satisfied**.
+
+Phase 1 is accepted and closed. Production scaffolding may now begin only through the deliberately small non-mutating Phase 2 foundation slice described in `PHASE1_GATE_ASSESSMENT.md`.
 
 See `PHASE1_GATE_ASSESSMENT.md` for the reconciliation findings and the distinction between accepted architecture, Phase 2 measured PoCs, feature-entry prerequisites and deliberately deferred product decisions.
 
@@ -74,16 +76,17 @@ See `PHASE1_GATE_ASSESSMENT.md` for the reconciliation findings and the distinct
 - [x] `docs/HANDOFF.md` is the only active handoff file.
 - [x] architecture docs agree with current repository decisions after a dedicated literal/cross-contract consistency audit and reconciliation.
 - [x] unresolved decisions are explicit, classified by when they become required, and have evidence-gathering plans.
-- [ ] user accepts Phase 1 result before production scaffold begins.
+- [x] user accepted the reconciled Phase 1 result on 2026-09-23 before production scaffolding began.
 
-## Closure rule
+## Closure record
 
-Do not mark the final item or begin production Android/Rust scaffolding unless the user explicitly accepts the reconciled Phase 1 result.
+Phase 1 acceptance was given explicitly on **2026-09-23**.
 
-When accepted:
+The Phase 1 result is therefore frozen as the architecture baseline. Later changes are normal architecture evolution and must be recorded deliberately; they do not retroactively reopen the Phase 1 gate.
 
-1. mark the final item;
-2. record Phase 1 acceptance in `PHASE1_PROGRESS.md` / `docs/HANDOFF.md`;
-3. merge/clean PR #1 as deliberately directed;
-4. begin the small non-mutating Phase 2 foundation slice described in `PHASE1_GATE_ASSESSMENT.md`, not a broad feature rewrite;
-5. apply `SOURCE_REIMPLEMENTATION_METHOD.md` whenever inherited behavior enters substantive implementation.
+Next sequence:
+
+1. merge/clean PR #1;
+2. establish `main` as the accepted architecture baseline;
+3. begin the small non-mutating Phase 2 foundation slice described in `PHASE1_GATE_ASSESSMENT.md`;
+4. apply `SOURCE_REIMPLEMENTATION_METHOD.md` whenever inherited behavior enters substantive implementation.
