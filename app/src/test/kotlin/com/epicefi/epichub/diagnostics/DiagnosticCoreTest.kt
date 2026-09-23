@@ -103,6 +103,36 @@ class DiagnosticCoreTest {
     }
 
     @Test
+    fun recentProblemCaptureFinishesOnlyAfterPostTriggerDeadline() {
+        val clock = FakeDiagnosticClock(monotonic = 1_000, wall = 10_000)
+        val hub = DiagnosticHub(clock = clock)
+        hub.startRecentProblemCapture()
+
+        clock.advance(2_999)
+        assertNull(hub.finishRecentProblemCaptureIfDue(postTriggerNanos = 3_000))
+        assertTrue(hub.activeCapture() != null)
+
+        clock.advance(1)
+        val capture = hub.finishRecentProblemCaptureIfDue(postTriggerNanos = 3_000)
+
+        assertTrue(capture != null)
+        assertNull(hub.activeCapture())
+        assertEquals(1, hub.captures().size)
+    }
+
+    @Test
+    fun reproductionCaptureDoesNotAutoFinishThroughRecentProblemDeadline() {
+        val clock = FakeDiagnosticClock(monotonic = 10, wall = 100)
+        val hub = DiagnosticHub(clock = clock)
+        hub.startReproductionCapture()
+
+        clock.advance(10_000)
+
+        assertNull(hub.finishRecentProblemCaptureIfDue(postTriggerNanos = 1))
+        assertTrue(hub.activeCapture() != null)
+    }
+
+    @Test
     fun reproductionCaptureDoesNotPullEarlierEventsIntoEvidence() {
         val clock = FakeDiagnosticClock(monotonic = 10, wall = 100)
         val hub = DiagnosticHub(clock = clock)
