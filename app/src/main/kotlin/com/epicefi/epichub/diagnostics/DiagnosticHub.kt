@@ -1,11 +1,11 @@
 package com.epicefi.epichub.diagnostics
 
-import android.os.SystemClock
 import java.util.concurrent.atomic.AtomicLong
 
 class DiagnosticHub(
     eventCapacity: Int = 512,
     private val retainedCaptureCount: Int = 20,
+    private val clock: DiagnosticClock = SystemDiagnosticClock,
 ) {
     init {
         require(retainedCaptureCount > 0) { "Retained capture count must be positive." }
@@ -42,8 +42,8 @@ class DiagnosticHub(
     ): DiagnosticEvent {
         val event = DiagnosticEvent(
             eventId = nextEventId.getAndIncrement(),
-            monotonicNanos = SystemClock.elapsedRealtimeNanos(),
-            wallClockMillis = System.currentTimeMillis(),
+            monotonicNanos = clock.monotonicNanos(),
+            wallClockMillis = clock.wallClockMillis(),
             severity = severity,
             domain = domain,
             code = code,
@@ -86,7 +86,7 @@ class DiagnosticHub(
     @Synchronized
     fun startRecentProblemCapture(): ActiveDiagnosticCapture {
         check(activeCapture == null) { "A diagnostic capture is already active." }
-        val now = SystemClock.elapsedRealtimeNanos()
+        val now = clock.monotonicNanos()
         val captureId = nextCaptureId.getAndIncrement()
         val preTrigger = ring.snapshot()
         val builder = CaptureBuilder(
@@ -116,7 +116,7 @@ class DiagnosticHub(
     @Synchronized
     fun startReproductionCapture(): ActiveDiagnosticCapture {
         check(activeCapture == null) { "A diagnostic capture is already active." }
-        val now = SystemClock.elapsedRealtimeNanos()
+        val now = clock.monotonicNanos()
         val captureId = nextCaptureId.getAndIncrement()
         val builder = CaptureBuilder(
             captureId = captureId,
@@ -147,8 +147,8 @@ class DiagnosticHub(
         val builder = checkNotNull(activeCapture) { "No diagnostic capture is active." }
         val marker = DiagnosticMarker(
             markerId = nextMarkerId.getAndIncrement(),
-            monotonicNanos = SystemClock.elapsedRealtimeNanos(),
-            wallClockMillis = System.currentTimeMillis(),
+            monotonicNanos = clock.monotonicNanos(),
+            wallClockMillis = clock.wallClockMillis(),
             label = label?.trim()?.takeIf { it.isNotEmpty() },
         )
         builder.markers += marker
@@ -169,7 +169,21 @@ class DiagnosticHub(
     @Synchronized
     fun finishCapture(note: String? = null): DiagnosticCapture {
         val builder = checkNotNull(activeCapture) { "No diagnostic capture is active." }
-        val stoppedAt = SystemClock.elapsedRealtimeNanos()
+        val stoppedAt = clock.monotonicNanos()
+
+        metrics.increment(DiagnosticMetricId.DIAGNOSTIC_CAPTURE_COUNT)
+        record(
+            severity = DiagnosticSeverity.INFO,
+            domain = DiagnosticDomain.DIAGNOSTIC_CAPTURE,
+            code = DiagnosticEventCode.CAPTURE_FINISHED,
+            correlationId = "capture-${builder.captureId}",
+            payload = DiagnosticPayload.CaptureState(
+                captureId = builder.captureId,
+                mode = builder.mode,
+                markerCount = builder.markers.size,
+            ),
+        )
+
         val liveEvents = ring.snapshotSince(builder.firstLiveEventId)
         val combinedEvents = (builder.preTriggerEvents + liveEvents)
             .distinctBy(DiagnosticEvent::eventId)
@@ -181,7 +195,7 @@ class DiagnosticHub(
             startedAtNanos = builder.startedAtNanos,
             triggerAtNanos = builder.triggerAtNanos,
             stoppedAtNanos = stoppedAt,
-            createdAtWallClockMillis = System.currentTimeMillis(),
+            createdAtWallClockMillis = clock.wallClockMillis(),
             events = combinedEvents,
             metrics = metrics.snapshot(),
             lifecycleOwners = lifecycle.snapshot(),
@@ -195,18 +209,6 @@ class DiagnosticHub(
             }
             captures.addLast(capture)
         }
-        metrics.increment(DiagnosticMetricId.DIAGNOSTIC_CAPTURE_COUNT)
-        record(
-            severity = DiagnosticSeverity.INFO,
-            domain = DiagnosticDomain.DIAGNOSTIC_CAPTURE,
-            code = DiagnosticEventCode.CAPTURE_FINISHED,
-            correlationId = "capture-${capture.captureId}",
-            payload = DiagnosticPayload.CaptureState(
-                captureId = capture.captureId,
-                mode = capture.mode,
-                markerCount = capture.markers.size,
-            ),
-        )
         return capture
     }
 
@@ -216,7 +218,7 @@ class DiagnosticHub(
         generation: Long,
         initialState: String,
     ): DiagnosticLifecycleOwner {
-        val now = SystemClock.elapsedRealtimeNanos()
+        val now = clock.monotonicNanos()
         val owner = lifecycle.create(ownerId, ownerKind, generation, now, initialState)
         record(
             severity = DiagnosticSeverity.INFO,
@@ -246,7 +248,7 @@ class DiagnosticHub(
     }
 
     fun destroyLifecycleOwner(ownerId: String): DiagnosticLifecycleOwner? {
-        val owner = lifecycle.destroy(ownerId, SystemClock.elapsedRealtimeNanos()) ?: return null
+        val owner = lifecycle.destroy(ownerId, clock.monotonicNanos()) ?: return null
         record(
             severity = DiagnosticSeverity.INFO,
             domain = DiagnosticDomain.LIFECYCLE,
