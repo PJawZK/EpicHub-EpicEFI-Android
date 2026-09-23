@@ -185,3 +185,11 @@ data class ActiveDiagnosticCapture(
     val triggerAtNanos: Long?,
     val markerCount: Int,
 )
+
+data class DiagnosticsSnapshot(
+    val events: List<DiagnosticEvent>,
+    val metrics: List<DiagnosticMetricSummary>,
+    val lifecycleOwners: List<DiagnosticLifecycleOwner>,
+    val captures: List<DiagnosticCapture>,
+    val activeCapture: ActiveDiagnosticCapture?,
+)
