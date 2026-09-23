@@ -45,7 +45,7 @@ Evidence confidence is recorded as:
 
 ## Source authority
 
-When sources disagree, use the following default authority order unless a responsibility-specific protocol document establishes a stronger source:
+When historical/external sources disagree, use the following default authority order unless a responsibility-specific protocol document establishes a stronger source:
 
 1. Firmware/protocol reality.
 2. Physically verified EpicDash-JZ behaviour.
@@ -54,6 +54,8 @@ When sources disagree, use the following default authority order unless a respon
 5. Other experimental, UI, tool and plugin repositories.
 
 UI/UX repositories may be authoritative for explicitly accepted interaction or visual behaviour, but never for ECU protocol, tune-memory or firmware truth.
+
+Within EpicHub itself, follow the authority interpretation in `docs/architecture/README.md`: durable decisions and cross-domain contracts override older/local evidence wording; topology maps those contracts but does not supersede them.
 
 ## Clean reimplementation rule
 
@@ -99,9 +101,25 @@ This methodology applies to the entire project, including Android platform integ
 
 ## Architecture changes
 
-Architecture documents are part of the implementation contract. A change that moves responsibility, state authority, dependency direction, transport ownership, safety policy or the Kotlin/Rust boundary must update the corresponding architecture document in the same workstream.
+Architecture documents are part of the implementation contract. A change that moves responsibility, state authority, dependency direction, transport ownership, safety policy or the Kotlin/Rust boundary must update the corresponding architecture documents in the same workstream.
 
-New code should have an obvious permanent home before it is implemented. If it does not, resolve the ownership/topology question before adding the production code.
+New code should have an obvious permanent home before it is implemented. If it does not, resolve the ownership/topology question before adding production code.
+
+### Cross-document consistency rule
+
+A durable architecture change is not complete merely because `DECISIONS.md` or one domain document was updated.
+
+Before accepting that workstream:
+
+1. identify every document that restates the changed concept, including decision, ownership, dependency, data-flow, threading/FFI, action/safety, topology, test/gap, progress/handoff material where relevant;
+2. update those documents in the same workstream, or clearly mark a document as historical evidence that does not override the current contract;
+3. search the active branch/PR for superseded names, ownership statements, provisional values and old implementation-order phrases;
+4. resolve contradictory wording instead of relying on readers to infer which statement is newer;
+5. verify `REVIEW_CHECKLIST.md`, `GAP_ANALYSIS.md`, progress and handoff status remain truthful.
+
+Examples of useful stale-term checks include old gateway/class names, old decision ranges, provisional values that have since been locked, file-format-specific wording inside generic contracts and previous state-owner names.
+
+Evidence documents may intentionally describe historical behavior that differs from the target architecture, but they must label that behavior as evidence/history rather than a current production instruction.
 
 ## Experiments
 
@@ -145,6 +163,7 @@ Phase 1 is complete only when the repository can answer, with documented ownersh
 - who owns each mutable state;
 - what crosses the Kotlin/Rust boundary;
 - what the dependency direction is;
-- what tests qualify each major subsystem.
+- what tests qualify each major subsystem;
+- whether the current architecture documents agree after a cross-document consistency pass.
 
-Only after this gate should production Android/Rust scaffolding begin.
+Only after this gate and explicit user acceptance should production Android/Rust scaffolding begin.
