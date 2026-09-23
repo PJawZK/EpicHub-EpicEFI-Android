@@ -753,7 +753,9 @@ Important edge fixtures include:
 
 ---
 
-# Remaining Phase 1 decisions exposed by this review
+# Remaining feature-entry/deferred work exposed by this review
+
+These items are intentionally classified by `GAP_ANALYSIS.md`; they are not unresolved Phase 1 ownership questions.
 
 1. Define the concrete `AnalysisSession` / provenance schema and relevant-calibration fingerprint mechanism.
 2. Define the domain-profile interface: channel contract, sample gate, segment/event extraction, measurement/model, comparability and optional recommendation.
