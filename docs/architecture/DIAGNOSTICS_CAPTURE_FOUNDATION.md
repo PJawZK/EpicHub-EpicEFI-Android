@@ -8,6 +8,8 @@ The goal is to make future bug hunting cheap, reproducible and evidence-driven f
 
 Diagnostics remain observational under D-017. The capture system records what happened; subsystem owners still decide connection, tuning, logging and recovery behavior.
 
+D-023 / `RUNTIME_LANGUAGE_AND_SERIALIZATION.md` also applies throughout this document: live diagnostic state is typed Kotlin/Rust state, Rust→Kotlin diagnostic transfer uses bounded typed/packed batches, and serialization exists only at the explicit capture persistence/export boundary.
+
 ---
 
 # 1. Design goals
@@ -71,7 +73,7 @@ The initial retention window should be chosen by measured memory/overhead rather
 
 # 3. Diagnostic event schema
 
-Every event uses a stable machine-readable structure.
+Every event uses a stable typed machine-readable structure.
 
 Conceptual shape:
 
@@ -129,6 +131,8 @@ ENGINE_HANDLE_LATE_ACCESS
 ```
 
 Human-readable summaries remain useful, but tools must not need to parse them to understand the event.
+
+No event is represented internally as a JSON/CBOR document or arbitrary string-key map merely for transport convenience.
 
 ---
 
@@ -339,6 +343,8 @@ Capture state is separate from normal live diagnostic rings.
 
 Once finalized, later live events do not mutate the saved capture.
 
+The capture exists as typed Kotlin/Rust data until it is explicitly finalized/persisted/exported.
+
 ---
 
 # 9. What a capture should include by default
@@ -414,27 +420,26 @@ This keeps routine bug reports small and privacy-bounded.
 
 # 11. Bundle format
 
-Diagnostic export should contain both machine-readable and human-readable forms.
+Diagnostic export contains one canonical machine-readable capture plus one human-readable projection.
 
-Suggested versioned archive:
+Locked versioned archive shape:
 
 ```text
 EpicHub-Diagnostics-<captureId>.zip
-├─ manifest.json
+├─ capture.cbor
 ├─ report.txt
-├─ state.json
-├─ events.ndjson
-├─ metrics.json
-├─ lifecycle.json
-├─ markers.json
-└─ attachments.json
+└─ attachments/
 ```
 
-Optional explicitly selected files may be stored beside or inside the archive later.
+`capture.cbor` is the canonical versioned diagnostic capture and contains the complete typed capture schema, including schema/build/device/source identity, subsystem snapshots, events, metrics, lifecycle records, markers, user notes and attachment metadata/hashes.
 
-`manifest.json` includes schema versions and hashes for contained artifacts.
+`report.txt` is generated from the same immutable typed capture and is never a competing source of truth.
 
-`report.txt` is generated from the same immutable typed snapshot and is never the only source of truth.
+Only explicitly selected full artifacts are placed in `attachments/`.
+
+CBOR exists only at this persistence/export boundary. Kotlin/Rust diagnostic rings and JNI diagnostic transfer do **not** serialize through CBOR.
+
+JSON/NDJSON is not part of the canonical bundle. If a future developer/external tool needs JSON, it may explicitly convert `capture.cbor` to a derived JSON projection outside the runtime authority path.
 
 ---
 
@@ -589,7 +594,8 @@ Rules:
 - metric recording stays cheap;
 - event export/report generation happens off hot paths;
 - high-volume protocol byte dumps are opt-in/development only;
-- ring capacities and diagnostic cadence are measurable metrics themselves.
+- ring capacities and diagnostic cadence are measurable metrics themselves;
+- do not serialize/parse JSON, CBOR or another document format merely to move live events between Kotlin and Rust.
 
 Qualification should measure diagnostics enabled versus minimal verbosity on both SM-A137F and SM-T500.
 
@@ -602,16 +608,16 @@ Before real ECU acquisition is introduced, implement enough diagnostic plumbing 
 Initial slice:
 
 ```text
-DiagnosticEvent schema
+DiagnosticEvent typed schema
 MetricDescriptor/registry
 bounded Kotlin event ring
 bounded Rust event ring
 bounded metric summaries
 owner/session/generation tracing
-coarse Rust → Kotlin diagnostic batch drain
+coarse typed/packed Rust → Kotlin diagnostic batch drain
 Diagnostics Overview/Events/Metrics/Sessions screens
 problem-capture session + markers
-versioned JSON/NDJSON export
+versioned CBOR capture export + report.txt
 ```
 
 Use the existing synthetic RuntimeSnapshot/native engine to create test events and lifecycle transitions.
@@ -629,15 +635,18 @@ At minimum test:
 - metric aggregation is deterministic;
 - p50/p95/p99 calculations match reference vectors;
 - events preserve monotonic ordering;
-- Kotlin/Rust correlation IDs survive batch transfer;
+- Kotlin/Rust correlation IDs survive typed/batched transfer;
 - stale generation events remain visible but cannot mutate current domain state;
 - capture includes pre-trigger and post-trigger evidence;
 - manual markers preserve ordering;
-- export schemas are versioned and parseable;
+- CBOR schema/version round-trip is deterministic and unsupported versions fail explicitly;
+- `report.txt` is generated from the same immutable capture;
+- optional tooling conversion, if later added, cannot become capture authority;
 - routine export does not contain forbidden full logs/tunes/GPS/secrets;
 - activity/process recreation does not duplicate capture ownership;
 - capture/export work does not block UI/native acquisition threads;
-- diagnostics actions route to owners rather than mutating subsystem state internally.
+- diagnostics actions route to owners rather than mutating subsystem state internally;
+- architecture tests/review prevent JSON/CBOR runtime-message-bus regression.
 
 Physical qualification should include deliberately induced benign failures, such as synthetic stale-generation events and forced capture-ring wrap, so the user can inspect whether the exported evidence is actually understandable.
 
@@ -649,13 +658,14 @@ The diagnostics foundation is ready when:
 
 - one user action can capture a recent problem without first navigating away;
 - reproduction capture can add markers and finalize an immutable report;
-- Android and Rust emit events into one correlated view;
+- Android and Rust emit typed events into one correlated view;
 - owner/session/generation history is visible;
 - core metrics expose current and tail behavior;
 - diagnostic capture/export remains bounded under stress;
-- the exported machine-readable bundle can reconstruct event order and subsystem identity;
+- the exported `capture.cbor` can reconstruct event order and subsystem identity;
 - both reference devices can create and export a capture;
 - diagnostics remain observational under tests;
+- no runtime JSON/CBOR bridge exists;
 - the next USB/ECU slice can add domain events/metrics without inventing a new logging/debug system.
 
 ## Summary
