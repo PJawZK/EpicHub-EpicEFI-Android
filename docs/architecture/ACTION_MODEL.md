@@ -7,8 +7,11 @@ EpicHub must support user/app actions that target different domains without expo
 Primary target domains:
 
 - `Local` — actions implemented inside the Android application;
-- `Accessory` — semantic commands handled by an accessory/bridge domain;
+- `AccessoryBridge` — semantic legacy BLE↔CAN bridge operations;
+- `AccessoryOutput` — only for a deliberately added/versioned direct-output capability;
 - `Ecu` — guarded semantic ECU/tuning/runtime actions handled by the engine.
+
+`AccessoryBridge` and `AccessoryOutput` are deliberately distinct so legacy forwarding semantics cannot accidentally acquire physical-output confirmation/failsafe authority.
 
 ## Core model
 
@@ -67,7 +70,7 @@ Examples:
 
 The router dispatches these directly to the appropriate Kotlin/app or NativeEngine API. They do not traverse unrelated transports.
 
-## Accessory/bridge actions
+## Legacy accessory-bridge actions
 
 The reviewed original ESP32 firmware is primarily a BLE↔CAN bridge with local input sources. It does **not** provide a reviewed BLE-controlled relay/GPIO output authority.
 
@@ -76,13 +79,15 @@ Legacy bridge path:
 ```text
 Compose/input
   → ActionRouter
-  → Esp32AccessoryGateway
-  → Esp32MessageCodec
+  → Esp32BridgeGateway
+  → message-specific legacy codec
   → connection-wide BleWriteScheduler
   → Esp32GattClient
   → ESP32 bridge
   → CAN consumer / ECU
 ```
+
+The message-specific codec is selected by the bridge operation, for example `LegacyButtonBridgeCodec`, `LegacyVariableRequestCodec` or `Esp32VariableSetCodec`. There is no catch-all `Esp32MessageCodec` authority.
 
 Rust is not in this command path merely to centralize architecture.
 
@@ -110,7 +115,7 @@ The original firmware also does not send an automatic zero/release button frame 
 
 ## Future direct accessory outputs
 
-If EpicHub later adds ESP32-controlled relays/GPIO outputs, that is a **new versioned accessory capability**, not behaviour inherited from the original bridge.
+If EpicHub later adds ESP32-controlled relays/GPIO outputs, that is a **new versioned `AccessoryOutput` capability**, not behaviour inherited from the original bridge.
 
 A direct-output extension must define:
 
@@ -124,6 +129,8 @@ A direct-output extension must define:
 - behavior across Android/app/BLE failure.
 
 For such direct physical outputs, the ESP32 firmware—not Android—is the final hardware authority for mapping, interlocks and fail-safe state.
+
+Its Kotlin gateway is separately named/owned (for example `Esp32DirectOutputGateway`) and does not reuse `Esp32BridgeGateway` as if the two protocols had identical semantics.
 
 ## Requested vs confirmed state
 
@@ -180,17 +187,31 @@ Every guarded action can identify its origin, for example:
 
 Source identity supports policy such as allowing a user-held action while prohibiting the same action from unattended automation.
 
-## Automation
+## Automation and warning separation
 
-Future rules may request approved actions, but arbitrary custom math/script execution must not gain unrestricted ECU or physical-output authority.
+Future automation rules may request approved actions, but arbitrary custom math/script execution must not gain unrestricted ECU or physical-output authority.
 
 An action definition/policy explicitly states allowed automated sources.
 
+**Warning evaluation itself remains observational under D-017.** A warning rule may emit/update a `WarningIncident`; it does not execute or request a production action merely because the warning became active.
+
+If product scope later allows automation based on warning state, the authority path is explicitly separate:
+
+```text
+WarningIncident (observed state)
+  → explicit AutomationRule / AutomationPolicy
+  → ActionRequest
+  → ActionPolicy
+  → target domain
+```
+
+This keeps the warning engine observational while still permitting a deliberately configured automation feature to consume warning state as one input.
+
 Examples:
 
-- a warning rule may request a versioned auxiliary-output action if explicitly allowed and the accessory capability supports it;
+- a separately configured automation rule may observe a warning incident and request a versioned auxiliary-output action only when that exact automation/action source is allowed;
 - fuel-pump/critical outputs may require guarded user/hardware authority;
-- tune writes/Burn are never implicitly enabled simply because the rule engine can name an action.
+- tune writes/Burn are never implicitly enabled simply because automation can name an action.
 
 ## Logging actions/events
 
