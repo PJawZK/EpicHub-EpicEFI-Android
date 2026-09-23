@@ -91,6 +91,7 @@ abstract class CargoNdkBuildTask @Inject constructor(
             "-t", "arm64-v8a",
             "-o", outputDirectory.get().asFile.absolutePath,
             "build",
+            "--locked",
         )
         if (releaseBuild.get()) {
             arguments += "--release"
