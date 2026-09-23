@@ -21,11 +21,7 @@ fn ffi_guard<T: Copy>(fallback: T, operation: impl FnOnce() -> T) -> T {
     catch_unwind(AssertUnwindSafe(operation)).unwrap_or(fallback)
 }
 
-fn copy_to_direct_buffer(
-    env: &JNIEnv,
-    buffer: &JByteBuffer,
-    bytes: &[u8],
-) -> jint {
+fn copy_to_direct_buffer(env: &JNIEnv, buffer: &JByteBuffer, bytes: &[u8]) -> jint {
     let capacity = match env.get_direct_buffer_capacity(buffer) {
         Ok(capacity) => capacity,
         Err(_) => return BUFFER_STATUS_NOT_DIRECT,
