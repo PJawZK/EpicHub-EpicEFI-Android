@@ -4,7 +4,9 @@ use jni::JNIEnv;
 use jni::objects::{JByteBuffer, JObject};
 use jni::sys::{JNI_FALSE, JNI_TRUE, jboolean, jint, jlong};
 
-use crate::engine::{active_engine_count, close_engine, create_engine, engine_is_alive, runtime_snapshot};
+use crate::engine::{
+    active_engine_count, close_engine, create_engine, engine_is_alive, runtime_snapshot,
+};
 use crate::runtime_snapshot::RUNTIME_SNAPSHOT_SIZE;
 
 const SNAPSHOT_STATUS_OK: jint = 0;
