@@ -2,11 +2,13 @@
 
 ## Status
 
-**Phase 1 provisional target topology.**
+**Phase 1 target responsibility topology.**
 
-This describes the intended finished source organization closely enough that every responsibility has a planned home before implementation. It is not authorization to scaffold production code yet.
+This describes the intended source organization closely enough that every known responsibility has a planned home before implementation. Exact crate/module/file splits may be refined when implementation evidence justifies it, but ownership/dependency boundaries must remain consistent with the architecture documents.
 
-Historical EpicDash/EpicDash-JZ filenames are evidence sources, not migration units.
+This is not authorization to scaffold production code before Phase 1 is explicitly accepted.
+
+Historical EpicDash/EpicDash-JZ filenames are evidence sources, not migration units. `SOURCE_REIMPLEMENTATION_METHOD.md` governs every inherited subsystem implementation.
 
 ## Repository shape
 
@@ -28,7 +30,13 @@ Source-domain packages are required from the start. Gradle/Cargo module prolifer
 
 # Kotlin / Android
 
-Provisional namespace: `com.epicefi.epichub`. Exact application ID/namespace is locked before Phase 2.
+Locked application ID and namespace:
+
+```text
+com.epicefi.epichub
+```
+
+See `ANDROID_BUILD_BASELINE.md` / D-021.
 
 ```text
 app/src/main/kotlin/com/epicefi/epichub/
@@ -44,6 +52,7 @@ app/src/main/kotlin/com/epicefi/epichub/
 ├── nativeengine/
 ├── actions/
 ├── accessory/
+├── settings/
 └── ui/
     ├── dashboard/
     ├── tuner/
@@ -85,14 +94,15 @@ Android USB owns Android host mechanics, never TunerStudio semantics.
 
 ### Sustained-I/O gate
 
-Two PoC candidates remain:
+PoC candidates include:
 
 ```text
-A. Kotlin bulk I/O worker -> coarse batches to Rust
-B. Android opens/claims -> proven native FD/handle -> Rust sustained I/O
+A. Kotlin USB I/O/decode reference
+B. Kotlin bulk I/O worker → coarse Rust batches/decode
+C. Android opens/claims → proven native FD/handle → Rust sustained I/O/decode
 ```
 
-Everything above the transport adapter remains identical. No architecture permits separate dashboard/tuner ECU owners.
+The selected implementation is measurement-driven. Everything above the transport adapter remains identical. No architecture permits separate dashboard/tuner ECU owners.
 
 ---
 
@@ -105,7 +115,7 @@ Android BLE/GATT remains Kotlin-owned.
 - `Esp32GattClient.kt` — one active GATT connection, discover/subscribe/MTU/priority, stale-GATT rejection and deterministic close.
 - `BleReconnectPolicy.kt` — pure scan/retry/backoff decisions.
 - `BleOperation.kt` — transport-level GATT operation description and class/priority/correlation metadata.
-- `BleWriteScheduler.kt` — **one connection-wide serialized operation owner**. It replaces the historical three independent per-characteristic FIFO ownership model.
+- `BleWriteScheduler.kt` — **one connection-wide serialized operation owner**. It replaces the historical independent per-characteristic FIFO ownership model.
 - `BleConnectionDiagnostics.kt` — scan/connect/retry/operation depth, latency, drops and Android GATT errors.
 
 `BleWriteScheduler` accepts already encoded transport messages. It does not decide button/GPS/accessory semantics and does not claim downstream command confirmation.
@@ -128,7 +138,7 @@ GPS→legacy ESP32 encoding does **not** live here as a GATT detail; location pr
 - `AndroidDocumentAccess.kt` — SAF import/export.
 - `FileExportService.kt` — copy prepared logs/reports/backups to user-selected destinations.
 
-No MDF/tune serialization logic belongs here.
+No measurement-format/tune/profile serialization logic belongs here.
 
 ---
 
@@ -151,7 +161,7 @@ No MDF/tune serialization logic belongs here.
 
 Only this normal production package calls Rust FFI directly.
 
-- `NativeEngine.kt` — small semantic façade; no per-channel/per-sample JNI calls.
+- `NativeEngine.kt` — small semantic façade; no high-rate per-channel/per-sample JNI traffic.
 - `NativeEngineHandle.kt` — opaque lifetime guard.
 - `NativeEngineError.kt` — stable Kotlin error projection.
 - `NativeSnapshotBuffer.kt` — versioned packed runtime snapshot.
@@ -159,17 +169,21 @@ Only this normal production package calls Rust FFI directly.
 - `NativeEventReader.kt` — bounded structured event drain.
 - `NativeEngineMetrics.kt` — coarse engine/JNI metrics.
 
+Low-rate discrete Android-source ingestion may cross individually when justified; burst/high-rate ingestion is batched. See `KOTLIN_RUST_BOUNDARY.md`.
+
 ---
 
 # Semantic actions: `actions/`
 
 - `AppAction.kt` — stable semantic action definition.
-- `ActionTarget.kt` — `Local`, `AccessoryBridge`, `AccessoryOutput` (only when supported), `Ecu`, deliberately extended only.
+- `ActionTarget.kt` — `Local`, `AccessoryBridge`, `AccessoryOutput` (only when supported), `Ecu`.
 - `ActionRequest.kt` — requested semantic value/source/correlation.
-- `ActionResult.kt` — accepted/rejected/pending/completed/failed; result semantics state whether this is transport completion or real domain confirmation.
+- `ActionResult.kt` — accepted/rejected/pending/completed/failed; result semantics distinguish transport completion from real domain confirmation.
 - `ActionSource.kt` — user/hardware/rule/internal source.
 - `ActionRouter.kt` — routes directly to owning domain.
 - `ActionPolicy.kt` — pure source/action guard policy.
+
+If automation is later implemented, it is an explicit policy/rule layer that observes state/warning incidents and emits permitted `ActionRequest`s. Warning evaluation itself remains observational.
 
 Raw characteristic UUIDs, button masks, GPIOs, CAN IDs and ECU page/offsets never become layout action identity.
 
@@ -186,12 +200,14 @@ The original ESP32 is modeled as a **legacy BLE↔CAN bridge with local inputs**
 - `LegacyVariableRequestCodec.kt` — BE hash request batch encoding.
 - `LegacyVariableResponseCodec.kt` — batched `[hash BE4][float BE4]` decode.
 - `Esp32VariableSetCodec.kt` — generic `[hash BE4][raw32 BE4]` entries. This replaces historical GPS-specific naming for characteristic `...ab`.
-- `GpsVariableEncoder.kt` — GPS-specific float/packed hash/value producer feeding the generic variable-set codec.
+- `GpsVariableEncoder.kt` — GPS-specific producer feeding the generic variable-set codec.
 - `VirtualInputEncoder.kt` — only if phone virtual ADC/input compatibility remains product-relevant.
+
+There is deliberately no generic `Esp32MessageCodec` that becomes semantic authority for all present/future accessory protocols.
 
 ## Bridge state/gateway
 
-- `Esp32BridgeGateway.kt` — semantic legacy bridge operations ↔ codecs ↔ connection-wide BLE scheduler.
+- `Esp32BridgeGateway.kt` — semantic legacy bridge operations ↔ message-specific codecs ↔ connection-wide BLE scheduler.
 - `BridgeRequest.kt` — explicit app-side variable request identity/correlation.
 - `BridgeRequestState.kt` — queued, in-flight, partial, timed-out, completed, failed.
 - `BridgeTransportState.kt` — BLE/GATT transport state distinct from downstream ECU/CAN state.
@@ -220,9 +236,18 @@ These files must **not** exist merely because the legacy bridge exists; scaffold
 
 ---
 
+# `settings/`
+
+- `AppSettings.kt` — typed application/user preference model only.
+- `SettingsStore.kt` — sole Kotlin settings owner/API.
+
+The concrete Android persistence backend is an implementation choice. Settings never store or override authoritative ECU/profile/tune/channel state.
+
+---
+
 # Compose UI
 
-UI consumes typed state/models and semantic actions. It never imports raw ECU frames, MDF blocks, raw tune addresses or BLE characteristic details.
+UI consumes typed state/models and semantic actions. It never imports raw ECU frames, measurement-format blocks/records, raw tune addresses or BLE characteristic details.
 
 ## `ui/dashboard/`
 
@@ -263,6 +288,8 @@ Avoid one universal widget class combining render/edit/serialization.
 - `TunerUiState.kt`
 - `TunerNavigation.kt`
 
+Compose owns selection/text-entry/gesture/viewport/modal state. The Rust tuning domain owns semantic tune draft state/history once staged editing is introduced.
+
 ### `tuner/parameter/`
 - `ParameterPanel.kt`
 - `ParameterEditor.kt`
@@ -277,7 +304,7 @@ Avoid one universal widget class combining render/edit/serialization.
 - `TablePanel.kt`
 - `TableGrid.kt`
 - `TableSelection.kt`
-- `TableEditCommand.kt`
+- `TableEditCommand.kt` — presentation intent only; resulting semantic edits are resolved/applied to the Rust draft model.
 - `Table3dView.kt`
 - `TableUiModel.kt`
 
@@ -324,6 +351,8 @@ UI requests bounded prepared data; whole logs do not live in Compose state.
 - `SettingsViewModel.kt`
 - `SettingsUiState.kt`
 
+These consume the typed `SettingsStore`; they are not the settings authority.
+
 ---
 
 # Rust workspace
@@ -348,7 +377,7 @@ rust/
     └── epichub-interop/
 ```
 
-Crate count remains provisional. Responsibility/file boundaries are the authority; crates are earned by dependency/build boundaries.
+Crate count remains provisional. Responsibility/file boundaries are the authority; crates are earned by dependency/build boundaries. The initial scaffold may start with fewer physical crates while preserving these logical domains.
 
 ## `epichub-engine`
 
@@ -428,6 +457,7 @@ TunerStudio condition compatibility remains independently tested from the genera
 - `snapshot_read_plan.rs`
 - `snapshot_reader.rs`
 - `tune_model.rs`
+- `tune_draft.rs` — semantic unverified staged edits/history; sole Rust semantic draft authority.
 - `target_resolver.rs`
 - `value_codec.rs`
 - `edit_request.rs`
@@ -445,9 +475,13 @@ TunerStudio condition compatibility remains independently tested from the genera
 
 ## `epichub-measurement`
 
-- `measurement_store.rs`
+- `measurement_store.rs` — common reader/query contract for file-backed measurement sources.
+- `measurement_writer.rs` — common writer contract consumed by the logger.
 - `time_range.rs`
 - `sample_batch.rs`
+- `measurement_event.rs`
+
+This domain defines format-neutral measurement contracts, not a proprietary file format.
 
 ## `epichub-mdf`
 
@@ -460,7 +494,7 @@ TunerStudio condition compatibility remains independently tested from the genera
 - `compression.rs`
 - `recovery.rs`
 
-MDF never knows Compose or tune semantics.
+MDF4 is the planned long-term native candidate. This crate/module is introduced when the MDF phase begins; it is not a prerequisite for the first logger or MLG writer. MDF never knows Compose or tune semantics.
 
 ## `epichub-logging`
 
@@ -470,16 +504,44 @@ MDF never knows Compose or tune semantics.
 - `log_event.rs`
 - `recovery_marker.rs`
 
+`recorder.rs` consumes format-neutral sample/event batches and a selected `MeasurementWriter`; it does not build MLG records or MDF blocks itself.
+
 ## `epichub-analysis`
 
-- `query.rs`
+Shared infrastructure:
+
+- `analysis_session.rs`
+- `analysis_identity.rs`
+- `channel_contract.rs`
+- `evidence.rs`
+- `rejection.rs`
+- `segment.rs`
+- `event.rs`
+- `visit_block.rs`
 - `statistics.rs`
+- `coverage.rs`
+- `comparability.rs`
+- `validation.rs`
+- `identifiability.rs`
+- `query.rs`
 - `search.rs`
-- `event_detector.rs`
 - `histogram.rs`
 - `scatter.rs`
 - `heatmap.rs`
 - `cache.rs`
+- `experiment_proposal.rs`
+
+Domain profiles/models are added deliberately, for example:
+
+```text
+profiles/
+├── ae/
+├── pid/
+├── tcharge/
+└── injection_phasing/
+```
+
+These are not ports of historical plugin UI/controller structures. See `ANALYSIS_RESPONSIBILITY_MAP.md`.
 
 ## `epichub-expressions`
 
@@ -506,7 +568,10 @@ General runtime/log-analysis expressions; not automatically the profile compatib
 - `event_ring.rs`
 - `performance_metric.rs`
 - `diagnostic_snapshot.rs`
+- `warning_incident.rs`
 - `report.rs`
+
+Diagnostics/warning state remains observational. Any action triggered by observed warning state belongs to a separate explicit automation/action policy path.
 
 ## `epichub-interop`
 
@@ -515,7 +580,7 @@ General runtime/log-analysis expressions; not automatically the profile compatib
 - `mlg_reader.rs`
 - `mlg_writer.rs`
 
-Exact MLG implementation responsibility is added only when the format investigation is turned into concrete contract/tests.
+MLG is the first planned ecosystem-compatible writer after the format-neutral live path is proven. Exact MLG implementation proceeds only after the real format contract/corpus is established.
 
 ---
 
@@ -556,7 +621,9 @@ tests/
 │   │   ├── variable-request/
 │   │   ├── variable-response/
 │   │   └── variable-set/
+│   ├── mlg/
 │   ├── mdf/
+│   ├── analysis/
 │   └── logs/
 └── interoperability/
 ```
@@ -570,7 +637,9 @@ Expected qualification layers:
 - ECU request/response golden vectors;
 - generated-INI accepted/unsupported corpus;
 - ESP32 BLE/CAN wire golden vectors;
+- MLG ecosystem interoperability tests;
 - MDF independent interoperability tests;
+- analysis replay/golden fixtures;
 - JNI tests;
 - Android instrumentation;
 - simulator/fault injection;
@@ -596,12 +665,16 @@ Compose UI
                     ▼                ▼                ▼
                  ECU/Profile       Channels         Tuning
                                      │
-                        ┌────────────┼───────────────┐
-                        ▼            ▼               ▼
-                      Logging       MDF           Analysis
-                                                      │
-                                                      ▼
-                                                   Plotting
+                        ┌────────────┴───────────────┐
+                        ▼                            ▼
+                      Logging                    Analysis
+                        │                            │
+                        ▼                            ├─► Plotting
+                 MeasurementWriter                  │
+                  /            \                    ▼
+              MLG/interop       MDF            MeasurementStore
+                                              /            \
+                                         interop readers   MDF
 ```
 
 Hard rules:
@@ -614,4 +687,10 @@ Hard rules:
 - BLE/GATT transport does not interpret downstream CAN success as confirmation.
 - GPS-specific code feeds generic variable-set transport; generic transport does not depend on location.
 - future direct ESP32 outputs do not share semantic state with the legacy button bridge simply because both may use BLE.
+- MLG/MDF format implementations do not own runtime ChannelStore or logging-session truth.
 - MDF never imports Compose/ECU tuning semantics.
+- analysis consumes common measurement/channel contracts rather than requiring MDF-specific structures.
+- semantic tuning drafts live in Rust; Compose owns edit interaction/presentation state only.
+- settings are Kotlin-owned user/application preferences only and never duplicate ECU/profile/tune authority.
+
+Before any inherited subsystem implementation is accepted, apply `SOURCE_REIMPLEMENTATION_METHOD.md` and record the old behaviors/bugs deliberately preserved or rejected.
