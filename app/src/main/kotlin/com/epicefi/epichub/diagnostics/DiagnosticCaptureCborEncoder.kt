@@ -119,6 +119,22 @@ internal object DiagnosticCaptureCborEncoder {
                 writer.writeLong(payload.activeEngineCount.toLong())
             }
 
+            is DiagnosticPayload.NativeEngineEvent -> {
+                writer.writeMapHeader(6)
+                writer.writeText("type")
+                writer.writeText("nativeEngineEvent")
+                writer.writeText("nativeEventId")
+                writer.writeLong(payload.nativeEventId)
+                writer.writeText("engineElapsedNanos")
+                writer.writeLong(payload.engineElapsedNanos)
+                writer.writeText("rawCode")
+                writer.writeLong(payload.rawCode.toLong())
+                writer.writeText("arg0")
+                writer.writeLong(payload.arg0)
+                writer.writeText("arg1")
+                writer.writeLong(payload.arg1)
+            }
+
             is DiagnosticPayload.RuntimeSnapshotState -> {
                 writer.writeMapHeader(5)
                 writer.writeText("type")
