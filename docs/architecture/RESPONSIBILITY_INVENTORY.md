@@ -2,13 +2,22 @@
 
 ## Purpose
 
-This inventory records permanent behaviours/responsibilities, not historical classes. Historical files are evidence sources only: one old class may split across many future owners and several old mechanisms may merge into one clean responsibility.
+This inventory records permanent behaviours/responsibilities, not historical classes. Historical files are evidence sources only: one old class may split across many target owners and several old mechanisms may merge into one clean responsibility.
 
 Classification values: `PRESERVE`, `REDESIGN`, `MERGE`, `SPLIT`, `REFERENCE`, `REMOVE`.
 
 Evidence levels: `PROVEN`, `SUPPORTED`, `PROPOSED`.
 
-This is an active Phase 1 inventory and is refined as source archaeology progresses.
+Phase 1 established this inventory and is closed. The inventory now acts as an **accepted responsibility map for Phase 2**. It is updated only when later evidence or a deliberate architecture decision changes/adds a responsibility. `Future owner` below means the intended permanent owner for responsibilities not yet implemented; it does not imply that the already-qualified foundation is still hypothetical.
+
+Current Phase-2 foundation facts that refine the original inventory:
+
+- Kotlin/Compose host exists and is qualified;
+- coarse JNI `NativeEngine` lifecycle exists and is qualified;
+- minimal Rust `ChannelStore` exists and is qualified with synthetic data;
+- packed/versioned RuntimeSnapshot ABI v1 exists and is qualified on SM-A137F + SM-T500;
+- D-023 locks production runtime to Kotlin/Compose + Rust and keeps JSON/WebView/browser-style serialization out of runtime/JNI state;
+- UI shell and diagnostics capture responsibilities are now explicitly defined by `UI_FOUNDATION_LAYOUT.md` and `DIAGNOSTICS_CAPTURE_FOUNDATION.md`.
 
 ---
 
@@ -20,17 +29,25 @@ Purpose: own Android application/process lifecycle without owning ECU/BLE/tuning
 
 Historical evidence: EpicDash-JZ application/activity lifecycle work and lifecycle diagnostics.
 
-Classification: `REDESIGN`. Evidence: lifecycle/duplicate-owner need `PROVEN`; target structure `PROPOSED`.
+Classification: `REDESIGN`. Evidence: lifecycle/duplicate-owner need `PROVEN`; clean foundation owner now implemented at minimal scope.
 
-Future owner: Kotlin app/platform layer.
+Permanent owner: Kotlin app/platform layer.
 
 ## `android.navigation.presentation`
 
 Purpose: route Dashboard, Tuner, Logger, Analyzer, Diagnostics and Settings without becoming data authority.
 
-Classification: `REDESIGN`. Evidence: `SUPPORTED`.
+Classification: `REDESIGN`. Evidence: `SUPPORTED`; current concrete shell contract `PROPOSED`/accepted-design in `UI_FOUNDATION_LAYOUT.md` pending implementation.
 
-Future owner: Compose navigation.
+Permanent owner: Compose navigation.
+
+## `android.ui.global-diagnostic-capture`
+
+Purpose: make recent-problem/reproduction capture reachable from the common application shell without navigating away from the failing surface.
+
+Classification: `ADD`. Evidence: architecture need `PROPOSED` and current design accepted for the active slice.
+
+Permanent owner: Compose shell/diagnostics presentation; capture data authority remains diagnostics owners below.
 
 ---
 
@@ -288,7 +305,7 @@ Purpose: exact source identity binding for compiled/cached profile state.
 
 Classification: `PRESERVE`. Evidence: `PROVEN`.
 
-Future owner: Rust profile crate.
+Future owner: Rust profile domain.
 
 Invariant across the profile domain: exact generated INI is structural/schema authority; board name does not own geometry.
 
@@ -318,17 +335,21 @@ Purpose: sole high-volume mutable authority for current channel values, timestam
 
 Finding: telemetry is domain-neutral, not Dashboard-owned.
 
-Classification: `MERGE` + `REDESIGN`. Evidence: old needs `SUPPORTED`; new owner `PROPOSED`.
+Classification: `MERGE` + `REDESIGN`.
 
-Future owner: Rust channel engine.
+Evidence: need `SUPPORTED`; **minimal Rust owner now implemented and device-qualified with synthetic channels**. Live ECU/file-backed schemas and full source/validity breadth remain later implementation work.
+
+Permanent owner: Rust channel engine.
 
 ## `runtime.snapshot.display`
 
 Purpose: bounded immutable latest-state snapshots to Compose at display cadence, independent of ECU sample rate.
 
-Classification: `REDESIGN`. Evidence: bounded-latest semantics `PROVEN`; packed/native snapshot `PROPOSED`.
+Classification: `REDESIGN`.
 
-Future owner: Rust producer + Kotlin native buffer adapter.
+Evidence: bounded-latest semantics `PROVEN`; **packed RuntimeSnapshot ABI v1 and direct-buffer Kotlin decode now implemented, CI-qualified and physically exercised on both reference devices**. Future expansion remains versioned and measurement-driven.
+
+Permanent owner: Rust producer + Kotlin typed native-buffer adapter.
 
 ## `runtime.source.freshness`
 
@@ -345,6 +366,21 @@ Purpose: one calculation system over the same channel model used by live/log ana
 Classification: `PRESERVE` capability / `REDESIGN`. Evidence: existing feature `SUPPORTED`; unified engine `PROPOSED`.
 
 Future owner: Rust expression engine.
+
+## `runtime.language.serialization-boundary`
+
+Purpose: prevent serialization/browser-era implementation mechanisms from becoming runtime architecture.
+
+Rules:
+
+- production runtime languages are Kotlin/Jetpack Compose + Rust;
+- runtime/JNI state uses typed values and packed/versioned ABI structures;
+- JSON is not a default internal message/state representation;
+- serialization exists only at explicit persistence/export/interoperability boundaries with a named schema/codec owner.
+
+Classification: `ADD` via D-023. Evidence: historical performance/complexity issues `SUPPORTED`; current RuntimeSnapshot implementation `PROVEN` at foundation scope.
+
+Permanent owners: each domain owns its typed runtime state; boundary codecs belong to the explicit persistence/export/interop owner.
 
 ---
 
@@ -714,7 +750,7 @@ Purpose: initial TunerStudio/MegaLogViewer compatibility path where useful durin
 Purpose: live recording session independently of concrete file writer. Classification: `PROPOSED`. Future owner: Rust logging.
 
 ## `logging.format.mdf4`
-Purpose: native MDF4 read/write/recovery behind internal abstraction. Classification: `PROPOSED`. Future owner: Rust MDF crate.
+Purpose: MDF4 read/write/recovery behind the internal measurement abstraction after interoperability/performance qualification. Classification: `PROPOSED`. Future owner: Rust measurement/MDF implementation; exact crate split remains implementation-driven.
 
 ---
 
@@ -754,12 +790,47 @@ Purpose: bounded structured events across Android and Rust with correlation/sess
 ## `diagnostics.performance-metrics`
 Purpose: frame/jank, ECU rates, JNI crossings/bytes, queue/drop, logging throughput, analyzer latency, CPU/memory/thermal metrics. Classification: `PRESERVE` measurement discipline / `REDESIGN` architecture.
 
+## `diagnostics.flight-recorder`
+
+Purpose: bounded always-on recent diagnostic evidence with deterministic eviction and no blocking disk I/O on hot paths.
+
+Classification: `ADD`. Evidence: `PROPOSED` active Phase-2 design based on mature historical diagnostic evidence.
+
+Permanent owners: bounded Rust engine ring + bounded Kotlin platform ring/aggregation as appropriate; no second domain authority.
+
+## `diagnostics.capture-session`
+
+Purpose: immutable recent-problem/reproduction/previous-exit capture containing correlated typed events, metric summaries, lifecycle owners, markers and bounded contextual state.
+
+Classification: `ADD`. Evidence: `PROPOSED` active Phase-2 design.
+
+Permanent owner: diagnostics capture model; UI only controls capture interaction/review.
+
+## `diagnostics.capture-export`
+
+Purpose: explicit export boundary for a finalized diagnostic capture.
+
+Rules:
+
+- canonical machine representation is versioned compact binary CBOR;
+- human `report.txt` is rendered from the same immutable typed capture;
+- archive manifest/integrity are versioned;
+- routine captures exclude full logs/tunes/GPS/secrets unless explicitly attached;
+- JSON is not runtime authority and is not the canonical diagnostic archive format.
+
+Classification: `ADD` under D-023.
+
+Permanent owner: typed diagnostics schema/codec + Kotlin Android document/share transport.
+
 ---
 
 # Historical ownership models explicitly removed
 
 ## `presentation.webview-json-dom-hot-path`
 Classification: `REMOVE`. Replacement: Compose + typed packed native state.
+
+## `runtime.json-message-bus`
+Classification: `REMOVE`. Replacement: typed Kotlin/Rust domain state + versioned packed ABI/results; serialization only at explicit boundaries under D-023.
 
 ## `dashboard-specific-telemetry-authority`
 Classification: `REMOVE`. Replacement: domain-neutral Rust ChannelStore.
@@ -781,3 +852,7 @@ Classification: `REMOVE` assumption. Replacement: legacy bridge compatibility mo
 
 ## `development-stage-production-names`
 Historical examples: `T3*`, `T4*`, `T6*`, `W4*`. Classification: `REMOVE`. Replacement: permanent responsibility-based names.
+
+## Current interpretation
+
+This inventory is not a build checklist. `CODEBASE_TOPOLOGY.md` records what physically exists today; `RESPONSIBILITY_DESTINATIONS.md` maps not-yet-implemented responsibilities; `DECISIONS.md` and cross-domain authority documents override any older wording in this inventory when a later deliberate decision changes the contract.
