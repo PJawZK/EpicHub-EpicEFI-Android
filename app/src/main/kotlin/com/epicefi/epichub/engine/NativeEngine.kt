@@ -21,6 +21,7 @@ class NativeEngine private constructor(initialHandle: Long) : Closeable {
         return snapshotBuffer.read(current)
     }
 
+    @Synchronized
     override fun close() {
         val current = handle.getAndSet(0L)
         if (current != 0L) {
