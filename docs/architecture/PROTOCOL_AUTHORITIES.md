@@ -4,7 +4,7 @@
 
 EpicHub must not let duplicated historical implementations become competing protocol truth. This document identifies the intended authority for each important protocol/schema area and records current evidence.
 
-This file is refined throughout Phase 1.
+Phase 1 established these authorities; Phase 2 consumes them. They remain current unless newer direct protocol/firmware evidence deliberately updates them.
 
 ## ECU USB transport candidate
 
@@ -35,7 +35,7 @@ Rules:
 - resolve CDC control/data relationships and bulk endpoints from descriptors, not hardcoded interface numbers;
 - interface claiming/release and `SET_LINE_CODING`/`SET_CONTROL_LINE_STATE` are Android CDC concerns, not ECU protocol concerns;
 - proven DTR/DTR+RTS compatibility attempts may inform the Android setup policy;
-- sustained runtime bulk-I/O ownership remains a PoC decision, but upper protocol/session semantics must be unchanged by it.
+- sustained runtime bulk-I/O ownership remains a measured Phase-2 decision, but upper protocol/session semantics must be unchanged by it.
 
 ## ECU live firmware identity
 
@@ -92,7 +92,7 @@ BE u32 CRC32(command+data)
 
 CRC excludes the length field. Plain `S/Q` query commands are also accepted in the current firmware detection/startup path.
 
-Future Rust rule: request framing has its own `encode_request`-style API.
+Planned Rust contract: request framing has its own `encode_request`-style API.
 
 ## TunerStudio response framing/status
 
@@ -116,7 +116,7 @@ Rules:
 - status is protocol metadata, not arbitrary payload;
 - large payloads may stream incrementally while retaining this logical frame.
 
-Future Rust rule: response framing has its own `decode_response -> status + payload` API. Do not use one symmetric `envelope()` abstraction for request and response.
+Planned Rust contract: response framing has its own `decode_response -> status + payload` API. Do not use one symmetric `envelope()` abstraction for request and response.
 
 ## Protocol synchronization and probe policy
 
@@ -293,7 +293,7 @@ The evolved implementation still owns three independent characteristic write FIF
 
 ## Legacy bridge vs future direct accessory outputs
 
-This distinction is now authoritative for Phase 1:
+This distinction is authoritative:
 
 ### Legacy bridge compatibility
 
