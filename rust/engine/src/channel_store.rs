@@ -7,6 +7,10 @@ pub const SYNTHETIC_AFR: ChannelId = ChannelId(0xFFFF_0003);
 
 #[repr(u32)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[expect(
+    dead_code,
+    reason = "ABI v1 reserves Invalid/Stale now; the synthetic foundation source emits only Valid samples"
+)]
 pub enum ChannelValidity {
     Invalid = 0,
     Valid = 1,
