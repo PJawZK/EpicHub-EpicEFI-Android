@@ -18,7 +18,7 @@ Owns:
 Must not perform:
 
 - blocking USB reads/writes;
-- MDF serialization/compression;
+- measurement-file serialization/compression;
 - full INI parsing;
 - complete TuneSnapshot I/O;
 - large-log analysis;
@@ -57,14 +57,22 @@ This path must not wait for Compose rendering.
 
 ## Rust logging writer
 
+The logging worker is format-neutral at its input boundary.
+
 Responsibilities:
 
 - consume bounded sample/event batches;
-- build MDF blocks;
-- compression where enabled;
-- sequential storage writes;
-- periodic recovery/finalization markers as required;
+- pass batches to the selected `MeasurementWriter` implementation;
+- perform/coordinate sequential storage writes through that writer;
+- surface writer checkpoint/finalization/recovery state;
 - expose coarse status/metrics.
+
+Format-specific responsibilities remain inside the selected writer:
+
+- MLG record/header/finalization mechanics in the MLG interoperability writer;
+- MDF block/compression/index/recovery mechanics in the MDF implementation when MDF4 is introduced.
+
+The locked implementation order remains live path first → MLG → MDF4 evaluation/implementation. The threading model must not make MDF a prerequisite for recording.
 
 The writer must never depend on UI frame delivery.
 
@@ -74,12 +82,15 @@ A slow writer must produce explicit pressure/drop/failure metrics rather than pe
 
 Responsibilities:
 
-- MDF lazy reads/decompression;
+- lazy/range reads through `MeasurementStore` / source-specific readers;
+- source-specific decompression/decoding where required;
 - expression evaluation;
 - statistics/search/event detection;
 - histogram/scatter/heatmap work;
 - plot-resolution/downsampling preparation;
-- cache construction/rebuild.
+- cache/index construction/rebuild.
+
+MDF4 may become the long-term native large-log source, but analyzer scheduling is not MDF-specific.
 
 Analysis must be independently cancellable/prioritizable so background work cannot starve live acquisition/logging.
 
