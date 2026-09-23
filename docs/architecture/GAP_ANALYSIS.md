@@ -4,9 +4,9 @@
 
 This document lists **current unresolved implementation, fixture, benchmark, compatibility and product-scope work**.
 
-Phase 1 is accepted/closed. The first Phase-2 Kotlin/Rust foundation is also implemented, CI-qualified and physically exercised on both reference devices. Completed work is not carried forward as a fake gap.
+Phase 1 is accepted/closed. PR #2's Kotlin/Rust foundation is accepted on `main`. PR #3's UI/diagnostics implementation is software-qualified on its branch but still awaits physical qualification/acceptance.
 
-Authority for the active design slice:
+Authority for the active slice:
 
 - D-001 through D-024 in `DECISIONS.md`;
 - `UI_FOUNDATION_LAYOUT.md`;
@@ -19,7 +19,7 @@ Authority for the active design slice:
 
 # Completed foundation — not open gaps
 
-Already accepted on `main`:
+Accepted on `main`:
 
 - Android/Compose application host;
 - `com.epicefi.epichub` namespace;
@@ -32,151 +32,164 @@ Already accepted on `main`:
 - minimal engine-owned Rust ChannelStore;
 - reserved synthetic ChannelIds;
 - synthetic Rust → RuntimeSnapshot → Kotlin → Compose path;
-- committed Cargo.lock / `--locked` Rust builds;
+- committed Cargo.lock / `--locked` builds;
 - CI dual-ABI APK verification;
 - physical execution on SM-A137F and SM-T500.
 
-These items must not be described elsewhere as unimplemented Phase-2 foundation work.
+Do not relist these as unfinished work.
 
 ---
 
-# Current blocking design/implementation slice
+# Implemented on PR #3 — awaiting physical acceptance
 
-Real ECU/USB integration is deliberately **not** next until the following foundation is accepted and qualified.
+The following are implemented and automated-test/CI qualified on `phase2/ui-diagnostics-foundation`; they are **not implementation gaps**, but they are not accepted onto `main` until the current physical gate passes.
 
 ## Responsive application shell
 
-Need production Compose implementation of the structural model:
+Implemented:
 
 ```text
 Dashboard | Tuner | Tuning Tools | Logger | Analyzer | Diagnostics
 ```
 
-with Settings globally accessible.
+plus global Settings.
 
-Need:
+Current shell includes:
 
-- wide/tablet rail layout;
-- compact navigation that keeps all six functional destinations reachable without undersized controls;
-- shared status/header strip;
-- placeholder-but-real surfaces for all functional destinations;
-- route/subpage state surviving ordinary configuration changes;
-- no separate phone/tablet application trees.
+- tablet/wide navigation rail;
+- compact/phone bottom navigation;
+- compact-safe two-row status/capture header;
+- structural screens for all six destinations;
+- synthetic RuntimeSnapshot presentation;
+- common capture/settings affordances.
 
-Status: `CURRENT PHASE 2 IMPLEMENTATION`.
-
-## Ground screen layouts
-
-Need initial functional shells for:
-
-- Dashboard;
-- Tuner;
-- Tuning Tools with visible AE/PID/TCharge/Injection-Angle entries and honest maturity states;
-- Logger with Live Logger + dedicated Trigger Logger;
-- Analyzer with source/channel/workspace/inspector structure;
-- Diagnostics with Overview/Events/Metrics/Sessions/Captures;
-- Settings groups.
-
-These establish regions/navigation/interaction ownership, not full feature depth.
-
-Status: `CURRENT PHASE 2 IMPLEMENTATION`.
-
-## Dashboard / Logger visual authority
-
-The user is developing HTML/CSS prototypes for Dashboard and Logger to iterate visual design quickly.
-
-Need:
-
-- allow those prototypes to mature before independently inventing large amounts of final Compose styling;
-- review/accept explicit visual/layout references;
-- translate accepted intent into Compose rather than embedding a WebView/browser runtime;
-- physically compare Compose results against the accepted references on phone/tablet.
-
-Prototype JavaScript/mock data is design-only and gains no runtime authority under D-023.
-
-Status: `CURRENT UI DESIGN INPUT`.
+Compact six-destination navigation remains subject to physical usability review; grouping/secondary navigation may still be introduced if the phone layout proves crowded.
 
 ## Native Tuning Tools shell
 
-D-024 resolves the architecture: historical plugins become native tools, not a plugin runtime.
+Implemented structural home for:
 
-Need now:
+- Acceleration Enrichment;
+- PID Controller;
+- TCharge;
+- Injection Angle;
 
-- real Tuning Tools destination/workspace in the shell;
-- initial tool cards for AE/PID/TCharge/Injection Angle;
-- maturity/unavailable state presentation;
-- shared source/profile/session context strip;
-- tool workspace + evidence/details layout;
-- diagnostics hooks for tool workflow state.
+with explicit maturity/availability presentation.
 
-Deep algorithms are not required for this shell gate.
-
-Status: `CURRENT PHASE 2 IMPLEMENTATION`.
+Deep algorithms are intentionally not implemented yet.
 
 ## Diagnostic event/metric foundation
 
-Need:
+Implemented:
 
-- typed `DiagnosticEvent` schema;
-- typed metric descriptors/IDs/units/kinds;
-- bounded Kotlin and Rust event/metric storage;
-- lifecycle owner/session/generation tracing;
-- correlation IDs;
-- typed/packed bounded Rust→Kotlin diagnostic drain;
-- invariant-violation events;
-- diagnostics overhead metrics.
-
-No JSON/CBOR runtime message bus under D-023.
-
-Status: `CURRENT PHASE 2 IMPLEMENTATION`.
+- process-scoped typed `DiagnosticHub`;
+- bounded Kotlin event ring;
+- explicit Kotlin dropped-event metric;
+- bounded Rust engine event ring;
+- explicit Rust dropped-event total;
+- fixed/versioned 656-byte Rust→Kotlin diagnostic batch ABI v1;
+- one coarse JNI drain, no per-event callbacks;
+- typed native decoder/ingestion;
+- metric current/min/max/p50/p95/p99;
+- Activity and NativeEngine generation tracing;
+- bounded destroyed-owner history;
+- invariant/late-owner evidence.
 
 ## Diagnostic problem capture
 
-Need:
+Implemented:
 
-- always-on bounded pre-trigger flight recorder;
+- bounded pre-trigger flight-recorder evidence;
 - recent-problem capture;
-- manual reproduction capture;
+- post-trigger completion;
+- reproduction capture;
 - user markers;
-- immutable finalized `DiagnosticCapture`;
-- previous-exit/crash context where Android permits;
-- global capture affordance reachable from every normal destination.
-
-Status: `CURRENT PHASE 2 IMPLEMENTATION`.
+- immutable finalized captures;
+- process-scoped recorder so capture state/evidence survives Activity recreation.
 
 ## Diagnostic export
 
-Canonical export:
+Implemented default routine bundle:
 
 ```text
 EpicHub-Diagnostics-<captureId>.zip
 ├─ capture.cbor
-├─ report.txt
-└─ attachments/
+└─ report.txt
 ```
 
-Need concrete versioned CBOR schema, bounds/integrity/version behavior, report formatting from the same immutable capture, explicit attachment selection/hashes, Android SAF/share flow and privacy tests.
+with:
 
-CBOR remains export/persistence only.
+- versioned CBOR encoder;
+- report generated from the same immutable capture;
+- secure FileProvider sharing;
+- tests proving default archive entry set;
+- no JSON/CBOR live runtime/JNI path.
 
-Status: `CURRENT PHASE 2 IMPLEMENTATION`.
+Automated qualification covers the above plus dual-ABI APK build/inspection.
+
+---
+
+# Current blocking gate
 
 ## UI/diagnostic physical qualification
 
-Before real ECU integration, prove on SM-A137F + SM-T500:
+Before PR #3 acceptance/merge, prove the exact qualified APK on both:
 
-- phone/tablet portrait/landscape reflow;
-- navigation/state preservation across all six destinations;
-- synthetic RuntimeSnapshot presentation through the new shell;
-- Tuning Tools placeholder/workspace usability;
-- diagnostics event/metric flow;
-- recent-problem and reproduction capture;
-- CBOR + report export;
-- bounded memory/CPU overhead;
-- capture/export does not block UI/native engine;
-- accepted Dashboard/Logger visual references translate acceptably to Compose.
+- Samsung SM-A137F;
+- Samsung SM-T500.
+
+Verify:
+
+- install/launch;
+- all six destinations reachable;
+- compact phone header/navigation has no clipping or unusable controls;
+- tablet rail/reflow behaves sensibly;
+- route/state behavior across rotation/recreation;
+- RuntimeSnapshot continues advancing;
+- Diagnostics Overview/Events/Metrics/Sessions/Captures populate;
+- recent-problem capture auto-finishes after its post-trigger window;
+- reproduction capture + marker + stop;
+- capture/export/share works;
+- Activity recreation during capture preserves capture/evidence;
+- no duplicate active NativeEngine after recreation;
+- no obvious UI/native responsiveness regression;
+- diagnostic memory/CPU overhead is reasonable for this synthetic workload.
 
 Status: `CURRENT PHASE 2 PHYSICAL GATE`.
+
+---
+
+# Dashboard / Logger visual authority still open
+
+The user is developing HTML/CSS prototypes for Dashboard and Logger.
+
+Need later:
+
+- review/accept explicit visual/layout references;
+- translate accepted intent into native Compose;
+- physically compare phone/tablet results;
+- preserve D-023: prototype JS/mock data never becomes runtime authority.
+
+Current structural Dashboard/Logger Compose surfaces are intentionally provisional.
+
+Status: `CURRENT UI DESIGN INPUT`, not a blocker for testing PR #3 shell/diagnostics behavior.
+
+---
+
+# Diagnostics depth still open after PR #3
+
+The current diagnostic foundation is sufficient for the upcoming subsystem work, but these deeper items remain deliberately open:
+
+- previous-process/crash/exit context where Android actually provides evidence;
+- explicit optional attachment selection;
+- attachment provenance/hash metadata;
+- richer archive integrity/version migration policy;
+- longer-duration event-storm/memory/thermal benchmarks;
+- richer subsystem-specific event schemas as USB/logger/tuner/analyzer arrive.
+
+Do not claim these are already implemented merely because the basic capture/archive exists.
+
+Status: `DIAGNOSTICS FOLLOW-ON WORK`.
 
 ---
 
@@ -184,16 +197,16 @@ Status: `CURRENT PHASE 2 PHYSICAL GATE`.
 
 ## Read-only ECU acquisition
 
-Begins only after the UI/Tuning-Tools/diagnostics foundation above is accepted.
+Begins only after PR #3 is physically qualified/accepted unless the user deliberately chooses to integrate accepted Dashboard/Logger visual prototypes first.
 
-D-022 source-understanding gate must review/classify relevant EpicDash-JZ/firmware behavior first.
+D-022 source-understanding gate must review/classify relevant EpicDash-JZ/firmware behavior before production implementation.
 
 Candidate sustained-I/O strategies remain measurement-driven:
 
 ```text
 A. Kotlin USB I/O/decode reference
-B. Kotlin bulk I/O → coarse Rust batches/decode
-C. Android open/claim → proven native FD/handle → Rust sustained I/O/decode
+B. Kotlin USB I/O → coarse Rust batches/decode
+C. Android open/claim → proven native FD/handle → Rust I/O/decode
 ```
 
 Measure connect/signature/preflight latency, sustained throughput, CPU/allocations/JNI cost, corrupt/dropped frames, unplug/replug/reconnect, lifecycle/close correctness and thermal/battery behavior.
@@ -214,9 +227,14 @@ Status: `FEATURE-ENTRY FIXTURE GAPS`.
 
 # Tuning / project persistence gaps
 
-Authority is resolved; implementation remains future feature-entry work.
+Need later:
 
-Need versioned project store for exact profile source + complete verified TuneSnapshot + identity/generation metadata, portable backup, uncertainty journal, offline draft/reconnect reconciliation and persistence/process-death/fault-injection corpus.
+- versioned project store;
+- exact profile source + complete verified TuneSnapshot + identity/generation metadata;
+- portable backup;
+- uncertainty journal;
+- offline draft/reconnect reconciliation;
+- process-death/fault-injection corpus.
 
 All codecs follow D-023: typed runtime first, serialization only at explicit boundaries.
 
@@ -234,7 +252,7 @@ Status: `COMPARE/ANALYSIS FEATURE-ENTRY WORK`.
 
 # Logging / measurement gaps
 
-Locked order remains:
+Locked order:
 
 ```text
 live acquisition path
@@ -251,18 +269,16 @@ Status: `LOGGER/MEASUREMENT FEATURE-ENTRY WORK`.
 
 # Analyzer / Tuning Tools depth gaps
 
-Responsibility architecture is resolved by D-019/D-020/D-024, `ANALYSIS_RESPONSIBILITY_MAP.md` and `TUNING_TOOLS_FOUNDATION.md`.
-
 Need later:
 
 - concrete versioned `AnalysisSession` representation;
 - domain-profile trait/interface;
 - typed readiness/comparability/identifiability/result vocabulary;
 - session persistence/indexing policy;
-- semantic `ExperimentProposal` handoff to tuning authority;
+- semantic `ExperimentProposal` handoff;
 - deterministic replay/golden corpus;
 - per-tool D-022 source review and clean Rust implementation;
-- product rollout/qualification depth for AE/PID/TCharge/Injection Angle.
+- AE/PID/TCharge/Injection Angle qualification depth.
 
 The tools are native EpicHub functionality, not dynamically loaded plugins.
 
@@ -278,25 +294,13 @@ Status: `DEFERRED ACCESSORY WORK`.
 
 ---
 
-# Deferred UI/product scope
-
-Not required for the current shell/diagnostics gate:
-
-- rich table arithmetic/fill/smoothing/interpolation depth;
-- dashboard customization/favorites depth beyond accepted visual shell;
-- specialized GPU renderer unless Compose measurements justify it;
-- cross-profile table regridding;
-- deep Tuning Tool algorithm rollout order.
-
----
-
 # Closed architecture questions
 
 Do not reopen without contradictory evidence:
 
 - Kotlin/Compose owns Android/UI; Rust owns native high-volume engine work;
 - runtime state is typed Kotlin/Rust state;
-- design-only HTML/CSS/JavaScript prototypes are allowed but are translated to Compose;
+- design-only HTML/CSS/JavaScript prototypes are allowed but translated to Compose;
 - no WebView/JavaScript production runtime architecture;
 - no JSON/CBOR runtime/JNI message bus;
 - serialization is explicit-boundary-only under D-023;
@@ -314,4 +318,4 @@ Do not reopen without contradictory evidence:
 
 ## Current gate
 
-The current development gate is **PR #3 UI + Tuning Tools + diagnostics design acceptance**, followed by implementation/physical qualification on the existing synthetic foundation. Only then proceed to read-only live ECU acquisition.
+> Physical qualification and acceptance of PR #3's implemented UI/diagnostics foundation on SM-A137F and SM-T500. Real ECU acquisition begins only after that gate unless the user explicitly changes the sequencing.
