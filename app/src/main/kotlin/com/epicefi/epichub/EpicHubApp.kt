@@ -1,75 +1,191 @@
 package com.epicefi.epichub
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
+import android.os.SystemClock
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
+import com.epicefi.epichub.diagnostics.DiagnosticDomain
+import com.epicefi.epichub.diagnostics.DiagnosticEventCode
+import com.epicefi.epichub.diagnostics.DiagnosticHub
+import com.epicefi.epichub.diagnostics.DiagnosticMetricId
+import com.epicefi.epichub.diagnostics.DiagnosticPayload
+import com.epicefi.epichub.diagnostics.DiagnosticSeverity
+import com.epicefi.epichub.diagnostics.DiagnosticsSnapshot
 import com.epicefi.epichub.engine.NativeEngine
 import com.epicefi.epichub.engine.RuntimeSnapshot
+import com.epicefi.epichub.navigation.AppDestination
+import com.epicefi.epichub.platform.diagnostics.DiagnosticCaptureExporter
+import com.epicefi.epichub.ui.EpicHubShell
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @Composable
 fun EpicHubApp() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val engine = remember { NativeEngine.create() }
-    var snapshot by remember(engine) { mutableStateOf<RuntimeSnapshot?>(null) }
+    val diagnostics = remember { DiagnosticHub() }
 
-    DisposableEffect(engine) {
+    var destinationId by rememberSaveable { mutableStateOf(AppDestination.DASHBOARD.id) }
+    var settingsOpen by rememberSaveable { mutableStateOf(false) }
+    var runtimeSnapshot by remember(engine) { mutableStateOf<RuntimeSnapshot?>(null) }
+    var diagnosticSnapshot by remember { mutableStateOf(diagnostics.snapshotForUi()) }
+
+    fun refreshDiagnostics() {
+        diagnosticSnapshot = diagnostics.snapshotForUi()
+    }
+
+    DisposableEffect(engine, diagnostics) {
+        diagnostics.createLifecycleOwner(
+            ownerId = "epichub-composition",
+            ownerKind = "ComposeRoot",
+            generation = 1,
+            initialState = "active",
+        )
+        diagnostics.createLifecycleOwner(
+            ownerId = "native-engine-1",
+            ownerKind = "NativeEngine",
+            generation = 1,
+            initialState = "active",
+        )
+        diagnostics.record(
+            severity = DiagnosticSeverity.INFO,
+            domain = DiagnosticDomain.APP_UI,
+            code = DiagnosticEventCode.APP_STARTED,
+        )
+        diagnostics.record(
+            severity = DiagnosticSeverity.INFO,
+            domain = DiagnosticDomain.NATIVE_ENGINE,
+            code = DiagnosticEventCode.NATIVE_ENGINE_CREATED,
+            payload = DiagnosticPayload.NativeEngineState(
+                alive = engine.isAlive,
+                activeEngineCount = NativeEngine.activeCount(),
+            ),
+        )
+        refreshDiagnostics()
+
         onDispose {
+            diagnostics.destroyLifecycleOwner("native-engine-1")
             engine.close()
+            diagnostics.record(
+                severity = DiagnosticSeverity.INFO,
+                domain = DiagnosticDomain.NATIVE_ENGINE,
+                code = DiagnosticEventCode.NATIVE_ENGINE_CLOSED,
+                payload = DiagnosticPayload.NativeEngineState(
+                    alive = false,
+                    activeEngineCount = NativeEngine.activeCount(),
+                ),
+            )
+            diagnostics.destroyLifecycleOwner("epichub-composition")
         }
     }
 
-    LaunchedEffect(engine) {
+    LaunchedEffect(engine, diagnostics) {
         while (true) {
-            snapshot = engine.readRuntimeSnapshot()
+            val startedAt = SystemClock.elapsedRealtimeNanos()
+            val next = engine.readRuntimeSnapshot()
+            val elapsedMs = (SystemClock.elapsedRealtimeNanos() - startedAt) / 1_000_000.0
+            runtimeSnapshot = next
+            diagnostics.observeMetric(DiagnosticMetricId.RUNTIME_SNAPSHOT_READ_MS, elapsedMs)
+            diagnostics.observeMetric(DiagnosticMetricId.RUNTIME_SNAPSHOT_SEQUENCE, next.sequence.toDouble())
+            diagnostics.observeMetric(
+                DiagnosticMetricId.ACTIVE_NATIVE_ENGINES,
+                NativeEngine.activeCount().toDouble(),
+            )
+            if (next.sequence == 1L || next.sequence % 20L == 0L) {
+                diagnostics.record(
+                    severity = DiagnosticSeverity.TRACE,
+                    domain = DiagnosticDomain.RUNTIME,
+                    code = DiagnosticEventCode.RUNTIME_SNAPSHOT_OBSERVED,
+                    sessionId = next.sessionId,
+                    payload = DiagnosticPayload.RuntimeSnapshotState(
+                        sequence = next.sequence,
+                        sessionId = next.sessionId,
+                        sourceKind = next.sourceKind,
+                        channelCount = next.channels.size,
+                    ),
+                )
+            }
+            refreshDiagnostics()
             delay(250)
         }
     }
 
     MaterialTheme {
-        Surface(modifier = Modifier.fillMaxSize()) {
-            Column(
-                modifier = Modifier.padding(24.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Text(
-                    text = "EpicHub",
-                    style = MaterialTheme.typography.headlineLarge,
+        EpicHubShell(
+            destination = AppDestination.fromId(destinationId),
+            onDestinationSelected = { destination ->
+                destinationId = destination.id
+                settingsOpen = false
+                diagnostics.record(
+                    severity = DiagnosticSeverity.TRACE,
+                    domain = DiagnosticDomain.APP_UI,
+                    code = DiagnosticEventCode.APP_DESTINATION_CHANGED,
+                    payload = DiagnosticPayload.DestinationChanged(destination.id),
                 )
-                Text("Phase 2 foundation bootstrap")
-                Text("Native engine: ${if (engine.isAlive) "alive" else "unavailable"}")
-                Text("Active native engines: ${NativeEngine.activeCount()}")
-                RuntimeSnapshotSummary(snapshot)
-            }
-        }
-    }
-}
-
-@Composable
-private fun RuntimeSnapshotSummary(snapshot: RuntimeSnapshot?) {
-    if (snapshot == null) {
-        Text("Runtime snapshot: waiting")
-        return
-    }
-
-    Text("Snapshot sequence: ${snapshot.sequence}")
-    Text("Session: ${snapshot.sessionId} · source: ${snapshot.sourceKind}")
-    snapshot.channels.forEach { channel ->
-        Text(
-            "Synthetic 0x${channel.id.toString(16).uppercase()}: " +
-                "${channel.value} (${channel.validity.name.lowercase()})",
+                refreshDiagnostics()
+            },
+            settingsOpen = settingsOpen,
+            onOpenSettings = { settingsOpen = true },
+            onCloseSettings = { settingsOpen = false },
+            runtimeSnapshot = runtimeSnapshot,
+            diagnostics = diagnosticSnapshot,
+            engineAlive = engine.isAlive,
+            activeEngineCount = NativeEngine.activeCount(),
+            onCaptureRecentProblem = {
+                val capture = diagnostics.startRecentProblemCapture()
+                refreshDiagnostics()
+                scope.launch {
+                    delay(3_000)
+                    if (diagnostics.activeCapture()?.captureId == capture.captureId) {
+                        diagnostics.finishCapture()
+                        refreshDiagnostics()
+                    }
+                }
+            },
+            onStartReproductionCapture = {
+                diagnostics.startReproductionCapture()
+                refreshDiagnostics()
+            },
+            onAddCaptureMarker = {
+                diagnostics.addMarker()
+                refreshDiagnostics()
+            },
+            onStopCapture = {
+                if (diagnostics.activeCapture() != null) {
+                    diagnostics.finishCapture()
+                    refreshDiagnostics()
+                }
+            },
+            onExportCapture = { capture ->
+                runCatching {
+                    DiagnosticCaptureExporter.share(context, capture)
+                }.onFailure { error ->
+                    diagnostics.invariantViolation(
+                        invariantId = "diagnostic.export.failed",
+                        detail = error.message ?: error::class.java.simpleName,
+                        domain = DiagnosticDomain.DIAGNOSTIC_CAPTURE,
+                        correlationId = "capture-${capture.captureId}",
+                    )
+                    refreshDiagnostics()
+                }
+            },
         )
     }
 }
+
+private fun DiagnosticHub.snapshotForUi(): DiagnosticsSnapshot = DiagnosticsSnapshot(
+    events = events(),
+    metrics = metricSummaries(),
+    lifecycleOwners = lifecycleOwners(),
+    captures = captures(),
+    activeCapture = activeCapture(),
+)
