@@ -205,12 +205,12 @@ The current locked Tuner contract and UXUI table work provide a strong split.
 
 ## Rust/tuning semantic ownership
 
-Rust should own or validate:
+Rust owns or validates:
 
 - table identity and dimensions;
 - X/Y/Z semantic arrays;
 - current verified baseline/source values;
-- local semantic draft values if the draft model is native-owned;
+- local semantic draft values and edit history;
 - selection translated into exact semantic cell indices for edit commands;
 - Add/Subtract/Multiply/Divide/Fill/Flatten semantics if those become product features;
 - smoothing/interpolation semantics and validity constraints;
@@ -443,7 +443,7 @@ Locked contract:
 
 Parameter field components consume typed field metadata/state. They never parse raw INI strings or calculate physical page/offset/byte writes.
 
-Draft/focus/text-input state is presentation state; committed semantic requested value is a tuning draft operation.
+Focus/text-entry/validation presentation state stays in Kotlin; a committed semantic requested value becomes a Rust tuning-draft operation.
 
 ---
 
