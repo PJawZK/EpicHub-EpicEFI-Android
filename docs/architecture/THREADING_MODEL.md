@@ -2,9 +2,9 @@
 
 ## Purpose
 
-EpicHub should keep UI work, acquisition, logging and heavy analysis independent so one subsystem cannot stall another. Threading is explicit and bounded; asynchronous work is not introduced merely because a framework supports it.
+EpicHub keeps UI work, acquisition, logging, diagnostics and heavy analysis independent so one subsystem cannot stall another. Threading is explicit and bounded; asynchronous work is not introduced merely because a framework supports it.
 
-This is a Phase 1 target model. Exact executors/runtimes are finalized with implementation benchmarks.
+This is the current Phase-2 threading contract. Exact executors/tasks/runtimes remain implementation details selected by measurement, but ownership and non-blocking boundaries below are authoritative.
 
 ## Android main thread
 
@@ -22,13 +22,16 @@ Must not perform:
 - full INI parsing;
 - complete TuneSnapshot I/O;
 - large-log analysis;
-- large data copies/conversions.
+- large data copies/conversions;
+- diagnostic archive generation.
 
 ## Kotlin platform/background work
 
-Android USB/BLE/location APIs may impose their own callback/handler/executor behavior. Platform adapters should normalize those events without leaking their threading models into domain/UI code.
+Android USB/BLE/location/storage APIs may impose their own callback/handler/executor behavior. Platform adapters normalize those events without leaking framework threading models into domain/UI code.
 
-BLE writes remain serialized according to Android GATT requirements. Reconnect timers/policies should not block UI.
+BLE writes remain serialized according to Android GATT requirements. Reconnect timers/policies must not block UI.
+
+Diagnostic capture assembly/export is background work. Event/metric recording remains cheap and bounded on the emitting path.
 
 ## Rust acquisition thread/task
 
@@ -47,13 +50,13 @@ If Kotlin remains the selected USB I/O owner after benchmarking, the same archit
 Responsibilities:
 
 - protocol frame validation/response parsing;
-- runtime output decode using current exact profile;
+- runtime output decode using the current exact profile;
 - conversion into typed sample/channel updates;
 - derived-channel evaluation required at acquisition rate;
 - publication to ChannelStore;
-- fan-out of immutable/batched observations to logger/runtime snapshot consumers.
+- fan-out of immutable/batched observations to logger/runtime-snapshot consumers.
 
-This path must not wait for Compose rendering.
+This path must not wait for Compose rendering, diagnostics export or file-analysis work.
 
 ## Rust logging writer
 
@@ -74,9 +77,7 @@ Format-specific responsibilities remain inside the selected writer:
 
 The locked implementation order remains live path first → MLG → MDF4 evaluation/implementation. The threading model must not make MDF a prerequisite for recording.
 
-The writer must never depend on UI frame delivery.
-
-A slow writer must produce explicit pressure/drop/failure metrics rather than permit unbounded RAM growth.
+The writer never depends on UI frame delivery. A slow writer produces explicit pressure/drop/failure metrics rather than permit unbounded RAM growth.
 
 ## Rust analysis worker pool
 
@@ -94,6 +95,19 @@ MDF4 may become the long-term native large-log source, but analyzer scheduling i
 
 Analysis must be independently cancellable/prioritizable so background work cannot starve live acquisition/logging.
 
+## Diagnostics workers
+
+Diagnostics use bounded in-memory rings/metric accumulators on the emitting side.
+
+Rules:
+
+- normal event/metric publication must be non-blocking or bounded;
+- Rust diagnostic events cross to Kotlin through coarse bounded drains, never one callback per event;
+- capture finalization, CBOR encoding, ZIP assembly, report rendering, hashing and Android document export run away from acquisition/UI hot paths;
+- diagnostic backpressure/overflow is observable and never changes the production subsystem's decisions merely to preserve diagnostics.
+
+D-017 and D-023 remain authoritative: diagnostics are observational, and serialization exists only at the explicit capture/export boundary.
+
 ## Tuning transaction execution
 
 Tune read/write/Burn operations require exclusive ownership of the ECU protocol session when their protocol sequence demands it.
@@ -106,8 +120,6 @@ Tune operations run off the Android main thread and provide coarse progress/stat
 
 ECU/channel update rate is independent of display rate.
 
-Example:
-
 ```text
 ECU / source updates: potentially hundreds of Hz
         │
@@ -119,12 +131,14 @@ Rust ChannelStore
         └─► latest immutable RuntimeSnapshot
                          │
                          ▼
-                  Compose ~display cadence
+                  Compose display cadence
 ```
 
 Do not trigger Compose state mutation for every raw sample.
 
-Target implementation should investigate double/triple-buffered packed snapshots with atomic sequence/version publication so the producer never blocks on UI reading.
+The accepted foundation already proves a fixed/versioned 96-byte little-endian RuntimeSnapshot ABI v1 over one reusable direct `ByteBuffer` on both reference devices. That is current measured foundation evidence, not a claim that every future production channel projection fits forever into 96 bytes.
+
+Any later snapshot expansion or double/triple-buffer publication must preserve explicit ABI versioning, stable complete-snapshot publication and bounded JNI cost, and is adopted only when actual live-load measurement justifies it.
 
 ## Bounded communication
 
@@ -148,22 +162,24 @@ When simultaneous work competes for resources, intended priority is broadly:
 
 1. ECU/session correctness and safety-critical transaction integrity;
 2. live acquisition needed for active logging/runtime truth;
-3. lossless logging within supported rate contract;
+3. lossless logging within the supported rate contract;
 4. UI latest-state responsiveness;
 5. foreground analyzer interaction;
-6. speculative/background analysis/cache work.
+6. diagnostic export/report generation;
+7. speculative/background analysis/cache work.
 
-Exact Android/Linux scheduler priorities should not be altered without measurements and device evidence.
+Exact Android/Linux scheduler priorities must not be altered without measurements and device evidence.
 
 ## Shutdown/disconnect
 
-Lifecycle/disconnect must have deterministic ownership ordering:
+Lifecycle/disconnect has deterministic ownership ordering:
 
 - stop accepting new semantic operations;
 - invalidate current session/generation;
 - stop/cancel acquisition;
 - finish/abort transactions according to uncertainty rules;
 - flush/finalize logging if possible without lying about success;
+- finalize or mark diagnostic captures according to their own bounded state;
 - release native/platform resources once;
 - publish final disconnected/error state.
 
