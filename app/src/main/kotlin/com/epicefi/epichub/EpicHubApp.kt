@@ -19,6 +19,7 @@ import com.epicefi.epichub.diagnostics.DiagnosticMetricId
 import com.epicefi.epichub.diagnostics.DiagnosticPayload
 import com.epicefi.epichub.diagnostics.DiagnosticSeverity
 import com.epicefi.epichub.diagnostics.DiagnosticsSnapshot
+import com.epicefi.epichub.diagnostics.NativeDiagnosticIngestor
 import com.epicefi.epichub.engine.NativeEngine
 import com.epicefi.epichub.engine.RuntimeSnapshot
 import com.epicefi.epichub.navigation.AppDestination
@@ -33,6 +34,7 @@ fun EpicHubApp() {
     val scope = rememberCoroutineScope()
     val engine = remember { NativeEngine.create() }
     val diagnostics = remember { DiagnosticHub() }
+    val nativeDiagnostics = remember { NativeDiagnosticIngestor() }
 
     var destinationId by rememberSaveable { mutableStateOf(AppDestination.DASHBOARD.id) }
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
@@ -61,15 +63,6 @@ fun EpicHubApp() {
             domain = DiagnosticDomain.APP_UI,
             code = DiagnosticEventCode.APP_STARTED,
         )
-        diagnostics.record(
-            severity = DiagnosticSeverity.INFO,
-            domain = DiagnosticDomain.NATIVE_ENGINE,
-            code = DiagnosticEventCode.NATIVE_ENGINE_CREATED,
-            payload = DiagnosticPayload.NativeEngineState(
-                alive = engine.isAlive,
-                activeEngineCount = NativeEngine.activeCount(),
-            ),
-        )
         refreshDiagnostics()
 
         onDispose {
@@ -88,7 +81,7 @@ fun EpicHubApp() {
         }
     }
 
-    LaunchedEffect(engine, diagnostics) {
+    LaunchedEffect(engine, diagnostics, nativeDiagnostics) {
         while (true) {
             val startedAt = SystemClock.elapsedRealtimeNanos()
             val next = engine.readRuntimeSnapshot()
@@ -100,20 +93,24 @@ fun EpicHubApp() {
                 DiagnosticMetricId.ACTIVE_NATIVE_ENGINES,
                 NativeEngine.activeCount().toDouble(),
             )
-            if (next.sequence == 1L || next.sequence % 20L == 0L) {
-                diagnostics.record(
-                    severity = DiagnosticSeverity.TRACE,
-                    domain = DiagnosticDomain.RUNTIME,
-                    code = DiagnosticEventCode.RUNTIME_SNAPSHOT_OBSERVED,
-                    sessionId = next.sessionId,
-                    payload = DiagnosticPayload.RuntimeSnapshotState(
-                        sequence = next.sequence,
+
+            runCatching { engine.drainDiagnosticEvents() }
+                .onSuccess { batch ->
+                    nativeDiagnostics.ingest(
+                        batch = batch,
+                        diagnostics = diagnostics,
                         sessionId = next.sessionId,
-                        sourceKind = next.sourceKind,
-                        channelCount = next.channels.size,
-                    ),
-                )
-            }
+                    )
+                }
+                .onFailure { error ->
+                    diagnostics.invariantViolation(
+                        invariantId = "native.diagnostics.drain_failed",
+                        detail = error.message ?: error::class.java.simpleName,
+                        domain = DiagnosticDomain.NATIVE_ENGINE,
+                        correlationId = "native-session-${next.sessionId}",
+                    )
+                }
+
             refreshDiagnostics()
             delay(250)
         }
