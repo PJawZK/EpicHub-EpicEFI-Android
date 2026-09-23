@@ -55,6 +55,48 @@ When sources disagree, use the following default authority order unless a respon
 
 UI/UX repositories may be authoritative for explicitly accepted interaction or visual behaviour, but never for ECU protocol, tune-memory or firmware truth.
 
+## Clean reimplementation rule
+
+Phase 1 responsibility archaeology does **not** certify historical source files as production-quality code and does not authorize bulk source migration.
+
+Before implementing any inherited subsystem or feature, follow `SOURCE_REIMPLEMENTATION_METHOD.md`:
+
+```text
+semantic behavior slice
+→ trace historical implementation/callers/tests/failure history
+→ classify required/safety/compatibility/useful/bug/obsolete/unknown behavior
+→ define clean owner + API + state/thread/lifetime/failure contract
+→ implement from scratch in EpicHub
+→ qualify against protocol truth / proven behavior / focused goldens
+→ benchmark hot paths
+→ accept the narrow slice
+→ move to the next slice
+```
+
+The prohibited migration pattern is:
+
+```text
+copy old subsystem
+→ make it compile
+→ rename/refactor it later
+```
+
+Historical bugs and awkward fixes are mined for the invariant they reveal, not for the old control flow that implemented them.
+
+Old tests are reviewed as candidate behavioral specifications. Implementation-detail assertions and accidental/junk behavior are not transferred merely to make the new implementation match the old code.
+
+A substantial implementation PR that replaces historical behavior should identify:
+
+- historical evidence reviewed;
+- required behavior and safety invariants;
+- old bugs/technical debt deliberately excluded;
+- new permanent owner/contract;
+- test/golden evidence;
+- performance/physical evidence where applicable;
+- deliberate behavior differences from the old implementation.
+
+This methodology applies to the entire project, including Android platform integration, ECU/profile/tuning, BLE/accessory, logging, MDF/MLG interoperability, analyzer/autotune, diagnostics and Compose UI.
+
 ## Architecture changes
 
 Architecture documents are part of the implementation contract. A change that moves responsibility, state authority, dependency direction, transport ownership, safety policy or the Kotlin/Rust boundary must update the corresponding architecture document in the same workstream.
