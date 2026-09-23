@@ -8,7 +8,7 @@ import org.junit.Test
 
 class DiagnosticCoreTest {
     @Test
-    fun ringEvictsOldestAndPreservesOrder() {
+    fun ringEvictsOldestPreservesOrderAndCountsDrops() {
         val ring = DiagnosticRing(capacity = 3)
         repeat(4) { index ->
             ring.add(testEvent(eventId = (index + 1).toLong()))
@@ -17,6 +17,7 @@ class DiagnosticCoreTest {
         assertEquals(listOf(2L, 3L, 4L), ring.snapshot().map { it.eventId })
         assertEquals(listOf(3L, 4L), ring.snapshotSince(2).map { it.eventId })
         assertEquals(4L, ring.newestEventId())
+        assertEquals(1L, ring.droppedTotal())
     }
 
     @Test
@@ -37,6 +38,25 @@ class DiagnosticCoreTest {
         assertEquals(50.0, summary.p50, 0.0)
         assertEquals(95.0, summary.p95, 0.0)
         assertEquals(99.0, summary.p99, 0.0)
+    }
+
+    @Test
+    fun hubExposesDroppedEventMetricWhenRingOverflows() {
+        val clock = FakeDiagnosticClock(monotonic = 0, wall = 0)
+        val hub = DiagnosticHub(eventCapacity = 2, clock = clock)
+        repeat(3) {
+            hub.record(
+                severity = DiagnosticSeverity.INFO,
+                domain = DiagnosticDomain.APP_UI,
+                code = DiagnosticEventCode.APP_STARTED,
+            )
+            clock.advance(1)
+        }
+
+        val dropped = hub.metricSummaries().first {
+            it.metric == DiagnosticMetricId.DIAGNOSTIC_DROPPED_EVENT_COUNT
+        }
+        assertEquals(1.0, dropped.current, 0.0)
     }
 
     @Test
