@@ -27,6 +27,7 @@ enum class DiagnosticEventCode(val stableId: String) {
     APP_DESTINATION_CHANGED("app.destination.changed"),
     NATIVE_ENGINE_CREATED("native.engine.created"),
     NATIVE_ENGINE_CLOSED("native.engine.closed"),
+    NATIVE_ENGINE_EVENT("native.engine.event"),
     RUNTIME_SNAPSHOT_OBSERVED("runtime.snapshot.observed"),
     LIFECYCLE_OWNER_CREATED("lifecycle.owner.created"),
     LIFECYCLE_OWNER_STATE_CHANGED("lifecycle.owner.state_changed"),
@@ -48,6 +49,14 @@ sealed interface DiagnosticPayload {
     data class NativeEngineState(
         val alive: Boolean,
         val activeEngineCount: Int,
+    ) : DiagnosticPayload
+
+    data class NativeEngineEvent(
+        val nativeEventId: Long,
+        val engineElapsedNanos: Long,
+        val rawCode: Int,
+        val arg0: Long,
+        val arg1: Long,
     ) : DiagnosticPayload
 
     data class RuntimeSnapshotState(
