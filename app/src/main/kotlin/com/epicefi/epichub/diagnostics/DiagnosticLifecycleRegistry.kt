@@ -1,6 +1,14 @@
 package com.epicefi.epichub.diagnostics
 
-class DiagnosticLifecycleRegistry {
+class DiagnosticLifecycleRegistry(
+    private val retainedDestroyedCapacity: Int = 128,
+) {
+    init {
+        require(retainedDestroyedCapacity > 0) {
+            "Retained destroyed lifecycle capacity must be positive."
+        }
+    }
+
     private data class MutableOwner(
         val ownerId: String,
         val ownerKind: String,
@@ -52,7 +60,9 @@ class DiagnosticLifecycleRegistry {
             owner.destroyedAtNanos = destroyedAtNanos
             owner.currentState = "destroyed"
         }
-        return owner.toImmutable()
+        val result = owner.toImmutable()
+        trimDestroyedHistory()
+        return result
     }
 
     @Synchronized
@@ -64,6 +74,22 @@ class DiagnosticLifecycleRegistry {
 
     @Synchronized
     fun snapshot(): List<DiagnosticLifecycleOwner> = owners.values.map { it.toImmutable() }
+
+    private fun trimDestroyedHistory() {
+        var destroyedCount = owners.values.count { it.destroyedAtNanos != null }
+        if (destroyedCount <= retainedDestroyedCapacity) {
+            return
+        }
+
+        val iterator = owners.entries.iterator()
+        while (iterator.hasNext() && destroyedCount > retainedDestroyedCapacity) {
+            val entry = iterator.next()
+            if (entry.value.destroyedAtNanos != null) {
+                iterator.remove()
+                destroyedCount -= 1
+            }
+        }
+    }
 
     private fun MutableOwner.toImmutable() = DiagnosticLifecycleOwner(
         ownerId = ownerId,
