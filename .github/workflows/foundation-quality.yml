@@ -38,14 +38,15 @@ jobs:
           unzip -q "$TOOLS_ZIP" -d "$TOOLS_DIR"
 
           SDKMANAGER="$TOOLS_DIR/cmdline-tools/bin/sdkmanager"
+          ANDROID_CLI="$TOOLS_DIR/cmdline-tools/bin/android"
           test -x "$SDKMANAGER"
+          test -x "$ANDROID_CLI"
+
           yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses >/dev/null || true
-          "$SDKMANAGER" \
-            --sdk_root="$SDK_ROOT" \
-            --channel=3 \
-            "platforms;android-37" \
-            "build-tools;36.0.0" \
-            "ndk;30.0.16248370"
+          "$ANDROID_CLI" --sdk="$SDK_ROOT" sdk install --canary \
+            platforms/android-37 \
+            build-tools/36.0.0 \
+            ndk/30.0.16248370
 
       - name: Set up Gradle 9.6
         uses: gradle/actions/setup-gradle@v4
