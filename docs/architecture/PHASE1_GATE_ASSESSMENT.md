@@ -8,6 +8,8 @@ The architecture/source/test gate is **ready for explicit user acceptance** befo
 
 This does **not** mean every future feature/format/algorithm has been implemented or physically qualified. It means the remaining unknowns are now explicit implementation, fixture, benchmark, compatibility or product-scope tasks with known owners and evidence plans rather than hidden architecture responsibilities.
 
+It also does **not** mean every historical source file has been certified as correct or reusable. Phase 1 mapped responsibilities and high-value evidence. D-022 / `SOURCE_REIMPLEMENTATION_METHOD.md` requires a deeper piece-by-piece review of the corresponding historical implementation whenever each subsystem enters implementation, followed by a clean rewrite rather than bulk source migration.
+
 ---
 
 # Completion-gate assessment
@@ -21,6 +23,8 @@ This does **not** mean every future feature/format/algorithm has been implemente
 EpicDash-JZ, original EpicDash/ESP32 behavior, generated profile/tuning authority, persistence/recovery, UI interaction/performance, logging, diagnostics, Tune Viewer and AE/PID/TCharge/Injection Angle plugin responsibilities have been decomposed by domain.
 
 Plugin-derived analysis/autotune responsibilities are explicitly mapped in `ANALYSIS_RESPONSIBILITY_MAP.md`.
+
+This is a responsibility-completeness statement, not a claim that every old source file is production quality. Implementation-stage source review remains mandatory under D-022.
 
 ## 2. ECU / ESP32 / file-format protocol authorities are explicit
 
@@ -58,6 +62,8 @@ Per-channel/per-sample JNI getters/callbacks are prohibited.
 - plugin-specific ECU writers;
 - warning/diagnostic definitions becoming hidden control policy;
 - external file formats becoming the runtime model.
+
+D-022 additionally prevents historical class/control-flow structure from becoming de facto architecture merely because it already exists.
 
 ## 6. Topology has a home for Phase 2 starting components
 
@@ -106,6 +112,8 @@ production ARM ABIs     = armeabi-v7a + arm64-v8a
 
 Plugin archaeology adds deterministic log-replay analysis goldens.
 
+D-022 adds a source-understanding gate before implementation acceptance: old tests are candidate specifications only after their real requirement is identified, and known old bug behavior receives explicit negative/regression tests instead of blind parity.
+
 ## 9. Repository architecture documents agree
 
 **SATISFIED after this reconciliation batch.**
@@ -122,7 +130,8 @@ Current authority documents consistently state:
 - diagnostics observational only;
 - exact-profile tune comparison;
 - shared analysis engine/domain profiles;
-- initial Android package/API/ABI baseline.
+- initial Android package/API/ABI baseline;
+- historical implementations are mined piece-by-piece and cleanly reimplemented rather than bulk-ported.
 
 ## 10. User explicitly accepts Phase 1 before production scaffold
 
@@ -149,6 +158,8 @@ B. Android open/claim → proven native FD/handle → Rust sustained I/O
 
 Selection remains measurement-driven. Architecture above the transport adapter is unchanged.
 
+Before either candidate becomes production code, its corresponding EpicDash-JZ/firmware transport behavior is reviewed piece-by-piece under D-022 so legacy lifecycle/retry/race behavior is understood rather than copied.
+
 ### Compose/runtime snapshot performance
 
 Prove:
@@ -168,6 +179,8 @@ Physically prove engine create/close/recreate and exact `Build.SUPPORTED_ABIS` o
 # Feature-entry prerequisites, not scaffold blockers
 
 These must be completed before their corresponding feature is accepted, but the empty foundation does not need them all on day one.
+
+Every inherited feature also requires the D-022 source-understanding/reimplementation gate before its production implementation is accepted.
 
 ## ECU/profile/tuning
 
@@ -240,6 +253,8 @@ Android app/bootstrap
 → diagnostics counters for JNI/snapshot lifecycle
 ```
 
+Even in this small slice, inherited lifecycle/state/performance lessons are reviewed under `SOURCE_REIMPLEMENTATION_METHOD.md` before substantive behavior is implemented. The scaffold itself is new; it is not a renamed EpicDash-JZ skeleton.
+
 Acceptance for that first slice should include:
 
 - CI builds both production ARM ABIs;
@@ -261,7 +276,7 @@ format-neutral live ECU path
 → scalable Analyzer
 ```
 
-Tuning mutation remains later and retains EpicDash-JZ as the behavioral oracle until parity is physically qualified.
+Tuning mutation remains later and retains physically accepted EpicDash-JZ behavior as behavioral evidence/oracle while the implementation is independently redesigned and physically qualified.
 
 ---
 
@@ -277,4 +292,4 @@ The single intentionally unchecked item is:
 
 > user accepts Phase 1 result before production scaffold begins.
 
-No unresolved architecture archaeology item currently blocks that decision.
+No unresolved architecture archaeology item currently blocks that decision. The deeper per-subsystem old-code review is deliberately an implementation-entry gate so it occurs immediately before each clean replacement is designed and written.
