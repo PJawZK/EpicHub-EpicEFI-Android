@@ -20,7 +20,7 @@ internal object DiagnosticCaptureCborEncoder {
         metadata: DiagnosticExportMetadata,
     ): ByteArray {
         val writer = CborWriter()
-        writer.writeMapHeader(12)
+        writer.writeMapHeader(13)
         writer.writeText("schemaVersion")
         writer.writeLong(SCHEMA_VERSION)
         writer.writeText("captureId")
