@@ -2,39 +2,44 @@
 
 ## Status
 
-Phase 1 source archaeology for the clean-slate Compose presentation architecture.
+This document records the accepted interaction/responsive/performance evidence gathered during Phase 1 and explains how it applies to the current Compose architecture.
 
-Visual authority and implementation evidence are deliberately separated.
+It is **evidence**, not the current ground-layout specification. The active EpicHub shell/navigation/layout contract is `UI_FOUNDATION_LAYOUT.md`.
 
-### Visual/layout authority
+Visual authority and implementation evidence remain deliberately separated.
 
-The accepted EpicDash-JZ tablet/phone reference family and current presentation contracts remain authoritative for the intended EpicHub Tuner visual/layout language.
+### Visual / interaction authority
 
-Primary current contracts reviewed:
+The accepted EpicDash-JZ tablet/phone reference family remains strong visual/interaction evidence for the intended Tuner language, especially:
 
 - `PJawZK/EpicDash-JZ/docs/UI_SPEC.md`;
 - `PJawZK/EpicDash-JZ/docs/TUNER_UI_SIDEQUEST.md`.
 
-### Interaction/performance reference only
+`PJawZK/Epic-DashTune-UXUI` is an interaction/responsive/performance reference only. Its WebView/JavaScript/HTML/SVG implementation and its visual theme/layout structure are not migrated as EpicHub architecture.
 
-`PJawZK/Epic-DashTune-UXUI` is reviewed for proven features, interaction rules, responsive behavior and performance techniques.
-
-Its visual theme/layout language is **not** imported into EpicHub simply because a behavior was proven there.
-
-GitHub currently reports no declared repository license for that reference repository, so code transplantation is not assumed. Concepts/behavior can be reimplemented cleanly.
+D-022 requires clean reimplementation; D-023 keeps production runtime presentation in Kotlin/Jetpack Compose with typed/packed Rust integration.
 
 ---
 
-# Locked high-level presentation contract
+# Current high-level presentation contract
 
-Top-level application destinations remain conceptually:
+The current first-class EpicHub destinations are:
+
+```text
+Dashboard | Tuner | Logger | Analyzer | Diagnostics
+```
+
+`Settings` is a global application surface rather than a sixth high-frequency work destination.
+
+The older EpicDash-JZ four-destination shell:
 
 ```text
 Dash | Tuner | Logging | Diagnostics
-                   + Settings
 ```
 
-Top-level navigation is separate from Dashboard page swipe/order.
+is historical interaction evidence only and no longer overrides `UI_FOUNDATION_LAYOUT.md`.
+
+Top-level navigation remains separate from Dashboard page swipe/order.
 
 Tuner hierarchy is derived from the exact accepted INI/profile:
 
@@ -42,38 +47,34 @@ Tuner hierarchy is derived from the exact accepted INI/profile:
 System → Category → Feature
 ```
 
-Normal Tuner content modes:
+Normal Tuner content modes remain:
 
 ```text
 Parameters | Tables | Curves
 ```
 
-The application must not invent a firmware-specific navigation taxonomy when the current INI supplies the hierarchy.
-
-Condition-hidden/disabled/unsupported items remain governed by profile condition authority below the UI layer.
+The UI does not invent a firmware-specific taxonomy when the authoritative profile supplies it. Condition-hidden/disabled/unsupported items remain governed by profile condition authority below presentation.
 
 ---
 
 # One responsive component/data model
 
-The current EpicDash-JZ contract and UXUI responsive work independently support the same architectural rule:
+Historical EpicDash-JZ/UXUI evidence supports the current rule:
 
 > Use one semantic/component model and reflow it by available geometry. Do not create separate phone/tablet application implementations.
 
-Reference behavior:
+Transferable behavior:
 
 - tablet landscape may keep persistent navigation/secondary regions;
-- tablet portrait and phone layouts replace persistent rails with compact selectors;
-- secondary panels move below/aside the main calibration surface instead of shrinking the editor until unusable;
-- phone layouts expose essential content and suppress redundant panel-hide/focus controls;
-- horizontal scroll is preferable to compressing compact telemetry/navigation beyond legibility;
-- orientation/resize recomputes a presentation profile without changing tune/runtime authority.
+- tablet portrait and phone layouts replace persistent rails with compact selectors/bottom navigation;
+- secondary panels move below/aside the primary workspace instead of shrinking it until unusable;
+- phone layouts expose essential content and suppress redundant controls;
+- horizontal scroll is preferable to compressing telemetry/navigation beyond legibility;
+- orientation/resize recomputes presentation geometry without changing domain authority.
 
-## Compose consequence
+Responsive policy is driven by measured available geometry/window classes/content constraints, not hardcoded device model names.
 
-Responsive policy should be based on measured available width/height/window size classes and content constraints, not hardcoded device model names.
-
-A provisional presentation model may expose something like:
+A Tuner layout model may eventually expose concepts such as:
 
 ```text
 TunerLayoutProfile
@@ -85,66 +86,64 @@ TunerLayoutProfile
 └─ compactTouchMode: Boolean
 ```
 
-The exact type is Phase 2 work; the responsibility boundary is Phase 1 authority.
+The exact Kotlin type is an implementation detail; the ownership boundary is already locked.
 
 ---
 
-# Responsive state is presentation state, not domain state
+# Responsive state is presentation state
 
 Orientation/window-size changes may alter:
 
-- rail versus selector presentation;
+- rail versus selector/bottom-nav presentation;
 - panel placement;
 - visible secondary cards;
 - local zoom/viewport bounds;
 - toolbar wrapping;
 - telemetry density.
 
-They must **not** implicitly alter:
+They must not implicitly alter:
 
 - selected semantic tune target;
-- local draft values;
+- local semantic draft values;
 - verified TuneSnapshot;
-- table stored orientation/data order;
+- stored table orientation/data order;
 - ECU session/profile identity;
 - write/Burn authority.
 
-Where possible, keep the semantic selection stable across rotation and recompute only its presentation geometry.
+Keep semantic selection stable across geometry changes wherever practical; recompute presentation only.
 
 ---
 
 # Active-surface rendering only
 
-UXUI's integration `render-coordinator.js` forwards runtime snapshots only to the active page. The current EpicDash-JZ UI spec independently states to render only active content where practical.
+UXUI proved an important optimization by forwarding runtime snapshots only to the active page. EpicDash-JZ independently reached the same requirement.
 
-## Compose consequence
+Compose consequence:
 
-Do not drive all top-level destinations with high-rate recomposition simply because one native runtime snapshot changes.
-
-Use:
-
-- one engine snapshot source;
-- screen/view-model projections selecting only required channels/fields;
+- one authoritative engine snapshot source;
+- screen/ViewModel projections select only required values;
 - lifecycle-aware collection;
-- active-route subscription/render policy;
+- active-route update/render policy;
 - stable immutable UI models;
 - change detection before expensive custom drawing.
 
-Inactive pages may preserve interaction state without consuming high-rate render work.
+Inactive destinations may preserve interaction state without consuming high-rate rendering work.
+
+The accepted foundation now provides a versioned packed RuntimeSnapshot ABI v1 over a reusable direct buffer. That foundation proves the typed snapshot pattern on SM-A137F and SM-T500; it does not justify sample-rate recomposition or one JNI getter per channel.
 
 ---
 
 # Snapshot acceptance / stale-state lesson
 
-UXUI's isolated state store accepts snapshots only when source/session/revision facts are valid, rejects retired/stale revisions and prevents an existing session from changing source identity silently.
+Historical UXUI state work rejected retired/stale revisions and prevented an existing session from silently changing source identity.
 
-This mirrors the stronger native/session rules already adopted in EpicHub.
+Current EpicHub consequence:
 
-## Compose consequence
-
-Do not maintain an independent JavaScript-style telemetry authority in Kotlin. Rust owns ChannelStore/session validity; Kotlin receives immutable versioned display snapshots.
-
-Presentation state may retain the last displayed values for transition/diagnostics, but connected/live indicators must follow authoritative source/session/freshness state. Old live values after disconnect are not current truth.
+- Rust owns ChannelStore/source/session validity;
+- Kotlin receives immutable typed/versioned display projections;
+- no JavaScript-style or JSON-backed telemetry authority exists in Kotlin;
+- presentation may retain last-displayed values for transition/diagnostic purposes, but live/connected/fresh indicators follow authoritative source/session state;
+- old live values after disconnect are not current truth.
 
 ---
 
@@ -152,118 +151,99 @@ Presentation state may retain the last displayed values for transition/diagnosti
 
 ## Static versus dynamic geometry
 
-UXUI r20 used hundreds of individually updated SVG zone segments, filters, gradients and transitions. r21 changed the design so static artwork was constructed once and each runtime update changed at most one pointer transform per gauge when the quantized visual angle actually changed.
+UXUI r20 used hundreds of individually updated SVG segments/filters/gradients/transitions. r21 constructed static artwork once and changed only the pointer transform when the quantized visual angle actually changed.
 
-The recorded synthetic benchmark for 12,000 updates reported:
+Its recorded synthetic benchmark for 12,000 updates reported:
 
 - r20 median: 175 ms;
 - r21 median: 17 ms;
 - reported speedup: ~10.29×;
 - reported update-work reduction: ~90.3%.
 
-This benchmark is specific to that WebView/SVG implementation and must **not** be treated as a Compose performance forecast.
+Those figures are specific to the historical WebView/SVG implementation and are **not** Compose performance forecasts.
 
-The transferable principle is:
+Transferable rule:
 
 ```text
-static visual geometry → construct/cache once
+static geometry → construct/cache once
 runtime numeric state → update only dynamic layer
-unchanged visual result → skip draw/state work
+unchanged visual result → skip state/draw work
 ```
 
-## Compose consequence
+Compose gauges/plots should:
 
-For custom gauges/plots:
-
-- separate static ticks/zones/labels from dynamic pointer/value/validity layers;
-- cache expensive path/text geometry where Compose APIs allow it safely;
-- avoid rebuilding path lists because one numeric value changed;
-- quantize only presentation coordinates when visually harmless; never quantize/log underlying channel truth;
-- avoid decorative effects that create measurable paint/compositing cost without useful information;
-- benchmark on low/mid target hardware rather than assuming Compose removes rendering cost.
+- separate static ticks/zones/labels from dynamic value/pointer/validity layers;
+- cache expensive paths/text geometry where safe;
+- avoid rebuilding static path lists because one value changed;
+- quantize only presentation coordinates where visually harmless, never underlying ChannelStore/log truth;
+- avoid decorative paint/compositing cost without useful information;
+- benchmark on reference hardware instead of assuming Compose removes render cost.
 
 ---
 
 # Dashboard presentation settings
 
-Useful interaction concepts from UXUI that may be carried forward if product scope retains them:
+Useful feature candidates from UXUI include:
 
-- long-press a gauge to open local display settings;
+- long-press gauge display settings;
 - per-gauge presentation min/max;
-- optional local decimal precision overriding a global presentation preference;
-- globally consistent unit/format settings;
-- no-signal state still shows known configured units;
-- suppress accidental text selection/context-menu style interactions on an instrument surface.
+- local decimal precision override;
+- globally consistent units/format preferences;
+- no-signal state retaining known configured units;
+- suppressing accidental text-selection/context-menu behavior on instrument surfaces.
 
-These are presentation settings only. They never alter the raw/decoded channel truth in ChannelStore or logs.
+These are presentation settings only and never alter decoded channel truth or recorded samples.
 
 ---
 
 # Table semantic state versus presentation state
 
-The current locked Tuner contract and UXUI table work provide a strong split.
+Rust/profile/tuning owns or validates:
 
-## Rust/tuning semantic ownership
-
-Rust owns or validates:
-
-- table identity and dimensions;
+- table identity/dimensions;
 - X/Y/Z semantic arrays;
-- current verified baseline/source values;
-- local semantic draft values and edit history;
-- selection translated into exact semantic cell indices for edit commands;
-- Add/Subtract/Multiply/Divide/Fill/Flatten semantics if those become product features;
-- smoothing/interpolation semantics and validity constraints;
-- undoable semantic edit commands where persistence/correctness benefits from native ownership;
+- verified baseline/source values;
+- local semantic draft/history;
+- resolved semantic cell indices;
+- edit-operation math/constraints where product scope includes it;
 - comparison against authoritative baseline;
 - write-plan compilation and ECU verification.
 
-## Compose presentation/interaction ownership
-
-Compose should own:
+Compose owns:
 
 - viewport zoom/pan/scroll;
-- visible row/column range;
-- sticky header presentation;
+- visible rows/columns;
+- sticky headers;
 - touch gesture recognition;
-- currently focused cell/selection gesture phase;
-- local display orientation (reverse X/Y display order);
+- focused cell/gesture phase;
+- local display orientation;
 - heat-map rendering;
-- folded/focus/fullscreen panel presentation;
-- 3D camera/pitch/yaw/zoom;
+- panel/focus/fullscreen presentation;
+- 3D camera state;
 - modal/pointer capture.
 
 ### Orientation invariant
 
-Reversing X or Y in presentation changes **display order only**. It must not rearrange the stored tune arrays or change semantic cell identity.
+Reversing X or Y in presentation changes **display order only**. It never rearranges stored tune arrays or changes semantic cell identity.
 
 ---
 
 # Table selection model
 
-Useful interaction evidence exists in two different forms:
-
-UXUI earlier tuning work exposed explicit touch modes:
+Historical evidence includes both explicit modes and gesture-first selection:
 
 - Single;
 - Multi;
-- Range via two opposite corners;
-- row/column/all/clear.
+- corner-defined Range;
+- row/column/all/clear;
+- tap select;
+- long-press + drag rectangular range;
+- double-tap edit/focus;
+- pointer/mouse drag where available.
 
-Later UXUI table interaction also proved a touch-first gesture language:
+EpicHub keeps the semantic selection model stable while presentation gestures may evolve.
 
-- tap → select;
-- long-press + drag → rectangular range;
-- double-tap → edit/focus;
-- mouse drag retained where available.
-
-The current EpicDash-JZ contract requires row/column/range/all/clear semantic-array selection, not one exact gesture implementation.
-
-## EpicHub decision direction
-
-Keep the **semantic selection model** stable and allow presentation gestures/modes to evolve around it.
-
-Suggested semantic shape:
+Conceptually:
 
 ```text
 TableSelection
@@ -273,7 +253,7 @@ TableSelection
 └─ normalized resolved cell indices
 ```
 
-Gesture state should be separate:
+Gesture phase is separate:
 
 ```text
 TableGestureState
@@ -284,196 +264,169 @@ TableGestureState
 └─ EditingCell
 ```
 
-### Multi-touch conflict lesson
-
-UXUI r28 explicitly separates long-press selection from pinch zoom: a second touch cancels/restores any pending range selection before zoom begins.
-
-That is a useful general rule for Compose pointer handling: simultaneous gesture recognizers must have explicit arbitration/rollback instead of both mutating selection/viewport state.
+Multi-touch recognizers require explicit arbitration/rollback. A second touch beginning pinch zoom must not leave a half-applied range selection.
 
 ---
 
 # Table editing operations
 
-UXUI demonstrated a richer local table editor including:
+UXUI demonstrated candidates including:
 
 - direct cell edit;
-- exact selection-value entry;
+- selection-value entry;
 - row/column/table selection;
 - Add/Subtract/Multiply/Divide/Fill/Flatten;
 - 3×3 smoothing;
-- row/column linear interpolation;
+- row/column interpolation;
 - bilinear rectangle interpolation;
 - copy/paste;
 - undo/redo;
 - baseline revert;
-- CSV text import/export.
+- CSV import/export.
 
-These are **feature candidates**, not automatically locked EpicHub scope.
+These remain feature candidates, not automatically accepted product scope.
 
-However they reveal the right architecture:
+Correct architecture:
 
 ```text
 Compose gesture/toolbar
 → semantic TableEditCommand
-→ tuning model validates selection/operation
-→ draft changes
-→ same verified write plan used for eventual ECU RAM write
+→ Rust tuning model validates selection/operation
+→ semantic draft changes
+→ eventual verified write plan
 ```
 
-Do not implement each toolbar operation as an independent raw ECU write path.
+No toolbar operation gets its own raw ECU write path.
 
-Non-contiguous selections should be rejected for operations that mathematically require a contiguous row/column/rectangle, with an explicit user-facing reason.
+Operations that mathematically require a contiguous range reject non-contiguous selection with an explicit reason.
 
 ---
 
 # Undo / redo
 
-Undo/redo is user-edit history, not ECU rollback.
+Undo/redo is semantic **draft edit history**, not ECU rollback.
 
-It should operate over semantic draft edit commands/snapshots. Undoing a local edit does not imply sending compensating ECU bytes unless the user explicitly performs another verified RAM write.
-
-This distinction should remain visible once live RAM writes and local drafts can diverge.
+Undoing a local edit does not imply compensating ECU bytes. Hardware changes occur only through another explicit verified tuning transaction.
 
 ---
 
 # Baseline / draft / live state in tables
 
-UXUI comparison deliberately compared bundled baseline against local draft rather than pretending the baseline was live ECU memory.
-
-EpicHub has stronger authority categories:
+EpicHub distinguishes:
 
 - saved project TuneSnapshot;
 - live verified TuneSnapshot;
-- local draft;
-- write/Burn dirty state;
-- uncertainty journal.
+- local semantic draft;
+- verified RAM dirty state;
+- Burn dirty/persistence state;
+- uncertainty journal/state.
 
-Table highlighting must name/encode **which two states are being compared**. A generic `changed` marker is ambiguous once offline draft and live RAM both exist.
+A generic `changed` marker becomes ambiguous once offline draft and live RAM can diverge. UI comparison must identify the two states being compared.
 
-Recommended conceptual distinctions:
+Useful conceptual distinctions include:
 
-- `DraftChangedFromProject`
-- `DraftChangedFromLiveBaseline`
-- `VerifiedRamChangedFromSavedProject`
-- `BurnDirtyPage`
-- `UncertainAfterMutation`
+- `DraftChangedFromProject`;
+- `DraftChangedFromLiveBaseline`;
+- `VerifiedRamChangedFromSavedProject`;
+- `BurnDirtyPage`;
+- `UncertainAfterMutation`.
 
-Exact UI wording/colors remain visual/product design work.
+Exact wording/colors remain UI design work.
 
 ---
 
 # 3D table visualization
 
-Locked EpicDash-JZ contract:
+Current locked rule:
 
-- 3D inspection is view-only unless separately accepted for editing.
+- 3D inspection is view-only unless a separately accepted edit contract is added.
 
-UXUI provides useful interaction evidence:
+Useful historical interactions:
 
-- small preview can open a fullscreen inspection surface;
+- small preview → fullscreen inspection;
 - pitch/yaw/zoom/reset;
-- touch/drag/pinch camera interactions;
-- stable view presets such as Front/Back/Left/Right/Top/Bottom;
-- pointer events inside the modal must be fully captured so underlying navigation/actions do not fire;
-- no live trace needed in 3D if 2D already owns the useful live trace.
+- touch/drag/pinch camera control;
+- stable view presets;
+- modal pointer capture so underlying controls do not fire;
+- no need to duplicate a useful 2D live trace in 3D.
 
-## Compose consequence
+Compose consequence:
 
-Treat 3D camera state as presentation-only Kotlin state. The surface consumes immutable table values/axes. It must not become an alternate tune model or edit path.
-
-Start with the simplest renderer that can maintain responsive rotation on target devices; benchmark before choosing a custom GPU stack.
+- 3D camera state is Kotlin presentation state;
+- renderer consumes immutable axes/table values;
+- it never becomes a second tune model/edit path;
+- start with the simplest renderer that meets target-device responsiveness; specialized GPU work requires measurement evidence.
 
 ---
 
 # 2D live trace
 
-UXUI used a bounded 2D trace (24 positions) at a throttled rate and intentionally avoided duplicating it in 3D.
+Transferable principles from the bounded historical trace:
 
-Transferable principles:
+- live cursor/trace projects current runtime channels into semantic table-axis space;
+- history is bounded;
+- display cadence is throttled to visual usefulness rather than ECU sample rate;
+- trace history is not tune state;
+- one semantic owner maps runtime channels to table coordinates so multiple renderers do not independently reinterpret mapping.
 
-- live cursor/trace is a presentation projection of current runtime channels into table-axis space;
-- bound history length;
-- throttle to visually useful cadence, not ECU sample rate;
-- do not make trace history part of tune state;
-- one owner computes/matches the semantic table coordinates; multiple renderers should not independently reinterpret channel-to-axis mapping.
-
-Whether EpicHub keeps a trail, only a live cursor or both is product/UI scope.
+Whether EpicHub keeps a trail, cursor only or both remains product scope.
 
 ---
 
 # Curves
 
-Locked current contract:
+Current interaction contract:
 
 - Single: one active editable curve;
-- Multi: multiple compatible visible curves, exactly one editing owner;
+- Multi: multiple compatible visible curves with exactly one editing owner;
 - active owner comes from explicit curve-manager state, not ambiguous line hit-testing;
 - incompatible axes are not overlaid as if scales were equal;
 - point/range edits use the same semantic array-cell authority.
 
-## State split
+Rust/profile/tuning owns identities/axis/value semantics/compatibility/current-draft values/edit commands.
 
-Rust/profile/tuning:
-
-- curve identities;
-- axis/value semantics;
-- compatibility;
-- current/draft values;
-- semantic edit commands.
-
-Kotlin/Compose:
-
-- viewport;
-- visible overlays;
-- active display styling;
-- cursor/selection gesture state.
+Compose owns viewport, visible overlays, active styling and cursor/selection gesture state.
 
 ---
 
 # Parameters
 
-Locked contract:
+Current contract:
 
-- selected INI dialog renders directly in Tuner content area;
-- compact multi-column fields where width permits, one-column flow when narrow;
+- selected INI dialog renders directly in Tuner content;
+- multi-column fields where width permits, one-column flow when narrow;
 - disabled controls communicate why unavailable;
 - editing remains semantic.
 
-## Compose consequence
+Compose field components consume typed metadata/state. They never parse raw INI strings or calculate physical page/offset/bytes.
 
-Parameter field components consume typed field metadata/state. They never parse raw INI strings or calculate physical page/offset/byte writes.
-
-Focus/text-entry/validation presentation state stays in Kotlin; a committed semantic requested value becomes a Rust tuning-draft operation.
+Focus/text-entry state stays in Kotlin; committed semantic values become Rust tuning-draft operations.
 
 ---
 
 # Panel folding / focus / fullscreen
 
-UXUI showed useful interaction behavior for complex tool pages:
+Useful behavior:
 
-- side/bottom panels can fold independently on large layouts;
-- folding triggers an explicit workspace reflow/redraw;
+- secondary panels may fold independently on wide layouts;
+- folding causes deterministic workspace reflow;
 - focus mode prioritizes the editor while keeping essential navigation reachable;
 - fullscreen dedicates the viewport to the primary editor;
-- phone layouts may omit redundant fold controls and simply stack/show all required content.
+- compact layouts may omit redundant fold controls and simply stack required content.
 
-## Compose consequence
-
-Panel visibility is local presentation preference/state. Layout reflow should derive deterministically from it and current window geometry; panel visibility must not force reconstruction of the semantic tuner model.
+Panel visibility is local presentation state and does not rebuild semantic tuner state.
 
 ---
 
 # Pointer / modal ownership
 
-UXUI found real bugs where fullscreen 3D pointer/tap handling could leak through to controls/navigation beneath it.
-
 Permanent interaction rule:
 
 > A modal or fullscreen editor/inspection surface owns its pointer stream for the duration of the gesture.
 
-Compose implementation must ensure closing/tapping/dragging a modal cannot trigger an underlying semantic action.
+Closing/tapping/dragging a modal must not trigger semantic actions beneath it.
 
-High-consequence actions deserve additional guard behavior, but ordinary table/curve navigation should not require safety gestures merely because the old WebView had pointer leakage.
+High-consequence actions can have additional guards, but ordinary table/curve navigation does not inherit awkward safety gestures merely because the historical WebView had pointer leakage.
 
 ---
 
@@ -481,53 +434,48 @@ High-consequence actions deserve additional guard behavior, but ordinary table/c
 
 Useful evidence:
 
-- haptics for cell/range selection can improve touch feedback;
-- disabled controls should not emit success-like feedback;
+- haptics can improve cell/range selection feedback;
+- disabled controls do not emit success-like feedback;
 - device/system haptic preferences remain authoritative.
 
-In EpicHub, haptics are presentation feedback only. They never signal ECU write/Burn success before native verification returns that result.
+Haptics are presentation feedback only and never imply ECU write/Burn success before native verification.
 
 ---
 
 # Changed-item / favorites / presets concepts
 
-Potential reusable interaction patterns:
+Potential reusable product patterns:
 
-- `Changes` list showing semantic items changed from an explicitly named baseline and deep-linking to them;
-- Quick Tuning/favorites as user navigation shortcuts, not alternate tune definitions;
-- logging channel presets as presentation/user configuration;
-- tap loads, long-press edits a preset where intuitive.
+- `Changes` list deep-linking semantic items changed from an explicitly named baseline;
+- Quick Tuning/favorites as navigation shortcuts, not alternate definitions;
+- logging channel presets as user configuration;
+- intuitive tap-load / long-press-edit behavior where retained.
 
-These should use stable semantic IDs, not visual row indices or old WebView DOM element IDs.
+Use stable semantic IDs, never visual row indices or old DOM element IDs.
 
 ---
 
 # Lifecycle / rotation state preservation
 
-The historical Tuner rotation work and responsive contract show that orientation transitions must preserve meaningful state while recalculating geometry.
+Preserve across ordinary resize/rotation where meaningful:
 
-Suggested state classes:
-
-## Preserve across ordinary rotation/window resize
-
-- selected top-level route;
+- selected primary route;
 - selected System/Category/Feature;
 - selected table/curve/parameter target;
-- semantic table selection where practical;
-- local draft values;
+- semantic table selection;
+- local draft;
 - active curve identity;
-- user panel/focus preference where still meaningful;
-- user display orientation/zoom preferences when sensible.
+- user panel/focus/display preferences.
 
-## Recompute from new geometry
+Recompute from geometry:
 
-- rail vs compact selectors;
-- number of parameter columns;
+- rail vs bottom/compact navigation;
+- parameter column count;
 - secondary-panel placement;
 - visible table cells;
 - toolbar wrapping;
 - plot/table pixel transforms;
-- 3D render viewport.
+- 3D viewport.
 
 Do not serialize/reconstruct the complete tuning workspace merely because Android rotated.
 
@@ -535,17 +483,19 @@ Do not serialize/reconstruct the complete tuning workspace merely because Androi
 
 # Performance ownership
 
-The new Compose architecture should keep expensive work in the correct place:
-
 ## Rust / background computation
 
-- large semantic tune model transforms;
-- table operation math over large selections if profiling justifies it;
-- live channel→table-axis mapping if shared with logging/analysis;
+Appropriate examples:
+
+- large semantic tune transforms;
+- large table-operation math where profiling justifies it;
+- shared live channel→axis mapping;
 - analysis/downsampling;
 - persisted data/schema work.
 
 ## Compose/UI thread
+
+Appropriate examples:
 
 - pointer gesture arbitration;
 - layout;
@@ -556,28 +506,33 @@ The new Compose architecture should keep expensive work in the correct place:
 ## Avoid
 
 - giant JSON workspace construction;
+- JSON/browser message buses;
 - rebuilding unchanged semantic models on every snapshot;
-- recalculating full static gauge/table artwork per sample;
+- recalculating static artwork per sample;
 - updating inactive pages at runtime cadence;
-- giving every widget/channel its own native call/Flow subscription when a coarse snapshot projection is enough.
+- one native call/Flow per widget/channel when a coarse snapshot projection is enough.
+
+D-023 makes the first two explicit architecture exclusions, not merely performance preferences.
 
 ---
 
-# Phase 1 responsibility conclusions
+# Current evidence conclusions
 
-The current evidence is sufficient to lock these ownership boundaries:
+The evidence is sufficient to keep these permanent rules:
 
 1. **Rust owns tuning/runtime semantic truth; Compose owns interaction/presentation state.**
-2. **Responsive design is one component/data model with geometry-driven reflow.**
-3. **Visual authority comes from accepted EpicHub/EpicDash-JZ references, not UXUI styling.**
-4. **Semantic table/curve selections and edit commands are separate from touch gesture state.**
-5. **X/Y reversal, zoom, pan, panel folds, camera state and heat maps are presentation only.**
-6. **3D remains view-only unless a future accepted edit contract says otherwise.**
-7. **Only active presentation surfaces consume high-rate display snapshots.**
-8. **Static geometry is cached; runtime rendering mutates the smallest useful dynamic layer.**
-9. **Modal pointer streams cannot leak to underlying actions.**
-10. **Haptics/animation never imply hardware success before verified domain results.**
-11. **Offline/project/live/draft/Burn/uncertain states remain explicitly distinguishable in UI.**
-12. **Undo/redo acts on local semantic edits, not implicit ECU rollback.**
+2. **Responsive design is one semantic/component model with geometry-driven reflow.**
+3. **Current primary navigation is defined by `UI_FOUNDATION_LAYOUT.md`; older shells are historical evidence only.**
+4. **Visual/Tuner behavior may be informed by accepted EpicDash-JZ references without migrating their WebView implementation.**
+5. **Semantic table/curve selections and edit commands are separate from touch gesture state.**
+6. **X/Y reversal, zoom, pan, panel folds, camera state and heat maps are presentation only.**
+7. **3D remains view-only unless a future accepted edit contract says otherwise.**
+8. **Only active presentation surfaces consume high-rate display updates.**
+9. **Static geometry is cached; runtime rendering changes the smallest useful dynamic layer.**
+10. **Modal pointer streams cannot leak to underlying actions.**
+11. **Haptics/animation never imply hardware success before verified domain results.**
+12. **Offline/project/live/draft/Burn/uncertain states remain explicitly distinguishable.**
+13. **Undo/redo acts on local semantic edits, not implicit ECU rollback.**
+14. **Runtime UI data remains typed/packed Kotlin↔Rust state under D-023, not JSON/JavaScript state.**
 
-Remaining questions are product-level interaction scope and physical Compose performance/ergonomics, not basic ownership ambiguity.
+Remaining questions are product-level interaction scope and measured Compose performance/ergonomics, not ownership ambiguity.
