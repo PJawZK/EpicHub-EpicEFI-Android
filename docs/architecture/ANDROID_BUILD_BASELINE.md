@@ -24,7 +24,7 @@ EpicHub is a clean-slate application with no package/update continuity requireme
 
 ```text
 minSdk      = 26
- targetSdk   = 36
+targetSdk   = 36
 compileSdk  = 37
 ```
 
