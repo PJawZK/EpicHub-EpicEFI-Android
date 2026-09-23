@@ -78,7 +78,11 @@ mod tests {
         assert_eq!(samples[0].id, SYNTHETIC_ENGINE_SPEED);
         assert_eq!(samples[1].id, SYNTHETIC_MANIFOLD_PRESSURE);
         assert_eq!(samples[2].id, SYNTHETIC_AFR);
-        assert!(samples.iter().all(|sample| sample.validity == ChannelValidity::Valid));
+        assert!(
+            samples
+                .iter()
+                .all(|sample| sample.validity == ChannelValidity::Valid)
+        );
     }
 
     #[test]
