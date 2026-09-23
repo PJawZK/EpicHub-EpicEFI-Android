@@ -4,8 +4,8 @@ use std::time::Instant;
 
 use crate::channel_store::ChannelStore;
 use crate::diagnostics::{
-    DIAGNOSTIC_BATCH_SIZE, DIAGNOSTIC_CODE_RUNTIME_SNAPSHOT_PUBLISHED,
-    DIAGNOSTIC_SEVERITY_TRACE, EngineDiagnostics,
+    DIAGNOSTIC_BATCH_SIZE, DIAGNOSTIC_CODE_RUNTIME_SNAPSHOT_PUBLISHED, DIAGNOSTIC_SEVERITY_TRACE,
+    EngineDiagnostics,
 };
 use crate::runtime_snapshot::{RUNTIME_SNAPSHOT_SIZE, RuntimeSnapshot};
 
@@ -203,7 +203,10 @@ mod tests {
         assert_eq!(read_u32(&first, 0), DIAGNOSTIC_BATCH_ABI_VERSION);
         assert_eq!(read_u32(&first, 8), 2);
         assert_eq!(read_u32(&first, 32), DIAGNOSTIC_CODE_ENGINE_CREATED);
-        assert_eq!(read_u32(&first, 72), DIAGNOSTIC_CODE_RUNTIME_SNAPSHOT_PUBLISHED);
+        assert_eq!(
+            read_u32(&first, 72),
+            DIAGNOSTIC_CODE_RUNTIME_SNAPSHOT_PUBLISHED
+        );
         assert_eq!(read_u32(&second, 8), 0);
     }
 
