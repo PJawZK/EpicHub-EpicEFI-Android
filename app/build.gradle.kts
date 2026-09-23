@@ -21,9 +21,9 @@ plugins {
 }
 
 val pinnedNdkVersion = "30.0.16248370"
-val rustManifest = rootProject.layout.projectDirectory.file("rust/engine/Cargo.toml")
-val rustSources = rootProject.layout.projectDirectory.dir("rust/engine/src")
-val rustProjectDirectory = rootProject.layout.projectDirectory
+val rustCrateDirectory = rootProject.layout.projectDirectory.dir("rust/engine")
+val rustManifest = rustCrateDirectory.file("Cargo.toml")
+val rustSources = rustCrateDirectory.dir("src")
 val rustDebugJniLibs = layout.buildDirectory.dir("generated/rustJniLibs/debug")
 val rustReleaseJniLibs = layout.buildDirectory.dir("generated/rustJniLibs/release")
 
@@ -60,7 +60,7 @@ abstract class CargoNdkBuildTask @Inject constructor(
     abstract val sourceDirectory: DirectoryProperty
 
     @get:Internal
-    abstract val projectDirectory: DirectoryProperty
+    abstract val crateDirectory: DirectoryProperty
 
     @get:Internal
     abstract val androidSdkDirectory: DirectoryProperty
@@ -91,14 +91,13 @@ abstract class CargoNdkBuildTask @Inject constructor(
             "-t", "arm64-v8a",
             "-o", outputDirectory.get().asFile.absolutePath,
             "build",
-            "--manifest-path", manifestFile.get().asFile.absolutePath,
         )
         if (releaseBuild.get()) {
             arguments += "--release"
         }
 
         execOperations.exec {
-            workingDir(projectDirectory.get().asFile)
+            workingDir(crateDirectory.get().asFile)
             environment("ANDROID_NDK_HOME", ndkDirectory.absolutePath)
             commandLine(arguments)
         }
@@ -142,7 +141,7 @@ fun registerRustBuildTask(
     description = "Builds the EpicHub Rust engine for both production Android ARM ABIs."
     manifestFile.set(rustManifest)
     sourceDirectory.set(rustSources)
-    projectDirectory.set(rustProjectDirectory)
+    crateDirectory.set(rustCrateDirectory)
     androidSdkDirectory.set(resolveAndroidSdkDirectory())
     ndkVersion.set(pinnedNdkVersion)
     releaseBuild.set(release)
