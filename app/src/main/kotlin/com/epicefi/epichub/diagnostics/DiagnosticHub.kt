@@ -51,8 +51,11 @@ class DiagnosticHub(
             sessionId = sessionId,
             payload = payload,
         )
-        ring.add(event)
+        val dropped = ring.add(event)
         metrics.increment(DiagnosticMetricId.DIAGNOSTIC_EVENT_COUNT)
+        if (dropped) {
+            metrics.increment(DiagnosticMetricId.DIAGNOSTIC_DROPPED_EVENT_COUNT)
+        }
         metrics.observe(DiagnosticMetricId.DIAGNOSTIC_RING_SIZE, ring.size().toDouble())
         return event
     }
