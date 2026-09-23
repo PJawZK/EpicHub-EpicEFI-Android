@@ -154,3 +154,15 @@ Production native support includes both `armeabi-v7a` and `arm64-v8a`. Arm64-onl
 Prefer ABI-split artifacts: App Bundle splitting for store distribution and ABI-specific APKs for direct distribution. A universal dual-ABI APK is a bench convenience, not the preferred size-efficient user artifact.
 
 Exact AGP/NDK/Rust/Compose patch versions are reproducibly pinned when Phase 2 scaffolds the build. Toolchain patch/version maintenance does not reopen this architecture decision unless it changes the supported API/ABI/product contract.
+
+## D-022 — Historical code is mined piece-by-piece and reimplemented cleanly
+
+EpicHub does not bulk-port old subsystems and clean them up afterward.
+
+Before implementing any inherited behavior, the relevant historical code is traced piece-by-piece across implementation, callers, mutable state, lifecycle/threading, error paths, tests, diagnostics, prior fixes and protocol/firmware authority. Each observed behavior is classified as required, safety-critical, compatibility-only, useful technique, accidental, known-buggy, obsolete or unresolved.
+
+The new subsystem contract is then designed independently around one permanent owner, explicit inputs/outputs/state/lifetime/failure semantics and test/performance seams. Production code is written from scratch against that contract.
+
+Historical bugs are treated as evidence of missing invariants, not as control flow to reproduce. Historical tests are reviewed as candidate specifications, not blindly copied implementation-detail contracts. Differential qualification compares EpicHub against protocol truth and deliberately required behavior, so differences from old accidental/junk/buggy behavior are expected and desirable.
+
+This clean reimplementation methodology applies to the entire application and all reference repositories. Direct source reuse is exceptional and requires separate provenance/licence, correctness, representation and test review. The detailed workflow is defined in `SOURCE_REIMPLEMENTATION_METHOD.md`.
