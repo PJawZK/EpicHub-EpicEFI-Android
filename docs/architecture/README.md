@@ -10,6 +10,7 @@ Phase 1 builds the repository-backed architecture before production Android/Rust
 - `REVIEW_CHECKLIST.md` — explicit Phase 1 closure checklist; final user-acceptance item remains the scaffold gate.
 - `DECISIONS.md` — durable architectural decisions.
 - `DEVELOPMENT_WORKFLOW.md` — repository and chat/handoff workflow.
+- `SOURCE_REIMPLEMENTATION_METHOD.md` — mandatory piece-by-piece historical-source review and clean rewrite method used throughout implementation.
 - `ANDROID_BUILD_BASELINE.md` — initial package/API/ABI/device support contract.
 
 ## Evidence and responsibility mapping
