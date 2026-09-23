@@ -1,5 +1,19 @@
+import org.gradle.api.DefaultTask
+import org.gradle.api.file.DirectoryProperty
+import org.gradle.api.file.RegularFileProperty
+import org.gradle.api.provider.Property
+import org.gradle.api.tasks.Input
+import org.gradle.api.tasks.InputDirectory
+import org.gradle.api.tasks.InputFile
+import org.gradle.api.tasks.Internal
+import org.gradle.api.tasks.OutputDirectory
+import org.gradle.api.tasks.PathSensitive
+import org.gradle.api.tasks.PathSensitivity
+import org.gradle.api.tasks.TaskAction
+import org.gradle.process.ExecOperations
 import java.io.File
 import java.util.Properties
+import javax.inject.Inject
 
 plugins {
     id("com.android.application")
@@ -7,7 +21,9 @@ plugins {
 }
 
 val pinnedNdkVersion = "30.0.16248370"
-val rustManifest = rootProject.file("rust/engine/Cargo.toml")
+val rustManifest = rootProject.layout.projectDirectory.file("rust/engine/Cargo.toml")
+val rustSources = rootProject.layout.projectDirectory.dir("rust/engine/src")
+val rustProjectDirectory = rootProject.layout.projectDirectory
 val rustDebugJniLibs = layout.buildDirectory.dir("generated/rustJniLibs/debug")
 val rustReleaseJniLibs = layout.buildDirectory.dir("generated/rustJniLibs/release")
 
@@ -30,6 +46,63 @@ fun resolveAndroidSdkDirectory(): File {
         "local.properties exists but does not define sdk.dir."
     }
     return File(sdkPath)
+}
+
+abstract class CargoNdkBuildTask @Inject constructor(
+    private val execOperations: ExecOperations,
+) : DefaultTask() {
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val manifestFile: RegularFileProperty
+
+    @get:InputDirectory
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val sourceDirectory: DirectoryProperty
+
+    @get:Internal
+    abstract val projectDirectory: DirectoryProperty
+
+    @get:Internal
+    abstract val androidSdkDirectory: DirectoryProperty
+
+    @get:Input
+    abstract val ndkVersion: Property<String>
+
+    @get:Input
+    abstract val releaseBuild: Property<Boolean>
+
+    @get:OutputDirectory
+    abstract val outputDirectory: DirectoryProperty
+
+    @TaskAction
+    fun buildRustLibrary() {
+        val ndkDirectory = androidSdkDirectory
+            .dir("ndk/${ndkVersion.get()}")
+            .get()
+            .asFile
+        require(ndkDirectory.isDirectory) {
+            "Pinned Android NDK ${ndkVersion.get()} is not installed at ${ndkDirectory.absolutePath}."
+        }
+
+        val arguments = mutableListOf(
+            "cargo",
+            "ndk",
+            "-t", "armeabi-v7a",
+            "-t", "arm64-v8a",
+            "-o", outputDirectory.get().asFile.absolutePath,
+            "build",
+            "--manifest-path", manifestFile.get().asFile.absolutePath,
+        )
+        if (releaseBuild.get()) {
+            arguments += "--release"
+        }
+
+        execOperations.exec {
+            workingDir(projectDirectory.get().asFile)
+            environment("ANDROID_NDK_HOME", ndkDirectory.absolutePath)
+            commandLine(arguments)
+        }
+    }
 }
 
 android {
@@ -58,62 +131,48 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-
-    sourceSets.getByName("debug").jniLibs.srcDir(rustDebugJniLibs)
-    sourceSets.getByName("release").jniLibs.srcDir(rustReleaseJniLibs)
 }
 
 fun registerRustBuildTask(
     taskName: String,
-    outputDirectory: File,
+    outputDirectory: DirectoryProperty,
     release: Boolean,
-) = tasks.register<Exec>(taskName) {
+) = tasks.register<CargoNdkBuildTask>(taskName) {
     group = "rust"
     description = "Builds the EpicHub Rust engine for both production Android ARM ABIs."
-    workingDir(rootProject.projectDir)
-    inputs.file(rustManifest)
-    inputs.dir(rootProject.file("rust/engine/src"))
-    outputs.dir(outputDirectory)
-
-    doFirst {
-        val ndkDirectory = File(resolveAndroidSdkDirectory(), "ndk/$pinnedNdkVersion")
-        require(ndkDirectory.isDirectory) {
-            "Pinned Android NDK $pinnedNdkVersion is not installed at ${ndkDirectory.absolutePath}."
-        }
-        environment("ANDROID_NDK_HOME", ndkDirectory.absolutePath)
-    }
-
-    val arguments = mutableListOf(
-        "cargo",
-        "ndk",
-        "-t", "armeabi-v7a",
-        "-t", "arm64-v8a",
-        "-o", outputDirectory.absolutePath,
-        "build",
-        "--manifest-path", rustManifest.absolutePath,
-    )
-    if (release) {
-        arguments += "--release"
-    }
-    commandLine(arguments)
+    manifestFile.set(rustManifest)
+    sourceDirectory.set(rustSources)
+    projectDirectory.set(rustProjectDirectory)
+    androidSdkDirectory.set(resolveAndroidSdkDirectory())
+    ndkVersion.set(pinnedNdkVersion)
+    releaseBuild.set(release)
+    this.outputDirectory.set(outputDirectory)
 }
 
 val buildRustDebug = registerRustBuildTask(
     taskName = "buildRustDebug",
-    outputDirectory = rustDebugJniLibs.get().asFile,
+    outputDirectory = objects.directoryProperty().apply { set(rustDebugJniLibs) },
     release = false,
 )
 
 val buildRustRelease = registerRustBuildTask(
     taskName = "buildRustRelease",
-    outputDirectory = rustReleaseJniLibs.get().asFile,
+    outputDirectory = objects.directoryProperty().apply { set(rustReleaseJniLibs) },
     release = true,
 )
 
-tasks.configureEach {
-    when (name) {
-        "mergeDebugJniLibFolders" -> dependsOn(buildRustDebug)
-        "mergeReleaseJniLibFolders" -> dependsOn(buildRustRelease)
+androidComponents {
+    onVariants(selector().withBuildType("debug")) { variant ->
+        variant.sources.jniLibs?.addGeneratedSourceDirectory(
+            buildRustDebug,
+            CargoNdkBuildTask::outputDirectory,
+        )
+    }
+    onVariants(selector().withBuildType("release")) { variant ->
+        variant.sources.jniLibs?.addGeneratedSourceDirectory(
+            buildRustRelease,
+            CargoNdkBuildTask::outputDirectory,
+        )
     }
 }
 
