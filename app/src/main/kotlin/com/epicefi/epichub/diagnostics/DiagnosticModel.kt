@@ -128,6 +128,11 @@ enum class DiagnosticMetricId(
         unit = "count",
         kind = DiagnosticMetricKind.COUNTER,
     ),
+    DIAGNOSTIC_DROPPED_EVENT_COUNT(
+        stableId = "diagnostics.events.dropped_total",
+        unit = "events",
+        kind = DiagnosticMetricKind.COUNTER,
+    ),
     DIAGNOSTIC_RING_SIZE(
         stableId = "diagnostics.events.ring_size",
         unit = "events",
