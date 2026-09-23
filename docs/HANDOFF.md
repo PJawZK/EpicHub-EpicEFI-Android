@@ -13,47 +13,38 @@ Do not reconstruct current architecture from EpicDash-JZ or other historical rep
 # Repository state
 
 - integration branch: `main`
-- active branch: `phase1/architecture-inventory`
-- draft PR: **#1 — Phase 1: architecture and responsibility inventory**
-- `main` still contains the clean-slate bootstrap
-- no production Android/Rust scaffold exists yet
+- Phase 1 PR: **#1 — Phase 1: architecture and responsibility inventory — merged**
+- Phase 1 merge commit: `d98c5f8a6e3dcad0b479323e12d0e845d6d3fefb`
+- Phase 1 review result: **46 / 46 accepted**
+- Phase 1 accepted/closed: **2026-09-23**
+- production Android/Rust implementation had not started before acceptance
+- next development branch: `phase2/foundation-bootstrap`
 
-Always verify the current PR/head SHA when resuming; this file deliberately does not embed a SHA that becomes stale with its own commit.
+Always verify the current branch/PR head when resuming. The Phase 1 merge SHA above is a historical accepted-baseline marker, not a claim that it remains the current `main` head after later documentation or implementation commits.
 
 ---
 
 # Current phase
 
-**Phase 1 is at the explicit acceptance gate after a dedicated documentation-consistency audit.**
+**Phase 2 — foundation bootstrap.**
 
-Review checklist:
-
-```text
-45 / 46 satisfied
-```
-
-Only unchecked item:
-
-> user accepts Phase 1 result before production scaffold begins.
+Phase 1 architecture is now the accepted baseline. Do not reopen broad source archaeology without a concrete evidence gap. Historical-source review now happens narrowly at each inherited subsystem's implementation-entry gate under D-022.
 
 Primary authority/read order:
 
 1. `docs/architecture/README.md`
 2. `docs/architecture/DECISIONS.md`
 3. `docs/architecture/PHASE1_GATE_ASSESSMENT.md`
-4. `docs/architecture/REVIEW_CHECKLIST.md`
-5. `docs/architecture/GAP_ANALYSIS.md`
-6. domain contract/evidence docs referenced by the above
-
-Do not start production scaffolding until explicit acceptance.
+4. `docs/architecture/GAP_ANALYSIS.md`
+5. `docs/architecture/SOURCE_REIMPLEMENTATION_METHOD.md`
+6. `docs/architecture/ANDROID_BUILD_BASELINE.md`
+7. domain contract/evidence docs when their subsystem enters implementation
 
 ---
 
-# Critical implementation methodology
+# Mandatory implementation methodology
 
-Phase 1 performed responsibility archaeology, **not** line-by-line certification of all old code.
-
-D-022 / `docs/architecture/SOURCE_REIMPLEMENTATION_METHOD.md` is mandatory throughout implementation:
+D-022 / `docs/architecture/SOURCE_REIMPLEMENTATION_METHOD.md` remains mandatory:
 
 ```text
 semantic behavior slice
@@ -69,13 +60,11 @@ semantic behavior slice
 
 Never bulk-copy an EpicDash-JZ/plugin subsystem and clean it later.
 
-Historical code is evidence for requirements, protocol behavior, useful techniques and known failures—not a structural template.
-
 ---
 
 # Locked architecture summary
 
-Durable decisions are D-001 through D-022 in `DECISIONS.md`.
+Durable Phase 1 decisions are D-001 through D-022 in `DECISIONS.md`.
 
 Key contracts:
 
@@ -90,19 +79,17 @@ Key contracts:
 - Burn is separate/explicit; uncertainty fails closed; no blind replay.
 - Android BLE/GATT stays Kotlin-owned with one connection-wide scheduler.
 - existing ESP32 is a legacy BLE↔CAN bridge, not a direct relay controller.
-- legacy bridge owner is `Esp32BridgeGateway` with message-specific codecs; GATT completion is not downstream confirmation.
-- future direct ESP32 outputs, if added, use a separate versioned capability/gateway and firmware-owned physical failsafes.
+- future direct ESP32 outputs, if added, are a separate versioned capability with firmware-owned physical failsafes.
 - warnings/diagnostics are observational; any warning-driven automation is a separate AutomationRule/ActionPolicy path.
 - Rust owns semantic tune draft/history; Kotlin owns Tuner selection/text-entry/gesture/presentation state.
 - runtime/logging architecture is format-neutral.
-- implementation order: **live path → MLG interoperability → MDF4 evaluation/implementation → scalable Analyzer**.
+- implementation order after foundation: **live path → MLG interoperability → MDF4 evaluation/implementation → scalable Analyzer**.
 - `MeasurementWriter` / `MeasurementStore` are common format-neutral contracts.
 - analyzers share one Rust evidence/analysis platform with domain profiles; recommendation never grants ECU mutation authority.
-- qualifying immutable logs/sessions can be reused by multiple compatible analyses.
 
 ---
 
-# Android build baseline
+# Android support baseline
 
 Authority: `ANDROID_BUILD_BASELINE.md` / D-021.
 
@@ -114,116 +101,86 @@ compileSdk              = 37
 production native ABIs  = armeabi-v7a + arm64-v8a
 ```
 
-First physical scaffold records `Build.SUPPORTED_ABIS` on SM-A137F and SM-T500.
+Exact AGP/Kotlin/Compose/Gradle/NDK/Rust patch versions are selected and reproducibly pinned as part of the Phase 2 scaffold, then qualified as a complete toolchain rather than treated as architecture.
+
+First physical qualification records `Build.SUPPORTED_ABIS` on SM-A137F and SM-T500 and proves JNI/native loading on both production ABI paths.
 
 ---
 
-# Consistency audit completed
+# Phase 2 foundation scope
 
-The pre-acceptance audit found and reconciled actual drift, including:
+The first production slice is deliberately new, small and non-mutating:
 
-- generic accessory gateway/codec wording vs legacy bridge/direct-output split;
-- warning rules appearing able to execute actions;
-- generic logger/data/thread docs hardcoded to MDF despite MLG-first architecture;
-- legacy ESP32 path incorrectly implying relay/GPIO authority;
-- absolute per-sample JNI prohibition conflicting with the intended low-rate exception;
-- ambiguous Kotlin/Rust semantic tune-draft ownership;
-- settings ownership still marked unresolved;
-- MDF-specific measurement-file ownership;
-- provisional namespace wording after D-021 locked it;
-- missing common `MeasurementWriter` and later analysis responsibilities in topology;
-- stale D-021-only decision-log references after D-022;
-- tests conflating legacy watchdog/liveness with future direct-output failsafe behavior.
+```text
+Android application/bootstrap
+→ Compose host
+→ dual-ABI Rust shared library
+→ NativeEngine create/close/recreate
+→ versioned packed RuntimeSnapshot ABI
+→ minimal Rust ChannelStore
+→ synthetic/native test-channel publication
+→ Compose display of snapshot
+→ bounded native event drain
+→ JNI/snapshot lifecycle diagnostics
+```
 
-The reconciled authority and final checklist are in `PHASE1_GATE_ASSESSMENT.md` and `REVIEW_CHECKLIST.md`.
+Initial slice explicitly excludes:
+
+- ECU mutation;
+- Burn;
+- MDF/MLG production writer implementation;
+- full Tuner migration;
+- BLE/accessory migration;
+- plugin ports;
+- analyzer/autotune feature work.
+
+The purpose is to qualify the clean Kotlin↔Rust application foundation before attaching inherited/high-risk domains.
 
 ---
 
-# Remaining work is classified, not hidden
+# First Phase 2 acceptance targets
 
-Use `GAP_ANALYSIS.md`. Main categories:
+The foundation is not accepted merely because it compiles.
 
-## Early Phase 2 measured PoCs
+At minimum prove:
+
+- reproducible clean build from pinned toolchain;
+- application launches through the Compose host;
+- Rust library loads on both production ARM ABIs;
+- `NativeEngine` create/close/recreate is leak/crash safe across repeated lifecycle cycles;
+- packed RuntimeSnapshot schema is versioned and bounds-checked;
+- synthetic channels flow Rust → bounded snapshot → Kotlin → Compose without per-channel JNI calls;
+- inactive UI does not create unnecessary high-rate work;
+- bounded native events cannot grow memory without limit;
+- process/activity recreation does not leave stale native handles authoritative;
+- basic frame/jank, CPU, memory and JNI cadence are measurable from the first slice.
+
+No ECU hardware mutation is needed to qualify this foundation.
+
+---
+
+# Work carried forward from Gap Analysis
+
+Early measured work includes:
 
 - USB runtime ownership comparison:
   - Kotlin I/O/decode reference;
   - Kotlin I/O → coarse Rust batches/decode;
-  - Android-opened native resource → Rust sustained I/O/decode.
+  - Android-opened native resource → Rust sustained I/O/decode;
 - packed RuntimeSnapshot/JNI lifecycle/performance;
 - both production ARM ABIs on SM-A137F + SM-T500;
 - Compose frame/jank under representative load.
 
-## Feature-entry prerequisites
-
-Examples:
-
-- ECU protocol + generated-INI golden corpora;
-- project/backup/journal formats before tuner persistence;
-- genuine MLG compatibility corpus;
-- MDF independent interoperability/compression benchmarks;
-- AnalysisSession/domain-profile/ExperimentProposal schemas;
-- diagnostic event/metric/export schemas.
-
-Every inherited feature also passes D-022 when it enters implementation.
-
-## Deliberately deferred
-
-Examples:
-
-- rich table-edit feature scope;
-- dashboard customization scope;
-- direct ESP32 GPIO/relay capability;
-- cross-profile table regridding;
-- later analyzer rollout order;
-- specialized GPU renderer unless Compose measurements require it.
-
----
-
-# Phase 2 entry plan after acceptance
-
-First slice is deliberately new, small and non-mutating:
-
-```text
-Android bootstrap
-→ Compose host
-→ dual-ABI Rust shared library
-→ NativeEngine create/close/recreate
-→ versioned packed RuntimeSnapshot
-→ minimal Rust ChannelStore
-→ synthetic test channels
-→ Compose snapshot display
-→ bounded native event drain
-→ JNI/snapshot diagnostics
-```
-
-Exclude from the first slice:
-
-- ECU mutation;
-- Burn;
-- MDF writer;
-- full Tuner migration;
-- plugin ports.
-
-After foundation qualification:
-
-```text
-format-neutral live ECU path
-→ MLG writer/interoperability
-→ MDF4 evaluation/implementation
-→ scalable Analyzer
-```
+Feature-entry prerequisites remain where they belong: genuine ECU/INI/MLG/MDF corpora, project/journal schemas, analyzer schemas, diagnostics schemas and other domain-specific qualification evidence are added when those features enter implementation.
 
 ---
 
 # Exact next action
 
-If the user accepts Phase 1:
-
-1. mark the final checklist item;
-2. record Phase 1 acceptance;
-3. merge/clean draft PR #1 as directed;
-4. establish `main` as the accepted architecture baseline;
-5. begin only the non-mutating Phase 2 foundation slice;
-6. apply D-022 at every inherited subsystem implementation-entry gate.
-
-If the user does not accept Phase 1, revise the specific concern only. Do not restart broad archaeology without a concrete evidence gap.
+1. create `phase2/foundation-bootstrap` from the cleaned accepted `main` baseline;
+2. pin the first complete compatible Android/Rust build toolchain;
+3. scaffold only the Android/Compose host + dual-ABI Rust library + minimal `NativeEngine` lifecycle;
+4. get that clean scaffold building before adding RuntimeSnapshot or ChannelStore complexity;
+5. add RuntimeSnapshot/ChannelStore/synthetic-channel flow incrementally with tests and diagnostics;
+6. keep ECU mutation, Burn, logging formats, Tuner migration and plugin/analyzer work out of this first slice;
+7. apply D-022 if any inherited behavior is introduced.
