@@ -84,6 +84,7 @@ jobs:
         run: cargo test --manifest-path rust/engine/Cargo.toml
 
       - name: Publish generated Rust lockfile
+        if: ${{ always() && hashFiles('rust/engine/Cargo.lock') != '' }}
         uses: actions/upload-artifact@v7
         with:
           name: epichub-rust-lockfile
