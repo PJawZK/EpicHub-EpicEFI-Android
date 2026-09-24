@@ -19,6 +19,8 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
+private val StaticSelectionShape = RoundedCornerShape(10.dp)
+
 /**
  * Immediate, non-animated selection surface for high-frequency workspace/tab navigation.
  *
@@ -50,14 +52,18 @@ fun StaticSelectionChoice(
     Surface(
         modifier = modifier.selectable(
             selected = selected,
-            onClick = onClick,
+            onClick = {
+                if (!selected) {
+                    onClick()
+                }
+            },
             role = Role.Tab,
             interactionSource = interactionSource,
             indication = null,
         ),
         color = containerColor,
         contentColor = contentColor,
-        shape = RoundedCornerShape(10.dp),
+        shape = StaticSelectionShape,
     ) {
         if (vertical) {
             Column(
