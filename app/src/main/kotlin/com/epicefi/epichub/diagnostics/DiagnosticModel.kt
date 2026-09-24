@@ -118,6 +118,111 @@ enum class DiagnosticMetricId(
         unit = "count",
         kind = DiagnosticMetricKind.GAUGE,
     ),
+    PROCESS_CPU_PERCENT(
+        stableId = "process.cpu.percent_of_one_core",
+        unit = "%",
+        kind = DiagnosticMetricKind.DISTRIBUTION,
+    ),
+    PROCESS_JAVA_HEAP_USED_MB(
+        stableId = "process.memory.java_heap_used_mb",
+        unit = "MiB",
+        kind = DiagnosticMetricKind.DISTRIBUTION,
+    ),
+    PROCESS_NATIVE_HEAP_ALLOCATED_MB(
+        stableId = "process.memory.native_heap_allocated_mb",
+        unit = "MiB",
+        kind = DiagnosticMetricKind.DISTRIBUTION,
+    ),
+    PROCESS_PSS_MB(
+        stableId = "process.memory.pss_mb",
+        unit = "MiB",
+        kind = DiagnosticMetricKind.DISTRIBUTION,
+    ),
+    UI_FRAME_COUNT(
+        stableId = "ui.frame.total_count",
+        unit = "frames",
+        kind = DiagnosticMetricKind.COUNTER,
+    ),
+    UI_JANK_FRAME_COUNT(
+        stableId = "ui.frame.jank_count",
+        unit = "frames",
+        kind = DiagnosticMetricKind.COUNTER,
+    ),
+    UI_FRAME_METRICS_CALLBACK_DROPPED_COUNT(
+        stableId = "ui.frame.metrics_callback_dropped_count",
+        unit = "frames",
+        kind = DiagnosticMetricKind.COUNTER,
+    ),
+    UI_FRAME_BUDGET_MS(
+        stableId = "ui.frame.budget_ms",
+        unit = "ms",
+        kind = DiagnosticMetricKind.GAUGE,
+    ),
+    UI_FRAME_TOTAL_MS(
+        stableId = "ui.frame.total_ms",
+        unit = "ms",
+        kind = DiagnosticMetricKind.DISTRIBUTION,
+    ),
+    UI_FRAME_DEADLINE_MS(
+        stableId = "ui.frame.deadline_ms",
+        unit = "ms",
+        kind = DiagnosticMetricKind.DISTRIBUTION,
+    ),
+    UI_FRAME_OVERRUN_MS(
+        stableId = "ui.frame.overrun_ms",
+        unit = "ms",
+        kind = DiagnosticMetricKind.DISTRIBUTION,
+    ),
+    UI_FRAME_VSYNC_DELAY_MS(
+        stableId = "ui.frame.vsync_delay_ms",
+        unit = "ms",
+        kind = DiagnosticMetricKind.DISTRIBUTION,
+    ),
+    UI_JANK_UNKNOWN_DELAY_MS(
+        stableId = "ui.jank.unknown_delay_ms",
+        unit = "ms",
+        kind = DiagnosticMetricKind.DISTRIBUTION,
+    ),
+    UI_JANK_INPUT_MS(
+        stableId = "ui.jank.input_ms",
+        unit = "ms",
+        kind = DiagnosticMetricKind.DISTRIBUTION,
+    ),
+    UI_JANK_ANIMATION_MS(
+        stableId = "ui.jank.animation_ms",
+        unit = "ms",
+        kind = DiagnosticMetricKind.DISTRIBUTION,
+    ),
+    UI_JANK_LAYOUT_MEASURE_MS(
+        stableId = "ui.jank.layout_measure_ms",
+        unit = "ms",
+        kind = DiagnosticMetricKind.DISTRIBUTION,
+    ),
+    UI_JANK_DRAW_MS(
+        stableId = "ui.jank.draw_ms",
+        unit = "ms",
+        kind = DiagnosticMetricKind.DISTRIBUTION,
+    ),
+    UI_JANK_SYNC_MS(
+        stableId = "ui.jank.sync_ms",
+        unit = "ms",
+        kind = DiagnosticMetricKind.DISTRIBUTION,
+    ),
+    UI_JANK_COMMAND_ISSUE_MS(
+        stableId = "ui.jank.command_issue_ms",
+        unit = "ms",
+        kind = DiagnosticMetricKind.DISTRIBUTION,
+    ),
+    UI_JANK_SWAP_BUFFERS_MS(
+        stableId = "ui.jank.swap_buffers_ms",
+        unit = "ms",
+        kind = DiagnosticMetricKind.DISTRIBUTION,
+    ),
+    UI_JANK_GPU_MS(
+        stableId = "ui.jank.gpu_ms",
+        unit = "ms",
+        kind = DiagnosticMetricKind.DISTRIBUTION,
+    ),
     ACTIVE_NATIVE_ENGINES(
         stableId = "native.engine.active_count",
         unit = "count",
