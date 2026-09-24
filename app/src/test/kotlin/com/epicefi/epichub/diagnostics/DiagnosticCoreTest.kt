@@ -121,6 +121,31 @@ class DiagnosticCoreTest {
     }
 
     @Test
+    fun reproductionCaptureMetricsAreScopedToTheCaptureWindow() {
+        val clock = FakeDiagnosticClock(monotonic = 100, wall = 1_000)
+        val hub = DiagnosticHub(clock = clock)
+
+        hub.observeMetric(DiagnosticMetricId.UI_FRAME_TOTAL_MS, 100.0)
+        hub.startReproductionCapture()
+        hub.observeMetric(DiagnosticMetricId.UI_FRAME_TOTAL_MS, 10.0)
+        hub.observeMetric(DiagnosticMetricId.UI_FRAME_TOTAL_MS, 20.0)
+        val capture = hub.finishCapture()
+
+        val captured = capture.metrics.first {
+            it.metric == DiagnosticMetricId.UI_FRAME_TOTAL_MS
+        }
+        val processLifetime = hub.metricSummaries().first {
+            it.metric == DiagnosticMetricId.UI_FRAME_TOTAL_MS
+        }
+
+        assertEquals(2L, captured.sampleCount)
+        assertEquals(10.0, captured.minimum, 0.0)
+        assertEquals(20.0, captured.maximum, 0.0)
+        assertEquals(3L, processLifetime.sampleCount)
+        assertEquals(100.0, processLifetime.maximum, 0.0)
+    }
+
+    @Test
     fun recentProblemCaptureFinishesOnlyAfterPostTriggerDeadline() {
         val clock = FakeDiagnosticClock(monotonic = 1_000, wall = 10_000)
         val hub = DiagnosticHub(clock = clock)
