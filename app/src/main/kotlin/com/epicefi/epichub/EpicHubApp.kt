@@ -1,5 +1,6 @@
 package com.epicefi.epichub
 
+import android.os.Debug
 import android.os.SystemClock
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -31,13 +32,17 @@ import com.epicefi.epichub.navigation.PrimaryWorkspace
 import com.epicefi.epichub.platform.diagnostics.DiagnosticCaptureExporter
 import com.epicefi.epichub.platform.diagnostics.ProcessPerformanceSampler
 import com.epicefi.epichub.ui.EpicHubShell
+import com.epicefi.epichub.ui.diagnostics.DiagnosticsTab
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 private const val RECENT_PROBLEM_POST_TRIGGER_NANOS = 3_000_000_000L
-private const val DIAGNOSTICS_PRESENTATION_REFRESH_MS = 1_000L
+private const val DIAGNOSTICS_ENTRY_SETTLE_MS = 400L
+private const val DIAGNOSTICS_ONE_SHOT_SETTLE_MS = 150L
+private const val DIAGNOSTICS_PREWARM_DELAY_MS = 750L
+private const val BYTES_PER_KIBIBYTE = 1024.0
 
 @Composable
 fun EpicHubApp(
@@ -56,6 +61,7 @@ fun EpicHubApp(
     var destinationId by rememberSaveable { mutableStateOf(AppDestination.DASHBOARD.id) }
     var lastTunerDestinationId by rememberSaveable { mutableStateOf(AppDestination.TUNER.id) }
     var lastLoggerDestinationId by rememberSaveable { mutableStateOf(AppDestination.LOGGER.id) }
+    var diagnosticsTabName by rememberSaveable { mutableStateOf(DiagnosticsTab.OVERVIEW.name) }
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
     val runtimeSnapshot = remember(engine) { mutableStateOf<RuntimeSnapshot?>(null) }
     val diagnosticSnapshotState = remember {
@@ -73,6 +79,9 @@ fun EpicHubApp(
     var activeCapture by remember { mutableStateOf(diagnostics.activeCapture()) }
     var pendingSaveCapture by remember { mutableStateOf<DiagnosticCapture?>(null) }
 
+    fun selectedDiagnosticsTab(): DiagnosticsTab =
+        DiagnosticsTab.entries.firstOrNull { it.name == diagnosticsTabName } ?: DiagnosticsTab.OVERVIEW
+
     fun diagnosticsVisible(): Boolean =
         AppDestination.fromId(destinationId) == AppDestination.DIAGNOSTICS && !settingsOpen
 
@@ -86,12 +95,22 @@ fun EpicHubApp(
         }
     }
 
-    fun requestDiagnosticsRefresh() {
+    fun requestDiagnosticsRefresh(settleMillis: Long = DIAGNOSTICS_ONE_SHOT_SETTLE_MS) {
         scope.launch {
-            val next = withContext(Dispatchers.Default) {
-                diagnostics.snapshotForUi()
+            if (settleMillis > 0L) {
+                delay(settleMillis)
             }
-            diagnosticSnapshotState.value = next
+            if (!diagnosticsVisible()) {
+                return@launch
+            }
+            val tab = selectedDiagnosticsTab()
+            val previous = diagnosticSnapshotState.value
+            val next = withContext(Dispatchers.Default) {
+                diagnostics.projectForUi(previous, tab)
+            }
+            if (diagnosticsVisible() && selectedDiagnosticsTab() == tab) {
+                diagnosticSnapshotState.value = next
+            }
         }
     }
 
@@ -182,15 +201,31 @@ fun EpicHubApp(
         diagnostics.setCurrentDestination(destinationId)
     }
 
-    LaunchedEffect(destinationId, settingsOpen, diagnostics) {
+    LaunchedEffect(diagnostics) {
+        delay(DIAGNOSTICS_PREWARM_DELAY_MS)
+        val prewarmed = withContext(Dispatchers.Default) {
+            diagnostics.fullSnapshotForUi()
+        }
+        if (!diagnosticsVisible()) {
+            diagnosticSnapshotState.value = prewarmed
+        }
+    }
+
+    LaunchedEffect(destinationId, settingsOpen, diagnosticsTabName, diagnostics) {
         val visible =
             AppDestination.fromId(destinationId) == AppDestination.DIAGNOSTICS && !settingsOpen
         if (visible) {
+            val tab = selectedDiagnosticsTab()
+            delay(DIAGNOSTICS_ENTRY_SETTLE_MS)
             while (true) {
-                diagnosticSnapshotState.value = withContext(Dispatchers.Default) {
-                    diagnostics.snapshotForUi()
+                val previous = diagnosticSnapshotState.value
+                val next = withContext(Dispatchers.Default) {
+                    diagnostics.projectForUi(previous, tab)
                 }
-                delay(DIAGNOSTICS_PRESENTATION_REFRESH_MS)
+                if (diagnosticsVisible() && selectedDiagnosticsTab() == tab) {
+                    diagnosticSnapshotState.value = next
+                }
+                delay(tab.refreshIntervalMillis())
             }
         }
     }
@@ -262,7 +297,7 @@ fun EpicHubApp(
             onCloseSettings = {
                 settingsOpen = false
                 if (AppDestination.fromId(destinationId) == AppDestination.DIAGNOSTICS) {
-                    requestDiagnosticsRefresh()
+                    requestDiagnosticsRefresh(DIAGNOSTICS_ENTRY_SETTLE_MS)
                 }
             },
             runtimeSnapshot = runtimeSnapshot,
@@ -270,6 +305,11 @@ fun EpicHubApp(
             activeCapture = activeCapture,
             engineAlive = engine.isAlive,
             activeEngineCount = NativeEngine.activeCount(),
+            onDiagnosticsTabSelected = { tab ->
+                if (diagnosticsTabName != tab.name) {
+                    diagnosticsTabName = tab.name
+                }
+            },
             onCaptureRecentProblem = {
                 diagnostics.startRecentProblemCapture()
                 refreshCaptureState()
@@ -319,10 +359,113 @@ fun EpicHubApp(
     }
 }
 
-private fun DiagnosticHub.snapshotForUi(): DiagnosticsSnapshot = DiagnosticsSnapshot(
-    events = events(),
-    metrics = metricSummaries(),
-    lifecycleOwners = lifecycleOwners(),
-    captures = captures(),
-    activeCapture = activeCapture(),
-)
+private fun DiagnosticsTab.refreshIntervalMillis(): Long = when (this) {
+    DiagnosticsTab.PERFORMANCE -> 1_000L
+    DiagnosticsTab.METRICS -> 1_500L
+    DiagnosticsTab.EVENTS -> 1_500L
+    DiagnosticsTab.OVERVIEW,
+    DiagnosticsTab.SESSIONS,
+    DiagnosticsTab.CAPTURES,
+    -> 2_000L
+}
+
+private fun DiagnosticHub.fullSnapshotForUi(): DiagnosticsSnapshot = measureUiProjection {
+    val nextEvents = events()
+    val nextLifecycleOwners = lifecycleOwners()
+    val nextCaptures = captures()
+    DiagnosticsSnapshot(
+        events = nextEvents,
+        metrics = metricSummaries(),
+        lifecycleOwners = nextLifecycleOwners,
+        captures = nextCaptures,
+        activeCapture = activeCapture(),
+        eventCount = nextEvents.size,
+        lifecycleOwnerCount = nextLifecycleOwners.size,
+        captureCount = nextCaptures.size,
+    )
+}
+
+private fun DiagnosticHub.projectForUi(
+    previous: DiagnosticsSnapshot,
+    tab: DiagnosticsTab,
+): DiagnosticsSnapshot = measureUiProjection {
+    val active = activeCapture()
+    val nextEventCount = eventCount()
+    val nextLifecycleOwnerCount = lifecycleOwnerCount()
+    val nextCaptureCount = captureCount()
+
+    when (tab) {
+        DiagnosticsTab.OVERVIEW -> previous.copy(
+            activeCapture = active,
+            eventCount = nextEventCount,
+            lifecycleOwnerCount = nextLifecycleOwnerCount,
+            captureCount = nextCaptureCount,
+        )
+
+        DiagnosticsTab.PERFORMANCE,
+        DiagnosticsTab.METRICS,
+        -> previous.copy(
+            metrics = metricSummaries(),
+            activeCapture = active,
+            eventCount = nextEventCount,
+            lifecycleOwnerCount = nextLifecycleOwnerCount,
+            captureCount = nextCaptureCount,
+        )
+
+        DiagnosticsTab.EVENTS -> {
+            val nextEvents = events()
+            previous.copy(
+                events = nextEvents,
+                activeCapture = active,
+                eventCount = nextEvents.size,
+                lifecycleOwnerCount = nextLifecycleOwnerCount,
+                captureCount = nextCaptureCount,
+            )
+        }
+
+        DiagnosticsTab.SESSIONS -> {
+            val nextOwners = lifecycleOwners()
+            previous.copy(
+                lifecycleOwners = nextOwners,
+                activeCapture = active,
+                eventCount = nextEventCount,
+                lifecycleOwnerCount = nextOwners.size,
+                captureCount = nextCaptureCount,
+            )
+        }
+
+        DiagnosticsTab.CAPTURES -> {
+            val nextCaptures = captures()
+            previous.copy(
+                captures = nextCaptures,
+                activeCapture = active,
+                eventCount = nextEventCount,
+                lifecycleOwnerCount = nextLifecycleOwnerCount,
+                captureCount = nextCaptures.size,
+            )
+        }
+    }
+}
+
+private inline fun DiagnosticHub.measureUiProjection(
+    block: () -> DiagnosticsSnapshot,
+): DiagnosticsSnapshot {
+    val allocatedBefore = runtimeAllocatedBytes()
+    val startedAt = SystemClock.elapsedRealtimeNanos()
+    val result = block()
+    val elapsedMs = (SystemClock.elapsedRealtimeNanos() - startedAt) / 1_000_000.0
+    val allocatedAfter = runtimeAllocatedBytes()
+
+    observeMetric(DiagnosticMetricId.DIAGNOSTICS_UI_PROJECTION_BUILD_MS, elapsedMs)
+    if (allocatedBefore != null && allocatedAfter != null && allocatedAfter >= allocatedBefore) {
+        observeMetric(
+            DiagnosticMetricId.DIAGNOSTICS_UI_PROJECTION_ALLOCATED_KIB,
+            (allocatedAfter - allocatedBefore).toDouble() / BYTES_PER_KIBIBYTE,
+        )
+    }
+    incrementMetric(DiagnosticMetricId.DIAGNOSTICS_UI_PROJECTION_COUNT)
+    return result
+}
+
+private fun runtimeAllocatedBytes(): Long? =
+    runCatching { Debug.getRuntimeStat("art.gc.bytes-allocated").toLongOrNull() }.getOrNull()
