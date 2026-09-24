@@ -89,23 +89,39 @@ jobs:
       - name: Android debug build
         run: gradle :app:assembleDebug --stacktrace
 
-      - name: Verify production ARM libraries in APK
+      - name: Android performance build
+        run: gradle :app:assemblePerformance --stacktrace
+
+      - name: Verify production ARM libraries in APKs
         shell: bash
         run: |
-          APK="app/build/outputs/apk/debug/app-debug.apk"
-          test -f "$APK"
-          unzip -Z1 "$APK" > "$RUNNER_TEMP/apk-contents.txt"
-          grep -Fxq "lib/armeabi-v7a/libepichub_engine.so" "$RUNNER_TEMP/apk-contents.txt"
-          grep -Fxq "lib/arm64-v8a/libepichub_engine.so" "$RUNNER_TEMP/apk-contents.txt"
+          for APK in \
+            app/build/outputs/apk/debug/app-debug.apk \
+            app/build/outputs/apk/performance/app-performance.apk
+          do
+            test -f "$APK"
+            CONTENTS="$RUNNER_TEMP/$(basename "$APK").contents.txt"
+            unzip -Z1 "$APK" > "$CONTENTS"
+            grep -Fxq "lib/armeabi-v7a/libepichub_engine.so" "$CONTENTS"
+            grep -Fxq "lib/arm64-v8a/libepichub_engine.so" "$CONTENTS"
 
-          mapfile -t EPICHUB_LIBS < <(grep '/libepichub_engine\.so$' "$RUNNER_TEMP/apk-contents.txt")
-          test "${#EPICHUB_LIBS[@]}" -eq 2
-          printf 'Verified packaged native libraries:\n%s\n' "${EPICHUB_LIBS[@]}"
+            mapfile -t EPICHUB_LIBS < <(grep '/libepichub_engine\.so$' "$CONTENTS")
+            test "${#EPICHUB_LIBS[@]}" -eq 2
+            printf 'Verified %s native libraries:\n%s\n' "$APK" "${EPICHUB_LIBS[*]}"
+          done
 
-      - name: Publish qualified foundation APK
+      - name: Publish qualified foundation debug APK
         uses: actions/upload-artifact@v7
         with:
           name: epichub-foundation-debug
           path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Publish qualified performance APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: epichub-foundation-performance
+          path: app/build/outputs/apk/performance/app-performance.apk
           if-no-files-found: error
           retention-days: 14
