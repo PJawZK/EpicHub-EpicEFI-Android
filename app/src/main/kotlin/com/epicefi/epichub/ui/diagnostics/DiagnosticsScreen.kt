@@ -15,6 +15,7 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -34,7 +35,14 @@ import java.text.DateFormat
 import java.util.Date
 import java.util.Locale
 
-private val diagnosticsTabs = listOf("Overview", "Performance", "Events", "Metrics", "Sessions", "Captures")
+enum class DiagnosticsTab(val title: String) {
+    OVERVIEW("Overview"),
+    PERFORMANCE("Performance"),
+    EVENTS("Events"),
+    METRICS("Metrics"),
+    SESSIONS("Sessions"),
+    CAPTURES("Captures"),
+}
 
 private data class OverviewPresentation(
     val eventCount: Int,
@@ -58,6 +66,9 @@ private data class PerformancePresentation(
     val allocated: String,
     val gcCount: String,
     val gcTime: String,
+    val projectionBuild: String,
+    val projectionAllocated: String,
+    val projectionCount: String,
     val unknownDelay: String,
     val input: String,
     val animation: String,
@@ -72,11 +83,17 @@ private data class PerformancePresentation(
 @Composable
 fun DiagnosticsScreen(
     diagnostics: State<DiagnosticsSnapshot>,
+    onTabSelected: (DiagnosticsTab) -> Unit,
     onSaveCapture: (DiagnosticCapture) -> Unit,
     onShareCapture: (DiagnosticCapture) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var selectedTab by rememberSaveable { mutableIntStateOf(0) }
+    var selectedTabIndex by rememberSaveable { mutableIntStateOf(0) }
+    val selectedTab = DiagnosticsTab.entries[selectedTabIndex]
+
+    LaunchedEffect(selectedTab) {
+        onTabSelected(selectedTab)
+    }
 
     Column(
         modifier = modifier.fillMaxSize(),
@@ -87,23 +104,23 @@ fun DiagnosticsScreen(
             style = MaterialTheme.typography.headlineMedium,
             modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp),
         )
-        ScrollableTabRow(selectedTabIndex = selectedTab) {
-            diagnosticsTabs.forEachIndexed { index, title ->
+        ScrollableTabRow(selectedTabIndex = selectedTabIndex) {
+            DiagnosticsTab.entries.forEachIndexed { index, tab ->
                 Tab(
-                    selected = selectedTab == index,
-                    onClick = { selectedTab = index },
-                    text = { Text(title) },
+                    selected = selectedTabIndex == index,
+                    onClick = { selectedTabIndex = index },
+                    text = { Text(tab.title) },
                 )
             }
         }
 
         when (selectedTab) {
-            0 -> OverviewTab(diagnostics)
-            1 -> PerformanceTab(diagnostics)
-            2 -> EventsTab(diagnostics)
-            3 -> MetricsTab(diagnostics)
-            4 -> SessionsTab(diagnostics)
-            else -> CapturesTab(diagnostics, onSaveCapture, onShareCapture)
+            DiagnosticsTab.OVERVIEW -> OverviewTab(diagnostics)
+            DiagnosticsTab.PERFORMANCE -> PerformanceTab(diagnostics)
+            DiagnosticsTab.EVENTS -> EventsTab(diagnostics)
+            DiagnosticsTab.METRICS -> MetricsTab(diagnostics)
+            DiagnosticsTab.SESSIONS -> SessionsTab(diagnostics)
+            DiagnosticsTab.CAPTURES -> CapturesTab(diagnostics, onSaveCapture, onShareCapture)
         }
     }
 }
@@ -114,9 +131,9 @@ private fun OverviewTab(diagnostics: State<DiagnosticsSnapshot>) {
         derivedStateOf {
             val snapshot = diagnostics.value
             OverviewPresentation(
-                eventCount = snapshot.events.size,
-                lifecycleOwnerCount = snapshot.lifecycleOwners.size,
-                captureCount = snapshot.captures.size,
+                eventCount = snapshot.eventCount,
+                lifecycleOwnerCount = snapshot.lifecycleOwnerCount,
+                captureCount = snapshot.captureCount,
                 activeCapture = snapshot.activeCapture?.let { "${it.mode} #${it.captureId}" } ?: "idle",
             )
         }
@@ -195,6 +212,17 @@ private fun PerformanceTab(diagnostics: State<DiagnosticsSnapshot>) {
                 KeyValueRow("Allocated bytes", presentation.allocated)
                 KeyValueRow("GC count", presentation.gcCount)
                 KeyValueRow("GC time", presentation.gcTime)
+            }
+        }
+        item {
+            StructuralCard(
+                title = "Diagnostics UI cost",
+                modifier = Modifier.fillMaxWidth(),
+                subtitle = "Projection work is measured off the UI thread. Recording cadence is independent of this presentation refresh.",
+            ) {
+                KeyValueRow("Projection build p50 / p95 / p99", presentation.projectionBuild)
+                KeyValueRow("Projection allocation p50 / p95 / p99", presentation.projectionAllocated)
+                KeyValueRow("Projection count", presentation.projectionCount)
             }
         }
         item {
@@ -399,6 +427,9 @@ private fun buildPerformancePresentation(metrics: List<DiagnosticMetricSummary>)
     val allocated = metric(DiagnosticMetricId.PROCESS_ALLOCATED_MB)
     val gcCount = metric(DiagnosticMetricId.PROCESS_GC_COUNT)
     val gcTime = metric(DiagnosticMetricId.PROCESS_GC_TIME_MS)
+    val projectionBuild = metric(DiagnosticMetricId.DIAGNOSTICS_UI_PROJECTION_BUILD_MS)
+    val projectionAllocated = metric(DiagnosticMetricId.DIAGNOSTICS_UI_PROJECTION_ALLOCATED_KIB)
+    val projectionCount = metric(DiagnosticMetricId.DIAGNOSTICS_UI_PROJECTION_COUNT)
 
     return PerformancePresentation(
         framesMeasured = frames.toLong().toString(),
@@ -415,6 +446,9 @@ private fun buildPerformancePresentation(metrics: List<DiagnosticMetricSummary>)
         allocated = allocated.trend("MiB"),
         gcCount = gcCount.delta("count"),
         gcTime = gcTime.delta("ms"),
+        projectionBuild = projectionBuild.percentiles("ms"),
+        projectionAllocated = projectionAllocated.percentiles("KiB"),
+        projectionCount = projectionCount?.current?.toLong()?.toString() ?: "waiting",
         unknownDelay = metric(DiagnosticMetricId.UI_JANK_UNKNOWN_DELAY_MS).tailPercentiles("ms"),
         input = metric(DiagnosticMetricId.UI_JANK_INPUT_MS).tailPercentiles("ms"),
         animation = metric(DiagnosticMetricId.UI_JANK_ANIMATION_MS).tailPercentiles("ms"),
