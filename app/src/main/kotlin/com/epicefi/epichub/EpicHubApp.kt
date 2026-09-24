@@ -290,10 +290,17 @@ fun EpicHubApp(
                 saveCaptureLauncher.launch(DiagnosticCaptureExporter.suggestedFileName(capture))
             },
             onShareCapture = { capture ->
-                runCatching {
-                    DiagnosticCaptureExporter.share(context, capture)
-                }.onFailure { error ->
-                    recordExportFailure(capture, error)
+                scope.launch {
+                    val result = runCatching {
+                        withContext(Dispatchers.IO) {
+                            DiagnosticCaptureExporter.createShareIntent(context, capture)
+                        }
+                    }
+                    result.onSuccess { chooser ->
+                        context.startActivity(chooser)
+                    }.onFailure { error ->
+                        recordExportFailure(capture, error)
+                    }
                 }
             },
         )
