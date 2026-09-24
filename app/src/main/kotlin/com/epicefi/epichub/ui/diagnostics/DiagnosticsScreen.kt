@@ -10,8 +10,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -22,6 +22,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.epicefi.epichub.diagnostics.DiagnosticCapture
+import com.epicefi.epichub.diagnostics.DiagnosticMetricId
+import com.epicefi.epichub.diagnostics.DiagnosticMetricSummary
 import com.epicefi.epichub.diagnostics.DiagnosticsSnapshot
 import com.epicefi.epichub.ui.components.KeyValueRow
 import com.epicefi.epichub.ui.components.StructuralCard
@@ -36,7 +38,7 @@ fun DiagnosticsScreen(
     modifier: Modifier = Modifier,
 ) {
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
-    val tabs = listOf("Overview", "Events", "Metrics", "Sessions", "Captures")
+    val tabs = listOf("Overview", "Performance", "Events", "Metrics", "Sessions", "Captures")
 
     Column(
         modifier = modifier.fillMaxSize(),
@@ -47,7 +49,7 @@ fun DiagnosticsScreen(
             style = MaterialTheme.typography.headlineMedium,
             modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp),
         )
-        TabRow(selectedTabIndex = selectedTab) {
+        ScrollableTabRow(selectedTabIndex = selectedTab) {
             tabs.forEachIndexed { index, title ->
                 Tab(
                     selected = selectedTab == index,
@@ -59,9 +61,10 @@ fun DiagnosticsScreen(
 
         when (selectedTab) {
             0 -> OverviewTab(diagnostics)
-            1 -> EventsTab(diagnostics)
-            2 -> MetricsTab(diagnostics)
-            3 -> SessionsTab(diagnostics)
+            1 -> PerformanceTab(diagnostics)
+            2 -> EventsTab(diagnostics)
+            3 -> MetricsTab(diagnostics)
+            4 -> SessionsTab(diagnostics)
             else -> CapturesTab(diagnostics, onSaveCapture, onShareCapture)
         }
     }
@@ -107,6 +110,81 @@ private fun OverviewTab(diagnostics: DiagnosticsSnapshot) {
 }
 
 @Composable
+private fun PerformanceTab(diagnostics: DiagnosticsSnapshot) {
+    val frames = diagnostics.metric(DiagnosticMetricId.UI_FRAME_COUNT)?.current ?: 0.0
+    val jankFrames = diagnostics.metric(DiagnosticMetricId.UI_JANK_FRAME_COUNT)?.current ?: 0.0
+    val jankPercent = if (frames > 0.0) jankFrames / frames * 100.0 else 0.0
+    val frameTotal = diagnostics.metric(DiagnosticMetricId.UI_FRAME_TOTAL_MS)
+    val frameBudget = diagnostics.metric(DiagnosticMetricId.UI_FRAME_BUDGET_MS)
+    val overrun = diagnostics.metric(DiagnosticMetricId.UI_FRAME_OVERRUN_MS)
+    val vsyncDelay = diagnostics.metric(DiagnosticMetricId.UI_FRAME_VSYNC_DELAY_MS)
+    val cpu = diagnostics.metric(DiagnosticMetricId.PROCESS_CPU_PERCENT)
+    val javaHeap = diagnostics.metric(DiagnosticMetricId.PROCESS_JAVA_HEAP_USED_MB)
+    val nativeHeap = diagnostics.metric(DiagnosticMetricId.PROCESS_NATIVE_HEAP_ALLOCATED_MB)
+    val pss = diagnostics.metric(DiagnosticMetricId.PROCESS_PSS_MB)
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        item {
+            StructuralCard(
+                title = "Performance recording",
+                modifier = Modifier.fillMaxWidth(),
+                subtitle = "For a clean test: Problem capture → Start reproduction capture, reproduce the slowdown, then Stop and Save ZIP. Capture metrics are scoped to that reproduction window.",
+            ) {
+                KeyValueRow("Frames measured", frames.toLong().toString())
+                KeyValueRow("Jank frames", "${jankFrames.toLong()} (${jankPercent.formatMetric()}%)")
+                KeyValueRow("Frame budget", frameBudget?.current?.formatWithUnit("ms") ?: "waiting")
+                KeyValueRow("Frame p50 / p95 / p99", frameTotal.percentiles("ms"))
+                KeyValueRow("Jank overrun p95 / p99", overrun.tailPercentiles("ms"))
+                KeyValueRow("UI-thread vsync delay p95 / p99", vsyncDelay.tailPercentiles("ms"))
+            }
+        }
+        item {
+            StructuralCard(
+                title = "Process load",
+                modifier = Modifier.fillMaxWidth(),
+                subtitle = "CPU is process CPU time expressed as percent of one fully occupied core.",
+            ) {
+                KeyValueRow("CPU p50 / p95 / p99", cpu.percentiles("%"))
+                KeyValueRow("Java heap current / max", javaHeap.currentAndMax("MiB"))
+                KeyValueRow("Native heap current / max", nativeHeap.currentAndMax("MiB"))
+                KeyValueRow("PSS current / max", pss.currentAndMax("MiB"))
+            }
+        }
+        item {
+            StructuralCard(
+                title = "Jank breakdown",
+                modifier = Modifier.fillMaxWidth(),
+                subtitle = "These timings are sampled only for frames that miss their frame budget/deadline.",
+            ) {
+                JankMetricRow(diagnostics, "Unknown/UI-thread delay", DiagnosticMetricId.UI_JANK_UNKNOWN_DELAY_MS)
+                JankMetricRow(diagnostics, "Input handling", DiagnosticMetricId.UI_JANK_INPUT_MS)
+                JankMetricRow(diagnostics, "Animation", DiagnosticMetricId.UI_JANK_ANIMATION_MS)
+                JankMetricRow(diagnostics, "Layout / measure", DiagnosticMetricId.UI_JANK_LAYOUT_MEASURE_MS)
+                JankMetricRow(diagnostics, "Draw", DiagnosticMetricId.UI_JANK_DRAW_MS)
+                JankMetricRow(diagnostics, "Render sync", DiagnosticMetricId.UI_JANK_SYNC_MS)
+                JankMetricRow(diagnostics, "GPU command issue", DiagnosticMetricId.UI_JANK_COMMAND_ISSUE_MS)
+                JankMetricRow(diagnostics, "Swap buffers", DiagnosticMetricId.UI_JANK_SWAP_BUFFERS_MS)
+                JankMetricRow(diagnostics, "GPU duration", DiagnosticMetricId.UI_JANK_GPU_MS)
+            }
+        }
+    }
+}
+
+@Composable
+private fun JankMetricRow(
+    diagnostics: DiagnosticsSnapshot,
+    label: String,
+    metricId: DiagnosticMetricId,
+) {
+    KeyValueRow(label, diagnostics.metric(metricId).tailPercentiles("ms"))
+}
+
+@Composable
 private fun EventsTab(diagnostics: DiagnosticsSnapshot) {
     LazyColumn(
         modifier = Modifier
@@ -133,6 +211,7 @@ private fun EventsTab(diagnostics: DiagnosticsSnapshot) {
 
 @Composable
 private fun MetricsTab(diagnostics: DiagnosticsSnapshot) {
+    val observedMetrics = diagnostics.metrics.filter { it.sampleCount > 0 }
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -140,7 +219,7 @@ private fun MetricsTab(diagnostics: DiagnosticsSnapshot) {
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         items(
-            items = diagnostics.metrics,
+            items = observedMetrics,
             key = { it.metric.stableId },
         ) { metric ->
             StructuralCard(
@@ -206,6 +285,9 @@ private fun CapturesTab(
             items = diagnostics.captures,
             key = { it.captureId },
         ) { capture ->
+            val frames = capture.metric(DiagnosticMetricId.UI_FRAME_COUNT)?.current ?: 0.0
+            val jankFrames = capture.metric(DiagnosticMetricId.UI_JANK_FRAME_COUNT)?.current ?: 0.0
+            val jankPercent = if (frames > 0.0) jankFrames / frames * 100.0 else 0.0
             StructuralCard(
                 title = "Problem capture #${capture.captureId}",
                 modifier = Modifier.fillMaxWidth(),
@@ -214,6 +296,10 @@ private fun CapturesTab(
                 KeyValueRow("Mode", capture.mode.name)
                 KeyValueRow("Events", capture.events.size.toString())
                 KeyValueRow("Markers", capture.markers.size.toString())
+                if (frames > 0.0) {
+                    KeyValueRow("Performance frames", frames.toLong().toString())
+                    KeyValueRow("Jank", "${jankFrames.toLong()} (${jankPercent.formatMetric()}%)")
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = { onSaveCapture(capture) }) {
                         Text("Save ZIP")
@@ -226,5 +312,22 @@ private fun CapturesTab(
         }
     }
 }
+
+private fun DiagnosticsSnapshot.metric(id: DiagnosticMetricId): DiagnosticMetricSummary? =
+    metrics.firstOrNull { it.metric == id && it.sampleCount > 0 }
+
+private fun DiagnosticCapture.metric(id: DiagnosticMetricId): DiagnosticMetricSummary? =
+    metrics.firstOrNull { it.metric == id && it.sampleCount > 0 }
+
+private fun DiagnosticMetricSummary?.percentiles(unit: String): String =
+    this?.let { "${p50.formatMetric()} / ${p95.formatMetric()} / ${p99.formatMetric()} $unit" } ?: "waiting"
+
+private fun DiagnosticMetricSummary?.tailPercentiles(unit: String): String =
+    this?.let { "${p95.formatMetric()} / ${p99.formatMetric()} $unit" } ?: "none observed"
+
+private fun DiagnosticMetricSummary?.currentAndMax(unit: String): String =
+    this?.let { "${current.formatMetric()} / ${maximum.formatMetric()} $unit" } ?: "waiting"
+
+private fun Double.formatWithUnit(unit: String): String = "${formatMetric()} $unit"
 
 private fun Double.formatMetric(): String = "%.3f".format(this)
