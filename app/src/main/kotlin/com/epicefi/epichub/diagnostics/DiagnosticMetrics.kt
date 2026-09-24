@@ -116,9 +116,11 @@ class DiagnosticMetrics(
         series.getOrPut(metric) { Series(distributionCapacity) }.increment(delta)
     }
 
-    fun snapshot(): List<DiagnosticMetricSummary> {
+    fun snapshot(): List<DiagnosticMetricSummary> = snapshot(DiagnosticMetricId.entries)
+
+    fun snapshot(metricIds: Collection<DiagnosticMetricId>): List<DiagnosticMetricSummary> {
         val copies = synchronized(this) {
-            DiagnosticMetricId.entries.map { metric ->
+            metricIds.map { metric ->
                 series[metric]?.copy(metric) ?: SeriesCopy(
                     metric = metric,
                     sampleCount = 0,
