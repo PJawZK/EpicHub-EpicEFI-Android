@@ -147,7 +147,6 @@ private fun SystemStatusHeader(
     onAddCaptureMarker: () -> Unit,
     onStopCapture: () -> Unit,
 ) {
-    val currentSnapshot = snapshot.value
     Surface(
         color = MaterialTheme.colorScheme.surfaceContainer,
         tonalElevation = 2.dp,
@@ -194,11 +193,7 @@ private fun SystemStatusHeader(
                         },
                         style = MaterialTheme.typography.bodySmall,
                     )
-                    Text(
-                        text = currentSnapshot?.let { "Source ${it.sourceKind} · #${it.sequence}" }
-                            ?: "Source waiting",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
+                    RuntimeSourceStatus(snapshot)
                 }
             }
         } else {
@@ -217,10 +212,7 @@ private fun SystemStatusHeader(
                     text = if (engineAlive) "Engine active ($activeEngineCount)" else "Engine unavailable",
                     style = MaterialTheme.typography.bodySmall,
                 )
-                Text(
-                    text = currentSnapshot?.let { "Source ${it.sourceKind} · #${it.sequence}" } ?: "Source waiting",
-                    style = MaterialTheme.typography.bodySmall,
-                )
+                RuntimeSourceStatus(snapshot)
                 Spacer(modifier = Modifier.weight(1f))
                 HeaderCaptureControls(
                     activeCapture = activeCapture,
@@ -236,6 +228,15 @@ private fun SystemStatusHeader(
             }
         }
     }
+}
+
+@Composable
+private fun RuntimeSourceStatus(snapshot: State<RuntimeSnapshot?>) {
+    val current = snapshot.value
+    Text(
+        text = current?.let { "Source ${it.sourceKind} · #${it.sequence}" } ?: "Source waiting",
+        style = MaterialTheme.typography.bodySmall,
+    )
 }
 
 @Composable
@@ -365,9 +366,9 @@ private fun ShellContent(
     }
 
     when (destination.workspace) {
-        PrimaryWorkspace.DASHBOARD -> DashboardScreen(runtimeSnapshot.value)
+        PrimaryWorkspace.DASHBOARD -> DashboardScreen(runtimeSnapshot)
         PrimaryWorkspace.DIAGNOSTICS -> DiagnosticsScreen(
-            diagnostics = diagnostics.value,
+            diagnostics = diagnostics,
             onSaveCapture = onSaveCapture,
             onShareCapture = onShareCapture,
         )
@@ -385,7 +386,7 @@ private fun ShellContent(
             Box(modifier = Modifier.weight(1f)) {
                 when (destination) {
                     AppDestination.ANALYZER -> AnalyzerScreen()
-                    else -> LoggerScreen(runtimeSnapshot.value)
+                    else -> LoggerScreen(runtimeSnapshot)
                 }
             }
         }
