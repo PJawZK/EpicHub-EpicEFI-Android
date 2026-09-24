@@ -68,12 +68,13 @@ class UiFramePerformanceMonitor(
 
         val intendedVsync = frameMetrics.metricNanos(FrameMetrics.INTENDED_VSYNC_TIMESTAMP)
         val actualVsync = frameMetrics.metricNanos(FrameMetrics.VSYNC_TIMESTAMP)
-        if (intendedVsync != null && actualVsync != null) {
-            val delayNanos = (actualVsync - intendedVsync).coerceAtLeast(0L)
-            diagnostics.observeMetric(
-                DiagnosticMetricId.UI_FRAME_VSYNC_DELAY_MS,
-                delayNanos / NANOS_PER_MILLISECOND,
-            )
+        val vsyncDelayMs = if (intendedVsync != null && actualVsync != null) {
+            (actualVsync - intendedVsync).coerceAtLeast(0L) / NANOS_PER_MILLISECOND
+        } else {
+            null
+        }
+        vsyncDelayMs?.let {
+            diagnostics.observeMetric(DiagnosticMetricId.UI_FRAME_VSYNC_DELAY_MS, it)
         }
 
         val deadlineMs = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -93,46 +94,47 @@ class UiFramePerformanceMonitor(
         val overrunMs = totalMs - budgetMs
         if (overrunMs <= 0.0) return
 
+        val unknownDelayMs = frameMetrics.metricMs(FrameMetrics.UNKNOWN_DELAY_DURATION)
+        val inputMs = frameMetrics.metricMs(FrameMetrics.INPUT_HANDLING_DURATION)
+        val animationMs = frameMetrics.metricMs(FrameMetrics.ANIMATION_DURATION)
+        val layoutMeasureMs = frameMetrics.metricMs(FrameMetrics.LAYOUT_MEASURE_DURATION)
+        val drawMs = frameMetrics.metricMs(FrameMetrics.DRAW_DURATION)
+        val syncMs = frameMetrics.metricMs(FrameMetrics.SYNC_DURATION)
+        val commandIssueMs = frameMetrics.metricMs(FrameMetrics.COMMAND_ISSUE_DURATION)
+        val swapBuffersMs = frameMetrics.metricMs(FrameMetrics.SWAP_BUFFERS_DURATION)
+        val gpuMs = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            frameMetrics.metricMs(FrameMetrics.GPU_DURATION)
+        } else {
+            null
+        }
+
         diagnostics.incrementMetric(DiagnosticMetricId.UI_JANK_FRAME_COUNT)
         diagnostics.observeMetric(DiagnosticMetricId.UI_FRAME_OVERRUN_MS, overrunMs)
-        diagnostics.observeIfAvailable(
-            DiagnosticMetricId.UI_JANK_UNKNOWN_DELAY_MS,
-            frameMetrics.metricMs(FrameMetrics.UNKNOWN_DELAY_DURATION),
+        diagnostics.observeIfAvailable(DiagnosticMetricId.UI_JANK_UNKNOWN_DELAY_MS, unknownDelayMs)
+        diagnostics.observeIfAvailable(DiagnosticMetricId.UI_JANK_INPUT_MS, inputMs)
+        diagnostics.observeIfAvailable(DiagnosticMetricId.UI_JANK_ANIMATION_MS, animationMs)
+        diagnostics.observeIfAvailable(DiagnosticMetricId.UI_JANK_LAYOUT_MEASURE_MS, layoutMeasureMs)
+        diagnostics.observeIfAvailable(DiagnosticMetricId.UI_JANK_DRAW_MS, drawMs)
+        diagnostics.observeIfAvailable(DiagnosticMetricId.UI_JANK_SYNC_MS, syncMs)
+        diagnostics.observeIfAvailable(DiagnosticMetricId.UI_JANK_COMMAND_ISSUE_MS, commandIssueMs)
+        diagnostics.observeIfAvailable(DiagnosticMetricId.UI_JANK_SWAP_BUFFERS_MS, swapBuffersMs)
+        diagnostics.observeIfAvailable(DiagnosticMetricId.UI_JANK_GPU_MS, gpuMs)
+
+        diagnostics.recordWorstFrame(
+            frameNumber = frameIndex,
+            totalMs = totalMs,
+            budgetMs = budgetMs,
+            overrunMs = overrunMs,
+            vsyncDelayMs = vsyncDelayMs,
+            unknownDelayMs = unknownDelayMs,
+            animationMs = animationMs,
+            layoutMeasureMs = layoutMeasureMs,
+            drawMs = drawMs,
+            syncMs = syncMs,
+            commandIssueMs = commandIssueMs,
+            swapBuffersMs = swapBuffersMs,
+            gpuMs = gpuMs,
         )
-        diagnostics.observeIfAvailable(
-            DiagnosticMetricId.UI_JANK_INPUT_MS,
-            frameMetrics.metricMs(FrameMetrics.INPUT_HANDLING_DURATION),
-        )
-        diagnostics.observeIfAvailable(
-            DiagnosticMetricId.UI_JANK_ANIMATION_MS,
-            frameMetrics.metricMs(FrameMetrics.ANIMATION_DURATION),
-        )
-        diagnostics.observeIfAvailable(
-            DiagnosticMetricId.UI_JANK_LAYOUT_MEASURE_MS,
-            frameMetrics.metricMs(FrameMetrics.LAYOUT_MEASURE_DURATION),
-        )
-        diagnostics.observeIfAvailable(
-            DiagnosticMetricId.UI_JANK_DRAW_MS,
-            frameMetrics.metricMs(FrameMetrics.DRAW_DURATION),
-        )
-        diagnostics.observeIfAvailable(
-            DiagnosticMetricId.UI_JANK_SYNC_MS,
-            frameMetrics.metricMs(FrameMetrics.SYNC_DURATION),
-        )
-        diagnostics.observeIfAvailable(
-            DiagnosticMetricId.UI_JANK_COMMAND_ISSUE_MS,
-            frameMetrics.metricMs(FrameMetrics.COMMAND_ISSUE_DURATION),
-        )
-        diagnostics.observeIfAvailable(
-            DiagnosticMetricId.UI_JANK_SWAP_BUFFERS_MS,
-            frameMetrics.metricMs(FrameMetrics.SWAP_BUFFERS_DURATION),
-        )
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            diagnostics.observeIfAvailable(
-                DiagnosticMetricId.UI_JANK_GPU_MS,
-                frameMetrics.metricMs(FrameMetrics.GPU_DURATION),
-            )
-        }
     }
 
     private fun FrameMetrics.metricNanos(id: Int): Long? =
