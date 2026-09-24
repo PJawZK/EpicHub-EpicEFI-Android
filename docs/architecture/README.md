@@ -2,18 +2,18 @@
 
 Phase 1 architecture/responsibility archaeology is accepted and closed. The first Phase-2 Kotlin/Rust foundation is also merged and physically qualified on the SM-A137F phone and SM-T500 tablet.
 
-Current Phase-2 design work establishes the responsive application shell, native Tuning Tools surface and diagnostic/bug-capture foundation **before** real ECU/USB integration.
+Current Phase-2 work establishes the application shell, native Tuning Tools, four-workspace navigation model and diagnostic/problem-capture foundation **before** real ECU/USB integration.
 
 ## Start here
 
-- `DECISIONS.md` — durable architectural decisions through D-024.
+- `DECISIONS.md` — durable architectural decisions through D-025.
 - `DEVELOPMENT_WORKFLOW.md` — repository and chat/handoff workflow.
 - `SOURCE_REIMPLEMENTATION_METHOD.md` — mandatory piece-by-piece historical-source review and clean rewrite method used throughout implementation.
 - `RUNTIME_LANGUAGE_AND_SERIALIZATION.md` — locked Kotlin/Compose + Rust runtime and boundary-only serialization contract; also clarifies that HTML/CSS/JavaScript may be used for design prototypes without becoming production runtime.
 - `ANDROID_BUILD_BASELINE.md` — locked package/API/ABI/device support contract and foundation qualification baseline.
-- `UI_FOUNDATION_LAYOUT.md` — Phase-2 ground layout/navigation/responsive contract for Dashboard, Tuner, Tuning Tools, Logger, Analyzer, Diagnostics and Settings.
+- `UI_FOUNDATION_LAYOUT.md` — four primary workspaces, six distinct functional/domain routes, four presentation-authority classes and diagnostics/control separation.
 - `TUNING_TOOLS_FOUNDATION.md` — native replacement for historical AE/PID/TCharge/Injection-Angle plugin packaging and the UI/runtime ownership contract for those tools.
-- `DIAGNOSTICS_CAPTURE_FOUNDATION.md` — Phase-2 typed diagnostics, flight-recorder and bug-capture design to establish before complex subsystem integration.
+- `DIAGNOSTICS_CAPTURE_FOUNDATION.md` — typed diagnostics, bounded flight recorder and problem-capture foundation.
 - `../HANDOFF.md` — single current development continuation index.
 
 Phase-1 closure/history:
@@ -52,7 +52,7 @@ Likewise, historical TunerStudio plugin/JAR packaging is evidence only. D-024 ma
 
 ## Target architecture contracts
 
-- `CODEBASE_TOPOLOGY.md` — target responsibility topology and planned Kotlin/Rust/file homes; exact physical module split may evolve without changing ownership.
+- `CODEBASE_TOPOLOGY.md` — current physical topology plus deliberate expansion rules, including the four-workspace/leaf-route split.
 - `DEPENDENCY_RULES.md` — allowed dependency direction and prohibited ownership/serialization leaks.
 - `STATE_OWNERSHIP.md` — sole mutable authority for important state.
 - `DATA_FLOW.md` — major live/tuning/accessory/logging/analyzer data paths.
@@ -62,7 +62,7 @@ Likewise, historical TunerStudio plugin/JAR packaging is evidence only. D-024 ma
 - `SAFETY_BOUNDARIES.md` — production safety/authority boundaries.
 - `NAMING_RULES.md` — permanent descriptive naming and experiment rules.
 - `TEST_STRATEGY.md` — qualification layers, MLG/MDF interop, subsystem testing and D-022/D-023 regression methodology.
-- `UI_FOUNDATION_LAYOUT.md` — concrete screen-region/responsive foundation before real feature depth.
+- `UI_FOUNDATION_LAYOUT.md` — concrete workspace/route/presentation contract before real feature depth.
 - `TUNING_TOOLS_FOUNDATION.md` — native guided tuning-tool surface and shared Rust-analysis integration.
 - `DIAGNOSTICS_CAPTURE_FOUNDATION.md` — concrete diagnostic flight-recorder/capture/export foundation before real subsystem complexity.
 
@@ -75,11 +75,11 @@ When documents differ in level of detail:
 3. protocol/source truth is resolved by `PROTOCOL_AUTHORITIES.md` plus direct evidence documents.
 4. `STATE_OWNERSHIP.md`, `DEPENDENCY_RULES.md`, `DATA_FLOW.md`, `KOTLIN_RUST_BOUNDARY.md`, `ACTION_MODEL.md` and `SAFETY_BOUNDARIES.md` define cross-domain contracts.
 5. Phase-2 implementation contracts such as `UI_FOUNDATION_LAYOUT.md`, `TUNING_TOOLS_FOUNDATION.md` and `DIAGNOSTICS_CAPTURE_FOUNDATION.md` refine the accepted architecture for implementation but may not override durable decisions.
-6. `CODEBASE_TOPOLOGY.md` maps those contracts into planned homes; it must not override them.
+6. `CODEBASE_TOPOLOGY.md` maps those contracts into current/planned homes; it must not override them.
 7. evidence documents explain why a decision exists but do not silently supersede a later durable decision.
 8. `GAP_ANALYSIS.md` identifies work still open; an open implementation/benchmark gap does not negate an already-locked ownership boundary.
 
-Historical evidence never overrides D-022's clean reimplementation rule, D-023's typed Kotlin/Rust runtime rule or D-024's native Tuning Tools rule merely because the old implementation used another language/serialization/plugin mechanism.
+Historical evidence never overrides D-022's clean reimplementation rule, D-023's typed Kotlin/Rust runtime rule, D-024's native Tuning Tools rule or D-025's workspace/domain separation merely because the old implementation used another language, serialization mechanism, plugin mechanism or navigation structure.
 
 ## Current handoff
 
