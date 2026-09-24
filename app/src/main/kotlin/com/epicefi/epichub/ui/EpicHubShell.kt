@@ -64,7 +64,8 @@ fun EpicHubShell(
     onStartReproductionCapture: () -> Unit,
     onAddCaptureMarker: () -> Unit,
     onStopCapture: () -> Unit,
-    onExportCapture: (DiagnosticCapture) -> Unit,
+    onSaveCapture: (DiagnosticCapture) -> Unit,
+    onShareCapture: (DiagnosticCapture) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Surface(
@@ -103,7 +104,8 @@ fun EpicHubShell(
                                 onCloseSettings = onCloseSettings,
                                 runtimeSnapshot = runtimeSnapshot,
                                 diagnostics = diagnostics,
-                                onExportCapture = onExportCapture,
+                                onSaveCapture = onSaveCapture,
+                                onShareCapture = onShareCapture,
                             )
                         }
                     }
@@ -116,7 +118,8 @@ fun EpicHubShell(
                             onCloseSettings = onCloseSettings,
                             runtimeSnapshot = runtimeSnapshot,
                             diagnostics = diagnostics,
-                            onExportCapture = onExportCapture,
+                            onSaveCapture = onSaveCapture,
+                            onShareCapture = onShareCapture,
                         )
                     }
                     PrimaryNavigationBar(
@@ -350,7 +353,8 @@ private fun ShellContent(
     onCloseSettings: () -> Unit,
     runtimeSnapshot: RuntimeSnapshot?,
     diagnostics: DiagnosticsSnapshot,
-    onExportCapture: (DiagnosticCapture) -> Unit,
+    onSaveCapture: (DiagnosticCapture) -> Unit,
+    onShareCapture: (DiagnosticCapture) -> Unit,
 ) {
     if (settingsOpen) {
         SettingsScreen(onClose = onCloseSettings)
@@ -361,7 +365,8 @@ private fun ShellContent(
         PrimaryWorkspace.DASHBOARD -> DashboardScreen(runtimeSnapshot)
         PrimaryWorkspace.DIAGNOSTICS -> DiagnosticsScreen(
             diagnostics = diagnostics,
-            onExportCapture = onExportCapture,
+            onSaveCapture = onSaveCapture,
+            onShareCapture = onShareCapture,
         )
         PrimaryWorkspace.TUNER -> Column(modifier = Modifier.fillMaxSize()) {
             WorkspaceRouteTabs(destination, onDestinationSelected)
