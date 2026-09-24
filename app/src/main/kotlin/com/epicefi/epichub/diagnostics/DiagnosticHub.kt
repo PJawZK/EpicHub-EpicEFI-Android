@@ -133,11 +133,17 @@ class DiagnosticHub(
 
     fun events(): List<DiagnosticEvent> = ring.snapshot()
 
+    fun eventCount(): Int = ring.size()
+
     fun metricSummaries(): List<DiagnosticMetricSummary> = metrics.snapshot()
 
     fun lifecycleOwners(): List<DiagnosticLifecycleOwner> = lifecycle.snapshot()
 
+    fun lifecycleOwnerCount(): Int = lifecycle.size()
+
     fun captures(): List<DiagnosticCapture> = synchronized(captures) { captures.toList().asReversed() }
+
+    fun captureCount(): Int = synchronized(captures) { captures.size }
 
     fun activeCapture(): ActiveDiagnosticCapture? = activeCapture?.let { builder ->
         ActiveDiagnosticCapture(
