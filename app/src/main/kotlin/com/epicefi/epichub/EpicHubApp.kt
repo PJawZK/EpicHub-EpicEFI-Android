@@ -8,12 +8,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.referentialEqualityPolicy
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import com.epicefi.epichub.diagnostics.DiagnosticCapture
@@ -43,6 +43,42 @@ private const val DIAGNOSTICS_ENTRY_SETTLE_MS = 400L
 private const val DIAGNOSTICS_ONE_SHOT_SETTLE_MS = 150L
 private const val DIAGNOSTICS_PREWARM_DELAY_MS = 750L
 private const val BYTES_PER_KIBIBYTE = 1024.0
+
+private val destinationPayloads = AppDestination.entries.associateWith { destination ->
+    DiagnosticPayload.DestinationChanged(destination.id)
+}
+
+private val performanceDiagnosticMetrics = listOf(
+    DiagnosticMetricId.UI_FRAME_COUNT,
+    DiagnosticMetricId.UI_JANK_FRAME_COUNT,
+    DiagnosticMetricId.UI_JANK_FIRST_DRAW_FRAME_COUNT,
+    DiagnosticMetricId.UI_JANK_WITHIN_500MS_OF_CONTEXT_CHANGE_COUNT,
+    DiagnosticMetricId.UI_JANK_STEADY_STATE_COUNT,
+    DiagnosticMetricId.UI_FRAME_METRICS_CALLBACK_DROPPED_COUNT,
+    DiagnosticMetricId.UI_FRAME_BUDGET_MS,
+    DiagnosticMetricId.UI_FRAME_TOTAL_MS,
+    DiagnosticMetricId.UI_FRAME_OVERRUN_MS,
+    DiagnosticMetricId.UI_FRAME_VSYNC_DELAY_MS,
+    DiagnosticMetricId.PROCESS_CPU_PERCENT,
+    DiagnosticMetricId.PROCESS_JAVA_HEAP_USED_MB,
+    DiagnosticMetricId.PROCESS_NATIVE_HEAP_ALLOCATED_MB,
+    DiagnosticMetricId.PROCESS_PSS_MB,
+    DiagnosticMetricId.PROCESS_GC_COUNT,
+    DiagnosticMetricId.PROCESS_GC_TIME_MS,
+    DiagnosticMetricId.PROCESS_ALLOCATED_MB,
+    DiagnosticMetricId.DIAGNOSTICS_UI_PROJECTION_BUILD_MS,
+    DiagnosticMetricId.DIAGNOSTICS_UI_PROJECTION_ALLOCATED_KIB,
+    DiagnosticMetricId.DIAGNOSTICS_UI_PROJECTION_COUNT,
+    DiagnosticMetricId.UI_JANK_UNKNOWN_DELAY_MS,
+    DiagnosticMetricId.UI_JANK_INPUT_MS,
+    DiagnosticMetricId.UI_JANK_ANIMATION_MS,
+    DiagnosticMetricId.UI_JANK_LAYOUT_MEASURE_MS,
+    DiagnosticMetricId.UI_JANK_DRAW_MS,
+    DiagnosticMetricId.UI_JANK_SYNC_MS,
+    DiagnosticMetricId.UI_JANK_COMMAND_ISSUE_MS,
+    DiagnosticMetricId.UI_JANK_SWAP_BUFFERS_MS,
+    DiagnosticMetricId.UI_JANK_GPU_MS,
+)
 
 @Composable
 fun EpicHubApp(
@@ -84,6 +120,17 @@ fun EpicHubApp(
 
     fun diagnosticsVisible(): Boolean =
         AppDestination.fromId(destinationId) == AppDestination.DIAGNOSTICS && !settingsOpen
+
+    fun restorePresentationContext() {
+        val destination = AppDestination.fromId(destinationId)
+        diagnostics.setCurrentDestination(
+            if (destination == AppDestination.DIAGNOSTICS) {
+                selectedDiagnosticsTab().contextId
+            } else {
+                destination.id
+            },
+        )
+    }
 
     fun refreshCaptureState() {
         val nextActiveCapture = diagnostics.activeCapture()
@@ -146,6 +193,7 @@ fun EpicHubApp(
     }
 
     fun selectDestination(destination: AppDestination) {
+        val changed = destinationId != destination.id
         destinationId = destination.id
         diagnostics.setCurrentDestination(destination.id)
         when (destination.workspace) {
@@ -154,12 +202,14 @@ fun EpicHubApp(
             else -> Unit
         }
         settingsOpen = false
-        diagnostics.record(
-            severity = DiagnosticSeverity.TRACE,
-            domain = DiagnosticDomain.APP_UI,
-            code = DiagnosticEventCode.APP_DESTINATION_CHANGED,
-            payload = DiagnosticPayload.DestinationChanged(destination.id),
-        )
+        if (changed) {
+            diagnostics.record(
+                severity = DiagnosticSeverity.TRACE,
+                domain = DiagnosticDomain.APP_UI,
+                code = DiagnosticEventCode.APP_DESTINATION_CHANGED,
+                payload = destinationPayloads.getValue(destination),
+            )
+        }
     }
 
     fun selectWorkspace(workspace: PrimaryWorkspace) {
@@ -197,10 +247,6 @@ fun EpicHubApp(
         }
     }
 
-    LaunchedEffect(destinationId, diagnostics) {
-        diagnostics.setCurrentDestination(destinationId)
-    }
-
     LaunchedEffect(diagnostics) {
         delay(DIAGNOSTICS_PREWARM_DELAY_MS)
         val prewarmed = withContext(Dispatchers.Default) {
@@ -216,6 +262,7 @@ fun EpicHubApp(
             AppDestination.fromId(destinationId) == AppDestination.DIAGNOSTICS && !settingsOpen
         if (visible) {
             val tab = selectedDiagnosticsTab()
+            diagnostics.setCurrentDestination(tab.contextId)
             delay(DIAGNOSTICS_ENTRY_SETTLE_MS)
             while (true) {
                 val previous = diagnosticSnapshotState.value
@@ -293,9 +340,13 @@ fun EpicHubApp(
             onDestinationSelected = ::selectDestination,
             onWorkspaceSelected = ::selectWorkspace,
             settingsOpen = settingsOpen,
-            onOpenSettings = { settingsOpen = true },
+            onOpenSettings = {
+                settingsOpen = true
+                diagnostics.setCurrentDestination("settings")
+            },
             onCloseSettings = {
                 settingsOpen = false
+                restorePresentationContext()
                 if (AppDestination.fromId(destinationId) == AppDestination.DIAGNOSTICS) {
                     requestDiagnosticsRefresh(DIAGNOSTICS_ENTRY_SETTLE_MS)
                 }
@@ -308,6 +359,9 @@ fun EpicHubApp(
             onDiagnosticsTabSelected = { tab ->
                 if (diagnosticsTabName != tab.name) {
                     diagnosticsTabName = tab.name
+                }
+                if (diagnosticsVisible()) {
+                    diagnostics.setCurrentDestination(tab.contextId)
                 }
             },
             onCaptureRecentProblem = {
@@ -401,7 +455,14 @@ private fun DiagnosticHub.projectForUi(
             captureCount = nextCaptureCount,
         )
 
-        DiagnosticsTab.PERFORMANCE,
+        DiagnosticsTab.PERFORMANCE -> previous.copy(
+            metrics = metricSummaries(performanceDiagnosticMetrics),
+            activeCapture = active,
+            eventCount = nextEventCount,
+            lifecycleOwnerCount = nextLifecycleOwnerCount,
+            captureCount = nextCaptureCount,
+        )
+
         DiagnosticsTab.METRICS -> previous.copy(
             metrics = metricSummaries(),
             activeCapture = active,
