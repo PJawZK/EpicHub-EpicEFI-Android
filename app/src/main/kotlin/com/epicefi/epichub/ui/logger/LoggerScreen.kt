@@ -12,6 +12,7 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -22,13 +23,14 @@ import com.epicefi.epichub.engine.RuntimeSnapshot
 import com.epicefi.epichub.ui.components.KeyValueRow
 import com.epicefi.epichub.ui.components.StructuralCard
 
+private val loggerTabs = listOf("Live Logger", "Trigger Logger")
+
 @Composable
 fun LoggerScreen(
-    snapshot: RuntimeSnapshot?,
+    snapshot: State<RuntimeSnapshot?>,
     modifier: Modifier = Modifier,
 ) {
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
-    val tabs = listOf("Live Logger", "Trigger Logger")
 
     Column(
         modifier = modifier
@@ -45,7 +47,7 @@ fun LoggerScreen(
         )
 
         TabRow(selectedTabIndex = selectedTab) {
-            tabs.forEachIndexed { index, title ->
+            loggerTabs.forEachIndexed { index, title ->
                 Tab(
                     selected = selectedTab == index,
                     onClick = { selectedTab = index },
@@ -55,16 +57,7 @@ fun LoggerScreen(
         }
 
         if (selectedTab == 0) {
-            StructuralCard(
-                title = "Recording health",
-                modifier = Modifier.fillMaxWidth(),
-                subtitle = "No file writer is attached yet.",
-            ) {
-                KeyValueRow("Source", snapshot?.sourceKind?.toString() ?: "waiting")
-                KeyValueRow("Visible channels", snapshot?.channels?.size?.toString() ?: "0")
-                KeyValueRow("Writer", "not implemented")
-                KeyValueRow("Drops", "0 (synthetic foundation)")
-            }
+            RecordingHealth(snapshot)
         } else {
             StructuralCard(
                 title = "Trigger lanes",
@@ -76,5 +69,20 @@ fun LoggerScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun RecordingHealth(snapshot: State<RuntimeSnapshot?>) {
+    val current = snapshot.value
+    StructuralCard(
+        title = "Recording health",
+        modifier = Modifier.fillMaxWidth(),
+        subtitle = "No file writer is attached yet.",
+    ) {
+        KeyValueRow("Source", current?.sourceKind?.toString() ?: "waiting")
+        KeyValueRow("Visible channels", current?.channels?.size?.toString() ?: "0")
+        KeyValueRow("Writer", "not implemented")
+        KeyValueRow("Drops", "0 (synthetic foundation)")
     }
 }
