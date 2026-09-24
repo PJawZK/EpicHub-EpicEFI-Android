@@ -44,6 +44,7 @@ import com.epicefi.epichub.navigation.PrimaryWorkspace
 import com.epicefi.epichub.ui.analyzer.AnalyzerScreen
 import com.epicefi.epichub.ui.dashboard.DashboardScreen
 import com.epicefi.epichub.ui.diagnostics.DiagnosticsScreen
+import com.epicefi.epichub.ui.diagnostics.DiagnosticsTab
 import com.epicefi.epichub.ui.logger.LoggerScreen
 import com.epicefi.epichub.ui.settings.SettingsScreen
 import com.epicefi.epichub.ui.tools.TuningToolsScreen
@@ -62,6 +63,7 @@ fun EpicHubShell(
     activeCapture: ActiveDiagnosticCapture?,
     engineAlive: Boolean,
     activeEngineCount: Int,
+    onDiagnosticsTabSelected: (DiagnosticsTab) -> Unit,
     onCaptureRecentProblem: () -> Unit,
     onStartReproductionCapture: () -> Unit,
     onAddCaptureMarker: () -> Unit,
@@ -106,6 +108,7 @@ fun EpicHubShell(
                                 onCloseSettings = onCloseSettings,
                                 runtimeSnapshot = runtimeSnapshot,
                                 diagnostics = diagnostics,
+                                onDiagnosticsTabSelected = onDiagnosticsTabSelected,
                                 onSaveCapture = onSaveCapture,
                                 onShareCapture = onShareCapture,
                             )
@@ -120,6 +123,7 @@ fun EpicHubShell(
                             onCloseSettings = onCloseSettings,
                             runtimeSnapshot = runtimeSnapshot,
                             diagnostics = diagnostics,
+                            onDiagnosticsTabSelected = onDiagnosticsTabSelected,
                             onSaveCapture = onSaveCapture,
                             onShareCapture = onShareCapture,
                         )
@@ -357,6 +361,7 @@ private fun ShellContent(
     onCloseSettings: () -> Unit,
     runtimeSnapshot: State<RuntimeSnapshot?>,
     diagnostics: State<DiagnosticsSnapshot>,
+    onDiagnosticsTabSelected: (DiagnosticsTab) -> Unit,
     onSaveCapture: (DiagnosticCapture) -> Unit,
     onShareCapture: (DiagnosticCapture) -> Unit,
 ) {
@@ -369,6 +374,7 @@ private fun ShellContent(
         PrimaryWorkspace.DASHBOARD -> DashboardScreen(runtimeSnapshot)
         PrimaryWorkspace.DIAGNOSTICS -> DiagnosticsScreen(
             diagnostics = diagnostics,
+            onTabSelected = onDiagnosticsTabSelected,
             onSaveCapture = onSaveCapture,
             onShareCapture = onShareCapture,
         )
