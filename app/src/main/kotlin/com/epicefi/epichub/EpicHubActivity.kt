@@ -4,10 +4,12 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import com.epicefi.epichub.platform.diagnostics.UiFramePerformanceMonitor
 
 class EpicHubActivity : ComponentActivity() {
     private lateinit var diagnosticsOwnerId: String
     private var nativeEngineGeneration: Long = 0
+    private var uiFramePerformanceMonitor: UiFramePerformanceMonitor? = null
 
     private val epicHubApplication: EpicHubApplication
         get() = application as EpicHubApplication
@@ -32,6 +34,11 @@ class EpicHubActivity : ComponentActivity() {
                 nativeEngineGeneration = nativeEngineGeneration,
             )
         }
+        uiFramePerformanceMonitor = UiFramePerformanceMonitor(
+            diagnostics = epicHubApplication.diagnostics,
+        ).also { monitor ->
+            monitor.start(window)
+        }
     }
 
     override fun onStart() {
@@ -55,6 +62,8 @@ class EpicHubActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        uiFramePerformanceMonitor?.stop()
+        uiFramePerformanceMonitor = null
         epicHubApplication.diagnostics.updateLifecycleOwner(
             diagnosticsOwnerId,
             if (isChangingConfigurations) "destroying_configuration" else "destroying",
