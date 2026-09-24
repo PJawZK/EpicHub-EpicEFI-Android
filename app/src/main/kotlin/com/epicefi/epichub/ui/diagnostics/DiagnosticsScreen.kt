@@ -79,9 +79,9 @@ private fun OverviewTab(diagnostics: DiagnosticsSnapshot) {
             ) {
                 KeyValueRow("Events retained", diagnostics.events.size.toString())
                 KeyValueRow("Lifecycle owners", diagnostics.lifecycleOwners.size.toString())
-                KeyValueRow("Saved captures", diagnostics.captures.size.toString())
+                KeyValueRow("Saved problem captures", diagnostics.captures.size.toString())
                 KeyValueRow(
-                    "Capture state",
+                    "Problem-capture state",
                     diagnostics.activeCapture?.let { "${it.mode} #${it.captureId}" } ?: "idle",
                 )
             }
@@ -90,7 +90,7 @@ private fun OverviewTab(diagnostics: DiagnosticsSnapshot) {
             StructuralCard(
                 title = "Subsystem status",
                 modifier = Modifier.fillMaxWidth(),
-                subtitle = "Current foundation coverage",
+                subtitle = "Evidence only — operational controls remain with their subsystem owners.",
             ) {
                 KeyValueRow("App / UI", "active")
                 KeyValueRow("Native engine / JNI", "active")
@@ -193,7 +193,7 @@ private fun CapturesTab(
         if (diagnostics.captures.isEmpty()) {
             item {
                 Text(
-                    "No finalized captures yet. Use the global Capture control while reproducing a problem.",
+                    "No finalized problem captures yet. Use the global Problem capture control while reproducing or immediately after noticing a problem.",
                     modifier = Modifier.padding(vertical = 16.dp),
                 )
             }
@@ -203,7 +203,7 @@ private fun CapturesTab(
             key = { it.captureId },
         ) { capture ->
             StructuralCard(
-                title = "Capture #${capture.captureId}",
+                title = "Problem capture #${capture.captureId}",
                 modifier = Modifier.fillMaxWidth(),
                 subtitle = DateFormat.getDateTimeInstance().format(Date(capture.createdAtWallClockMillis)),
             ) {
@@ -211,7 +211,7 @@ private fun CapturesTab(
                 KeyValueRow("Events", capture.events.size.toString())
                 KeyValueRow("Markers", capture.markers.size.toString())
                 Button(onClick = { onExportCapture(capture) }) {
-                    Text("Export capture")
+                    Text("Export problem capture")
                 }
             }
         }
