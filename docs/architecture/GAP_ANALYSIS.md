@@ -4,11 +4,11 @@
 
 This document lists **current unresolved implementation, fixture, benchmark, compatibility and product-scope work**.
 
-Phase 1 is accepted/closed. PR #2's Kotlin/Rust foundation is accepted on `main`. PR #3's UI/diagnostics implementation is software-qualified on its branch but still awaits physical qualification/acceptance.
+Phase 1 is accepted/closed. PR #2's Kotlin/Rust foundation is accepted on `main`. PR #3's UI/diagnostics implementation remains on its branch and still awaits physical qualification/acceptance. The D-025 navigation revision also requires exact-head CI qualification before the next physical APK is treated as authoritative.
 
 Authority for the active slice:
 
-- D-001 through D-024 in `DECISIONS.md`;
+- D-001 through D-025 in `DECISIONS.md`;
 - `UI_FOUNDATION_LAYOUT.md`;
 - `TUNING_TOOLS_FOUNDATION.md`;
 - `DIAGNOSTICS_CAPTURE_FOUNDATION.md`;
@@ -42,28 +42,63 @@ Do not relist these as unfinished work.
 
 # Implemented on PR #3 — awaiting physical acceptance
 
-The following are implemented and automated-test/CI qualified on `phase2/ui-diagnostics-foundation`; they are **not implementation gaps**, but they are not accepted onto `main` until the current physical gate passes.
+The following are implemented on `phase2/ui-diagnostics-foundation`; they are **not design-only gaps**, but they are not accepted onto `main` until the current software + physical gates pass.
 
-## Responsive application shell
+## Four-workspace application shell
 
-Implemented:
+Implemented primary workspaces:
 
 ```text
-Dashboard | Tuner | Tuning Tools | Logger | Analyzer | Diagnostics
+Dashboard | Tuner | Logger | Diagnostics
+```
+
+Distinct leaf/domain routes remain:
+
+```text
+Dashboard
+Tuner
+Tuning Tools
+Logger
+Analyzer
+Diagnostics
+```
+
+Current visual grouping:
+
+```text
+Tuner workspace  → Tuner | Tuning Tools
+Logger workspace → Logger | Analyzer
 ```
 
 plus global Settings.
 
 Current shell includes:
 
-- tablet/wide navigation rail;
-- compact/phone bottom navigation;
-- compact-safe two-row status/capture header;
-- structural screens for all six destinations;
+- primary navigation over the four workspaces only;
+- separate leaf route identity for Tuning Tools and Analyzer;
+- preservation of the last meaningful Tuner-workspace and Logger-workspace leaf route;
+- structural nested-route selector pending accepted HTML styling;
 - synthetic RuntimeSnapshot presentation;
-- common capture/settings affordances.
+- common Problem capture and Settings affordances.
 
-Compact six-destination navigation remains subject to physical usability review; grouping/secondary navigation may still be introduced if the phone layout proves crowded.
+D-025 explicitly forbids Analyzer from depending on Logger UI/state and Tuning Tools from depending on Tuner UI/state merely because of visual nesting.
+
+A navigation contract test locks the workspace/leaf mapping.
+
+## Presentation-authority model
+
+The final visual design is expected to support explicitly accepted references for:
+
+```text
+Tablet Landscape
+Tablet Portrait
+Phone Landscape
+Phone Portrait
+```
+
+These are four presentation recipes over one semantic architecture, not four implementations.
+
+The current simple scaffold breakpoint remains provisional and is **not** the final responsive-design authority.
 
 ## Native Tuning Tools shell
 
@@ -72,9 +107,11 @@ Implemented structural home for:
 - Acceleration Enrichment;
 - PID Controller;
 - TCharge;
-- Injection Angle;
+- Injection Angle/Phasing;
 
 with explicit maturity/availability presentation.
+
+It is now visually nested under the Tuner primary workspace without becoming Tuner-owned.
 
 Deep algorithms are intentionally not implemented yet.
 
@@ -105,7 +142,8 @@ Implemented:
 - reproduction capture;
 - user markers;
 - immutable finalized captures;
-- process-scoped recorder so capture state/evidence survives Activity recreation.
+- process-scoped recorder so capture state/evidence survives Activity recreation;
+- global UI wording changed to **Problem capture** so it is not confused with Logger recording.
 
 ## Diagnostic export
 
@@ -125,25 +163,54 @@ with:
 - tests proving default archive entry set;
 - no JSON/CBOR live runtime/JNI path.
 
-Automated qualification covers the above plus dual-ABI APK build/inspection.
+## Diagnostics/control separation
+
+Current production Diagnostics remains evidence-only.
+
+Locked future UI separation:
+
+```text
+Diagnostics
+→ health/history/events/metrics/incidents/problem captures
+
+Connection control panel
+→ Connect / Disconnect / Reconnect / Scan
+→ routes to transport/session owner
+
+Settings → Connections
+→ persistent connection policy/preferences
+
+Diagnostics → Warnings/incidents
+→ observe/history/acknowledge
+
+Settings → Warnings & alerts
+→ rule definitions/threshold/debounce/cooldown/enablement
+```
+
+Diagnostics must not become transport or warning-policy authority.
 
 ---
 
 # Current blocking gate
 
-## UI/diagnostic physical qualification
+## Exact-head software + physical qualification
 
-Before PR #3 acceptance/merge, prove the exact qualified APK on both:
+Before PR #3 acceptance/merge:
 
-- Samsung SM-A137F;
-- Samsung SM-T500.
+1. exact current D-025 head must pass Foundation quality;
+2. install the exact qualified APK on both reference devices:
+   - Samsung SM-A137F;
+   - Samsung SM-T500.
 
-Verify:
+Verify at minimum:
 
 - install/launch;
-- all six destinations reachable;
-- compact phone header/navigation has no clipping or unusable controls;
-- tablet rail/reflow behaves sensibly;
+- exactly four primary workspaces globally;
+- Tuner workspace can switch Tuner ↔ Tuning Tools;
+- Logger workspace can switch Logger ↔ Analyzer;
+- switching away/back preserves the last nested route;
+- diagnostics records the leaf route rather than only the primary workspace;
+- phone/tablet navigation has no clipping or unusable controls;
 - route/state behavior across rotation/recreation;
 - RuntimeSnapshot continues advancing;
 - Diagnostics Overview/Events/Metrics/Sessions/Captures populate;
@@ -155,7 +222,7 @@ Verify:
 - no obvious UI/native responsiveness regression;
 - diagnostic memory/CPU overhead is reasonable for this synthetic workload.
 
-Status: `CURRENT PHASE 2 PHYSICAL GATE`.
+Status: `CURRENT PHASE 2 SOFTWARE + PHYSICAL GATE`.
 
 ---
 
@@ -163,12 +230,22 @@ Status: `CURRENT PHASE 2 PHYSICAL GATE`.
 
 The user is developing HTML/CSS prototypes for Dashboard and Logger.
 
+Expected authority family may include separate files/references for:
+
+```text
+Tablet Landscape
+Tablet Portrait
+Phone Landscape
+Phone Portrait
+```
+
 Need later:
 
-- review/accept explicit visual/layout references;
+- review/accept each relevant visual/layout reference;
 - translate accepted intent into native Compose;
-- physically compare phone/tablet results;
-- preserve D-023: prototype JS/mock data never becomes runtime authority.
+- physically compare all target presentation classes;
+- preserve one semantic/domain model underneath;
+- preserve D-023: prototype JS/mock data/JSON never becomes runtime authority.
 
 Current structural Dashboard/Logger Compose surfaces are intentionally provisional.
 
@@ -178,7 +255,7 @@ Status: `CURRENT UI DESIGN INPUT`, not a blocker for testing PR #3 shell/diagnos
 
 # Diagnostics depth still open after PR #3
 
-The current diagnostic foundation is sufficient for the upcoming subsystem work, but these deeper items remain deliberately open:
+The current diagnostic foundation is sufficient for upcoming subsystem work, but these deeper items remain deliberately open:
 
 - previous-process/crash/exit context where Android actually provides evidence;
 - explicit optional attachment selection;
@@ -282,6 +359,8 @@ Need later:
 
 The tools are native EpicHub functionality, not dynamically loaded plugins.
 
+Analyzer remains a separate analysis domain even though its UI route is inside the Logger workspace. Tuning Tools remains a separate analysis/tool domain even though its route is inside the Tuner workspace.
+
 Status: `TUNING TOOLS / ANALYSIS FEATURE-ENTRY WORK`.
 
 ---
@@ -311,11 +390,15 @@ Do not reopen without contradictory evidence:
 - legacy ESP32 is not a direct relay controller;
 - GATT completion is not downstream action confirmation;
 - diagnostics/warnings are observational;
+- connection actions/policy and warning incidents/policy remain separated by owner;
 - historical code is reimplemented cleanly under D-022;
 - historical TunerStudio plugins become native Tuning Tools under D-024;
+- four primary user workspaces group six distinct leaf/domain routes under D-025;
+- visual nesting never becomes dependency nesting;
 - Analyzer is generic exploration while Tuning Tools owns guided domain workflows;
+- four visual presentation authorities may exist over one semantic architecture;
 - logging/analyzer architecture is format-neutral rather than MDF-specific.
 
 ## Current gate
 
-> Physical qualification and acceptance of PR #3's implemented UI/diagnostics foundation on SM-A137F and SM-T500. Real ECU acquisition begins only after that gate unless the user explicitly changes the sequencing.
+> Exact-head CI plus physical qualification/acceptance of PR #3's four-workspace UI/diagnostics foundation on SM-A137F and SM-T500. Real ECU acquisition begins only after that gate unless the user explicitly changes the sequencing.
