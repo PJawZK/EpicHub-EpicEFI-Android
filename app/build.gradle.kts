@@ -21,7 +21,10 @@ plugins {
 }
 
 val pinnedNdkVersion = "30.0.16248370"
-val buildGitSha = System.getenv("GITHUB_SHA")?.takeIf { it.isNotBlank() } ?: "unknown"
+val buildGitSha = System.getenv("EPICHUB_SOURCE_SHA")
+    ?.takeIf { it.isNotBlank() }
+    ?: System.getenv("GITHUB_SHA")?.takeIf { it.isNotBlank() }
+    ?: "unknown"
 val rustCrateDirectory = rootProject.layout.projectDirectory.dir("rust/engine")
 val rustManifest = rustCrateDirectory.file("Cargo.toml")
 val rustSources = rustCrateDirectory.dir("src")
