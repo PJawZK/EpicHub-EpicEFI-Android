@@ -35,6 +35,16 @@ class ProcessPerformanceSampler {
             Debug.getNativeHeapAllocatedSize().toMebibytes(),
         )
 
+        runtimeStatLong("art.gc.gc-count")?.let {
+            diagnostics.observeMetric(DiagnosticMetricId.PROCESS_GC_COUNT, it.toDouble())
+        }
+        runtimeStatLong("art.gc.gc-time")?.let {
+            diagnostics.observeMetric(DiagnosticMetricId.PROCESS_GC_TIME_MS, it.toDouble())
+        }
+        runtimeStatLong("art.gc.bytes-allocated")?.let {
+            diagnostics.observeMetric(DiagnosticMetricId.PROCESS_ALLOCATED_MB, it.toMebibytes())
+        }
+
         sampleIndex += 1
         if (sampleIndex % PSS_SAMPLE_INTERVAL == 0L) {
             diagnostics.observeMetric(
@@ -46,6 +56,9 @@ class ProcessPerformanceSampler {
         lastWallMillis = nowWallMillis
         lastCpuMillis = nowCpuMillis
     }
+
+    private fun runtimeStatLong(key: String): Long? =
+        runCatching { Debug.getRuntimeStat(key).toLongOrNull() }.getOrNull()
 
     private fun Long.toMebibytes(): Double = toDouble() / BYTES_PER_MEBIBYTE
 
