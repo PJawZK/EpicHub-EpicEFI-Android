@@ -44,8 +44,28 @@ class DiagnosticMetrics(
             observe(current + delta)
         }
 
-        fun summary(metric: DiagnosticMetricId): DiagnosticMetricSummary {
-            if (storedCount == 0) {
+        fun copy(metric: DiagnosticMetricId): SeriesCopy = SeriesCopy(
+            metric = metric,
+            sampleCount = totalCount,
+            retainedSamples = samples.copyOf(storedCount),
+            first = first,
+            current = current,
+            minimum = if (storedCount == 0) 0.0 else minimum,
+            maximum = if (storedCount == 0) 0.0 else maximum,
+        )
+    }
+
+    private data class SeriesCopy(
+        val metric: DiagnosticMetricId,
+        val sampleCount: Long,
+        val retainedSamples: DoubleArray,
+        val first: Double,
+        val current: Double,
+        val minimum: Double,
+        val maximum: Double,
+    ) {
+        fun summary(): DiagnosticMetricSummary {
+            if (retainedSamples.isEmpty()) {
                 return DiagnosticMetricSummary(
                     metric = metric,
                     sampleCount = 0,
@@ -60,21 +80,19 @@ class DiagnosticMetrics(
                 )
             }
 
-            val ordered = DoubleArray(storedCount)
-            for (index in 0 until storedCount) {
-                ordered[index] = samples[index]
-            }
-            ordered.sort()
+            retainedSamples.sort()
 
             fun percentile(percent: Double): Double {
-                val rank = ceil((percent / 100.0) * ordered.size).toInt().coerceIn(1, ordered.size)
-                return ordered[rank - 1]
+                val rank = ceil((percent / 100.0) * retainedSamples.size)
+                    .toInt()
+                    .coerceIn(1, retainedSamples.size)
+                return retainedSamples[rank - 1]
             }
 
             return DiagnosticMetricSummary(
                 metric = metric,
-                sampleCount = totalCount,
-                retainedSampleCount = storedCount,
+                sampleCount = sampleCount,
+                retainedSampleCount = retainedSamples.size,
                 first = first,
                 current = current,
                 minimum = minimum,
@@ -98,9 +116,20 @@ class DiagnosticMetrics(
         series.getOrPut(metric) { Series(distributionCapacity) }.increment(delta)
     }
 
-    @Synchronized
-    fun snapshot(): List<DiagnosticMetricSummary> =
-        DiagnosticMetricId.entries.map { metric ->
-            series[metric]?.summary(metric) ?: Series(distributionCapacity).summary(metric)
+    fun snapshot(): List<DiagnosticMetricSummary> {
+        val copies = synchronized(this) {
+            DiagnosticMetricId.entries.map { metric ->
+                series[metric]?.copy(metric) ?: SeriesCopy(
+                    metric = metric,
+                    sampleCount = 0,
+                    retainedSamples = doubleArrayOf(),
+                    first = 0.0,
+                    current = 0.0,
+                    minimum = 0.0,
+                    maximum = 0.0,
+                )
+            }
         }
+        return copies.map(SeriesCopy::summary)
+    }
 }
