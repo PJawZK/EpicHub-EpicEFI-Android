@@ -10,6 +10,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
+import androidx.compose.runtime.key
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.epicefi.epichub.engine.RuntimeSnapshot
@@ -18,7 +20,7 @@ import com.epicefi.epichub.ui.components.StructuralCard
 
 @Composable
 fun DashboardScreen(
-    snapshot: RuntimeSnapshot?,
+    snapshot: State<RuntimeSnapshot?>,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -34,23 +36,31 @@ fun DashboardScreen(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        DashboardRuntimeContent(snapshot)
+    }
+}
 
-        StructuralCard(
-            title = "Runtime source",
-            modifier = Modifier.fillMaxWidth(),
-            subtitle = "Existing synthetic RuntimeSnapshot foundation",
-        ) {
-            if (snapshot == null) {
-                Text("Waiting for runtime snapshot")
-            } else {
-                KeyValueRow("Sequence", snapshot.sequence.toString())
-                KeyValueRow("Session", snapshot.sessionId.toString())
-                KeyValueRow("Source", snapshot.sourceKind.toString())
-                KeyValueRow("Channels", snapshot.channels.size.toString())
-            }
+@Composable
+private fun DashboardRuntimeContent(snapshot: State<RuntimeSnapshot?>) {
+    val current = snapshot.value
+
+    StructuralCard(
+        title = "Runtime source",
+        modifier = Modifier.fillMaxWidth(),
+        subtitle = "Existing synthetic RuntimeSnapshot foundation",
+    ) {
+        if (current == null) {
+            Text("Waiting for runtime snapshot")
+        } else {
+            KeyValueRow("Sequence", current.sequence.toString())
+            KeyValueRow("Session", current.sessionId.toString())
+            KeyValueRow("Source", current.sourceKind.toString())
+            KeyValueRow("Channels", current.channels.size.toString())
         }
+    }
 
-        snapshot?.channels?.forEach { channel ->
+    current?.channels?.forEach { channel ->
+        key(channel.id) {
             StructuralCard(
                 title = "Synthetic 0x${channel.id.toString(16).uppercase()}",
                 modifier = Modifier.fillMaxWidth(),
