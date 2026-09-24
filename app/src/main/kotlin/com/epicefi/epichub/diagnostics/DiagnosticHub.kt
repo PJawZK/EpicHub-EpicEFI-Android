@@ -32,6 +32,9 @@ class DiagnosticHub(
     @Volatile
     private var activeCapture: CaptureBuilder? = null
 
+    @Volatile
+    private var activeCaptureMetrics: DiagnosticMetrics? = null
+
     fun record(
         severity: DiagnosticSeverity,
         domain: DiagnosticDomain,
@@ -52,20 +55,20 @@ class DiagnosticHub(
             payload = payload,
         )
         val dropped = ring.add(event)
-        metrics.increment(DiagnosticMetricId.DIAGNOSTIC_EVENT_COUNT)
+        incrementMetricInternal(DiagnosticMetricId.DIAGNOSTIC_EVENT_COUNT)
         if (dropped) {
-            metrics.increment(DiagnosticMetricId.DIAGNOSTIC_DROPPED_EVENT_COUNT)
+            incrementMetricInternal(DiagnosticMetricId.DIAGNOSTIC_DROPPED_EVENT_COUNT)
         }
-        metrics.observe(DiagnosticMetricId.DIAGNOSTIC_RING_SIZE, ring.size().toDouble())
+        observeMetricInternal(DiagnosticMetricId.DIAGNOSTIC_RING_SIZE, ring.size().toDouble())
         return event
     }
 
     fun observeMetric(metric: DiagnosticMetricId, value: Double) {
-        metrics.observe(metric, value)
+        observeMetricInternal(metric, value)
     }
 
     fun incrementMetric(metric: DiagnosticMetricId, delta: Double = 1.0) {
-        metrics.increment(metric, delta)
+        incrementMetricInternal(metric, delta)
     }
 
     fun events(): List<DiagnosticEvent> = ring.snapshot()
@@ -101,6 +104,7 @@ class DiagnosticHub(
             preTriggerEvents = preTrigger,
             markers = mutableListOf(),
         )
+        activeCaptureMetrics = DiagnosticMetrics()
         activeCapture = builder
         record(
             severity = DiagnosticSeverity.INFO,
@@ -144,6 +148,7 @@ class DiagnosticHub(
             preTriggerEvents = emptyList(),
             markers = mutableListOf(),
         )
+        activeCaptureMetrics = DiagnosticMetrics()
         activeCapture = builder
         record(
             severity = DiagnosticSeverity.INFO,
@@ -188,7 +193,7 @@ class DiagnosticHub(
         val builder = checkNotNull(activeCapture) { "No diagnostic capture is active." }
         val stoppedAt = clock.monotonicNanos()
 
-        metrics.increment(DiagnosticMetricId.DIAGNOSTIC_CAPTURE_COUNT)
+        incrementMetricInternal(DiagnosticMetricId.DIAGNOSTIC_CAPTURE_COUNT)
         record(
             severity = DiagnosticSeverity.INFO,
             domain = DiagnosticDomain.DIAGNOSTIC_CAPTURE,
@@ -205,6 +210,8 @@ class DiagnosticHub(
         val combinedEvents = (builder.preTriggerEvents + liveEvents)
             .distinctBy(DiagnosticEvent::eventId)
             .sortedBy(DiagnosticEvent::eventId)
+        val captureMetricWindow = activeCaptureMetrics
+        activeCaptureMetrics = null
 
         val capture = DiagnosticCapture(
             captureId = builder.captureId,
@@ -214,7 +221,7 @@ class DiagnosticHub(
             stoppedAtNanos = stoppedAt,
             createdAtWallClockMillis = clock.wallClockMillis(),
             events = combinedEvents,
-            metrics = metrics.snapshot(),
+            metrics = captureMetricWindow?.snapshot() ?: emptyList(),
             lifecycleOwners = lifecycle.snapshot(),
             markers = builder.markers.toList(),
             note = note?.trim()?.takeIf { it.isNotEmpty() },
@@ -289,6 +296,16 @@ class DiagnosticHub(
             correlationId = correlationId,
             payload = DiagnosticPayload.InvariantViolation(invariantId, detail),
         )
+    }
+
+    private fun observeMetricInternal(metric: DiagnosticMetricId, value: Double) {
+        metrics.observe(metric, value)
+        activeCaptureMetrics?.observe(metric, value)
+    }
+
+    private fun incrementMetricInternal(metric: DiagnosticMetricId, delta: Double = 1.0) {
+        metrics.increment(metric, delta)
+        activeCaptureMetrics?.increment(metric, delta)
     }
 
     private fun DiagnosticLifecycleOwner.asPayload() = DiagnosticPayload.LifecycleState(
