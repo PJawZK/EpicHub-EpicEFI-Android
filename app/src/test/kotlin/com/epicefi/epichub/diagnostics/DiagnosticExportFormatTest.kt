@@ -10,11 +10,11 @@ import org.junit.Test
 
 class DiagnosticExportFormatTest {
     @Test
-    fun cborStartsWithVersionedThirteenFieldCanonicalMap() {
+    fun cborStartsWithVersionedFourteenFieldCanonicalMap() {
         val capture = sampleCapture()
         val encoded = DiagnosticCaptureCborEncoder.encode(capture, sampleMetadata())
 
-        assertEquals(0xAD, encoded[0].toInt() and 0xFF)
+        assertEquals(0xAE, encoded[0].toInt() and 0xFF)
         assertEquals(0x6D, encoded[1].toInt() and 0xFF)
         assertEquals(
             "schemaVersion",
@@ -22,6 +22,9 @@ class DiagnosticExportFormatTest {
         )
         assertEquals(DiagnosticCaptureCborEncoder.SCHEMA_VERSION.toInt(), encoded[15].toInt())
         assertTrue(encoded.containsUtf8("nativeEngineEvent"))
+        assertTrue(encoded.containsUtf8("worstFrames"))
+        assertTrue(encoded.containsUtf8("retainedSampleCount"))
+        assertTrue(encoded.containsUtf8("gitSha"))
     }
 
     @Test
@@ -72,19 +75,60 @@ class DiagnosticExportFormatTest {
                 ),
             ),
         ),
-        metrics = emptyList(),
+        metrics = listOf(
+            DiagnosticMetricSummary(
+                metric = DiagnosticMetricId.UI_FRAME_TOTAL_MS,
+                sampleCount = 300,
+                retainedSampleCount = 256,
+                first = 10.0,
+                current = 12.0,
+                minimum = 8.0,
+                maximum = 40.0,
+                p50 = 11.0,
+                p95 = 20.0,
+                p99 = 30.0,
+            ),
+        ),
         lifecycleOwners = emptyList(),
         markers = emptyList(),
+        worstFrames = listOf(
+            DiagnosticWorstFrame(
+                frameNumber = 42,
+                monotonicNanos = 15,
+                wallClockMillis = 35,
+                destinationId = "analyzer",
+                totalMs = 40.0,
+                budgetMs = 16.0,
+                overrunMs = 24.0,
+                vsyncDelayMs = 0.0,
+                unknownDelayMs = 1.0,
+                animationMs = 2.0,
+                layoutMeasureMs = 0.2,
+                drawMs = 10.0,
+                syncMs = 0.3,
+                commandIssueMs = 4.0,
+                swapBuffersMs = 3.0,
+                gpuMs = 8.0,
+            ),
+        ),
         note = null,
     )
 
     private fun sampleMetadata() = DiagnosticExportMetadata(
         appVersion = "test",
-        buildType = "test",
+        buildType = "performance",
+        gitSha = "abc123",
         manufacturer = "test",
         model = "test",
         androidApi = 37,
         supportedAbis = listOf("arm64-v8a"),
+        processAbi = "arm64-v8a",
+        processIs64Bit = true,
+        displayWidthPx = 1920,
+        displayHeightPx = 1080,
+        densityDpi = 320,
+        refreshRateHz = 60.0,
+        orientation = "landscape",
     )
 
     private fun ByteArray.containsUtf8(value: String): Boolean {
