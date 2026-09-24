@@ -2,8 +2,12 @@ package com.epicefi.epichub.platform.diagnostics
 
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
+import android.hardware.display.DisplayManager
 import android.net.Uri
 import android.os.Build
+import android.os.Process
+import android.view.Display
 import androidx.core.content.FileProvider
 import com.epicefi.epichub.BuildConfig
 import com.epicefi.epichub.diagnostics.DiagnosticCapture
@@ -12,6 +16,7 @@ import com.epicefi.epichub.diagnostics.DiagnosticCaptureCborEncoder
 import com.epicefi.epichub.diagnostics.DiagnosticExportMetadata
 import java.io.File
 import java.io.FileOutputStream
+import java.util.Locale
 
 object DiagnosticCaptureExporter {
     fun suggestedFileName(capture: DiagnosticCapture): String =
@@ -70,35 +75,75 @@ object DiagnosticCaptureExporter {
         capture: DiagnosticCapture,
         output: java.io.OutputStream,
     ) {
-        val metadata = DiagnosticExportMetadata(
+        val metadata = buildMetadata(context)
+        val cbor = DiagnosticCaptureCborEncoder.encode(capture, metadata)
+        val report = buildReport(capture, metadata).toByteArray(Charsets.UTF_8)
+        DiagnosticCaptureArchive.write(output, cbor, report)
+    }
+
+    private fun buildMetadata(context: Context): DiagnosticExportMetadata {
+        val displayMetrics = context.resources.displayMetrics
+        val configuration = context.resources.configuration
+        val display = context.getSystemService(DisplayManager::class.java)
+            ?.getDisplay(Display.DEFAULT_DISPLAY)
+        val processIs64Bit = Process.is64Bit()
+        val activeAbi = if (processIs64Bit) {
+            Build.SUPPORTED_64_BIT_ABIS.firstOrNull()
+        } else {
+            Build.SUPPORTED_32_BIT_ABIS.firstOrNull()
+        } ?: Build.SUPPORTED_ABIS.firstOrNull() ?: "unknown"
+
+        val orientation = when (configuration.orientation) {
+            Configuration.ORIENTATION_LANDSCAPE -> "landscape"
+            Configuration.ORIENTATION_PORTRAIT -> "portrait"
+            else -> "undefined"
+        }
+
+        return DiagnosticExportMetadata(
             appVersion = BuildConfig.VERSION_NAME,
             buildType = BuildConfig.BUILD_TYPE,
+            gitSha = BuildConfig.GIT_SHA,
             manufacturer = Build.MANUFACTURER,
             model = Build.MODEL,
             androidApi = Build.VERSION.SDK_INT,
             supportedAbis = Build.SUPPORTED_ABIS.toList(),
+            processAbi = activeAbi,
+            processIs64Bit = processIs64Bit,
+            displayWidthPx = displayMetrics.widthPixels,
+            displayHeightPx = displayMetrics.heightPixels,
+            densityDpi = displayMetrics.densityDpi,
+            refreshRateHz = display?.refreshRate?.toDouble() ?: 0.0,
+            orientation = orientation,
         )
-        val cbor = DiagnosticCaptureCborEncoder.encode(capture, metadata)
-        val report = buildReport(capture, metadata).toByteArray(Charsets.UTF_8)
-        DiagnosticCaptureArchive.write(output, cbor, report)
     }
 
     private fun buildReport(
         capture: DiagnosticCapture,
         metadata: DiagnosticExportMetadata,
     ): String = buildString {
+        val durationSeconds = (capture.stoppedAtNanos - capture.startedAtNanos) / 1_000_000_000.0
         appendLine("EpicHub diagnostic capture")
         appendLine("schema: ${DiagnosticCaptureCborEncoder.SCHEMA_VERSION}")
         appendLine("capture: ${capture.captureId}")
         appendLine("mode: ${capture.mode}")
+        appendLine("durationSeconds: ${durationSeconds.formatMetric()}")
         appendLine("app: ${metadata.appVersion} (${metadata.buildType})")
+        appendLine("gitSha: ${metadata.gitSha}")
         appendLine("device: ${metadata.manufacturer} ${metadata.model}")
         appendLine("androidApi: ${metadata.androidApi}")
-        appendLine("abis: ${metadata.supportedAbis.joinToString()}")
+        appendLine("supportedAbis: ${metadata.supportedAbis.joinToString()}")
+        appendLine("processAbi: ${metadata.processAbi}")
+        appendLine("processIs64Bit: ${metadata.processIs64Bit}")
+        appendLine(
+            "display: ${metadata.displayWidthPx}x${metadata.displayHeightPx} " +
+                "densityDpi=${metadata.densityDpi} refreshHz=${metadata.refreshRateHz.formatMetric()} " +
+                "orientation=${metadata.orientation}",
+        )
         appendLine("events: ${capture.events.size}")
         appendLine("metrics: ${capture.metrics.size}")
         appendLine("lifecycleOwners: ${capture.lifecycleOwners.size}")
         appendLine("markers: ${capture.markers.size}")
+        appendLine("worstFrames: ${capture.worstFrames.size}")
         capture.note?.let { appendLine("note: $it") }
         appendLine()
         appendLine("Metrics")
@@ -108,21 +153,52 @@ object DiagnosticCaptureExporter {
                 append(metric.metric.stableId)
                 append(" [")
                 append(metric.metric.unit)
-                append("] current=")
-                append("%.3f".format(metric.current))
+                append("] first=")
+                append(metric.first.formatMetric())
+                append(" current=")
+                append(metric.current.formatMetric())
+                append(" delta=")
+                append((metric.current - metric.first).formatMetric())
                 append(" min=")
-                append("%.3f".format(metric.minimum))
+                append(metric.minimum.formatMetric())
                 append(" max=")
-                append("%.3f".format(metric.maximum))
+                append(metric.maximum.formatMetric())
                 append(" p50=")
-                append("%.3f".format(metric.p50))
+                append(metric.p50.formatMetric())
                 append(" p95=")
-                append("%.3f".format(metric.p95))
+                append(metric.p95.formatMetric())
                 append(" p99=")
-                append("%.3f".format(metric.p99))
+                append(metric.p99.formatMetric())
                 append(" samples=")
-                appendLine(metric.sampleCount)
+                append(metric.sampleCount)
+                append(" retained=")
+                appendLine(metric.retainedSampleCount)
             }
+        appendLine()
+        appendLine("Worst frames")
+        if (capture.worstFrames.isEmpty()) {
+            appendLine("none")
+        } else {
+            capture.worstFrames.forEach { frame ->
+                append("frame=")
+                append(frame.frameNumber)
+                append(" route=")
+                append(frame.destinationId)
+                append(" totalMs=")
+                append(frame.totalMs.formatMetric())
+                append(" budgetMs=")
+                append(frame.budgetMs.formatMetric())
+                append(" overrunMs=")
+                append(frame.overrunMs.formatMetric())
+                frame.animationMs?.let { append(" animationMs=${it.formatMetric()}") }
+                frame.layoutMeasureMs?.let { append(" layoutMs=${it.formatMetric()}") }
+                frame.drawMs?.let { append(" drawMs=${it.formatMetric()}") }
+                frame.commandIssueMs?.let { append(" commandMs=${it.formatMetric()}") }
+                frame.gpuMs?.let { append(" gpuMs=${it.formatMetric()}") }
+                frame.vsyncDelayMs?.let { append(" vsyncDelayMs=${it.formatMetric()}") }
+                appendLine()
+            }
+        }
         appendLine()
         appendLine("Recent events")
         capture.events.takeLast(80).forEach { event ->
@@ -140,4 +216,6 @@ object DiagnosticCaptureExporter {
             appendLine()
         }
     }
+
+    private fun Double.formatMetric(): String = String.format(Locale.US, "%.3f", this)
 }
