@@ -15,8 +15,11 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -31,15 +34,49 @@ import java.text.DateFormat
 import java.util.Date
 import java.util.Locale
 
+private val diagnosticsTabs = listOf("Overview", "Performance", "Events", "Metrics", "Sessions", "Captures")
+
+private data class OverviewPresentation(
+    val eventCount: Int,
+    val lifecycleOwnerCount: Int,
+    val captureCount: Int,
+    val activeCapture: String,
+)
+
+private data class PerformancePresentation(
+    val framesMeasured: String,
+    val jankFrames: String,
+    val frameBudget: String,
+    val framePercentiles: String,
+    val frameSamples: String,
+    val overrunPercentiles: String,
+    val vsyncDelayPercentiles: String,
+    val cpuPercentiles: String,
+    val javaHeap: String,
+    val nativeHeap: String,
+    val pss: String,
+    val allocated: String,
+    val gcCount: String,
+    val gcTime: String,
+    val unknownDelay: String,
+    val input: String,
+    val animation: String,
+    val layoutMeasure: String,
+    val draw: String,
+    val sync: String,
+    val commandIssue: String,
+    val swapBuffers: String,
+    val gpu: String,
+)
+
 @Composable
 fun DiagnosticsScreen(
-    diagnostics: DiagnosticsSnapshot,
+    diagnostics: State<DiagnosticsSnapshot>,
     onSaveCapture: (DiagnosticCapture) -> Unit,
     onShareCapture: (DiagnosticCapture) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
-    val tabs = listOf("Overview", "Performance", "Events", "Metrics", "Sessions", "Captures")
 
     Column(
         modifier = modifier.fillMaxSize(),
@@ -51,7 +88,7 @@ fun DiagnosticsScreen(
             modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp),
         )
         ScrollableTabRow(selectedTabIndex = selectedTab) {
-            tabs.forEachIndexed { index, title ->
+            diagnosticsTabs.forEachIndexed { index, title ->
                 Tab(
                     selected = selectedTab == index,
                     onClick = { selectedTab = index },
@@ -72,7 +109,19 @@ fun DiagnosticsScreen(
 }
 
 @Composable
-private fun OverviewTab(diagnostics: DiagnosticsSnapshot) {
+private fun OverviewTab(diagnostics: State<DiagnosticsSnapshot>) {
+    val presentation by remember(diagnostics) {
+        derivedStateOf {
+            val snapshot = diagnostics.value
+            OverviewPresentation(
+                eventCount = snapshot.events.size,
+                lifecycleOwnerCount = snapshot.lifecycleOwners.size,
+                captureCount = snapshot.captures.size,
+                activeCapture = snapshot.activeCapture?.let { "${it.mode} #${it.captureId}" } ?: "idle",
+            )
+        }
+    }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -84,13 +133,10 @@ private fun OverviewTab(diagnostics: DiagnosticsSnapshot) {
                 title = "Diagnostic recorder",
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                KeyValueRow("Events retained", diagnostics.events.size.toString())
-                KeyValueRow("Lifecycle owners", diagnostics.lifecycleOwners.size.toString())
-                KeyValueRow("Saved problem captures", diagnostics.captures.size.toString())
-                KeyValueRow(
-                    "Problem-capture state",
-                    diagnostics.activeCapture?.let { "${it.mode} #${it.captureId}" } ?: "idle",
-                )
+                KeyValueRow("Events retained", presentation.eventCount.toString())
+                KeyValueRow("Lifecycle owners", presentation.lifecycleOwnerCount.toString())
+                KeyValueRow("Saved problem captures", presentation.captureCount.toString())
+                KeyValueRow("Problem-capture state", presentation.activeCapture)
             }
         }
         item {
@@ -111,21 +157,9 @@ private fun OverviewTab(diagnostics: DiagnosticsSnapshot) {
 }
 
 @Composable
-private fun PerformanceTab(diagnostics: DiagnosticsSnapshot) {
-    val frames = diagnostics.metric(DiagnosticMetricId.UI_FRAME_COUNT)?.current ?: 0.0
-    val jankFrames = diagnostics.metric(DiagnosticMetricId.UI_JANK_FRAME_COUNT)?.current ?: 0.0
-    val jankPercent = if (frames > 0.0) jankFrames / frames * 100.0 else 0.0
-    val frameTotal = diagnostics.metric(DiagnosticMetricId.UI_FRAME_TOTAL_MS)
-    val frameBudget = diagnostics.metric(DiagnosticMetricId.UI_FRAME_BUDGET_MS)
-    val overrun = diagnostics.metric(DiagnosticMetricId.UI_FRAME_OVERRUN_MS)
-    val vsyncDelay = diagnostics.metric(DiagnosticMetricId.UI_FRAME_VSYNC_DELAY_MS)
-    val cpu = diagnostics.metric(DiagnosticMetricId.PROCESS_CPU_PERCENT)
-    val javaHeap = diagnostics.metric(DiagnosticMetricId.PROCESS_JAVA_HEAP_USED_MB)
-    val nativeHeap = diagnostics.metric(DiagnosticMetricId.PROCESS_NATIVE_HEAP_ALLOCATED_MB)
-    val pss = diagnostics.metric(DiagnosticMetricId.PROCESS_PSS_MB)
-    val allocated = diagnostics.metric(DiagnosticMetricId.PROCESS_ALLOCATED_MB)
-    val gcCount = diagnostics.metric(DiagnosticMetricId.PROCESS_GC_COUNT)
-    val gcTime = diagnostics.metric(DiagnosticMetricId.PROCESS_GC_TIME_MS)
+private fun PerformanceTab(diagnostics: State<DiagnosticsSnapshot>) {
+    val metrics = diagnostics.value.metrics
+    val presentation = remember(metrics) { buildPerformancePresentation(metrics) }
 
     LazyColumn(
         modifier = Modifier
@@ -139,13 +173,13 @@ private fun PerformanceTab(diagnostics: DiagnosticsSnapshot) {
                 modifier = Modifier.fillMaxWidth(),
                 subtitle = "For a clean test: Problem capture → Start reproduction capture, reproduce the slowdown, then Stop and Save ZIP. Capture metrics are scoped to that reproduction window.",
             ) {
-                KeyValueRow("Frames measured", frames.toLong().toString())
-                KeyValueRow("Jank frames", "${jankFrames.toLong()} (${jankPercent.formatMetric()}%)")
-                KeyValueRow("Frame budget", frameBudget?.current?.formatWithUnit("ms") ?: "waiting")
-                KeyValueRow("Frame p50 / p95 / p99", frameTotal.percentiles("ms"))
-                KeyValueRow("Frame samples total / retained", frameTotal.sampleWindow())
-                KeyValueRow("Jank overrun p95 / p99", overrun.tailPercentiles("ms"))
-                KeyValueRow("UI-thread vsync delay p95 / p99", vsyncDelay.tailPercentiles("ms"))
+                KeyValueRow("Frames measured", presentation.framesMeasured)
+                KeyValueRow("Jank frames", presentation.jankFrames)
+                KeyValueRow("Frame budget", presentation.frameBudget)
+                KeyValueRow("Frame p50 / p95 / p99", presentation.framePercentiles)
+                KeyValueRow("Frame samples total / retained", presentation.frameSamples)
+                KeyValueRow("Jank overrun p95 / p99", presentation.overrunPercentiles)
+                KeyValueRow("UI-thread vsync delay p95 / p99", presentation.vsyncDelayPercentiles)
             }
         }
         item {
@@ -154,13 +188,13 @@ private fun PerformanceTab(diagnostics: DiagnosticsSnapshot) {
                 modifier = Modifier.fillMaxWidth(),
                 subtitle = "CPU is process CPU time expressed as percent of one fully occupied core. Memory rows show first → current and capture/session delta.",
             ) {
-                KeyValueRow("CPU p50 / p95 / p99", cpu.percentiles("%"))
-                KeyValueRow("Java heap", javaHeap.trend("MiB"))
-                KeyValueRow("Native heap", nativeHeap.trend("MiB"))
-                KeyValueRow("PSS", pss.trend("MiB"))
-                KeyValueRow("Allocated bytes", allocated.trend("MiB"))
-                KeyValueRow("GC count", gcCount.delta("count"))
-                KeyValueRow("GC time", gcTime.delta("ms"))
+                KeyValueRow("CPU p50 / p95 / p99", presentation.cpuPercentiles)
+                KeyValueRow("Java heap", presentation.javaHeap)
+                KeyValueRow("Native heap", presentation.nativeHeap)
+                KeyValueRow("PSS", presentation.pss)
+                KeyValueRow("Allocated bytes", presentation.allocated)
+                KeyValueRow("GC count", presentation.gcCount)
+                KeyValueRow("GC time", presentation.gcTime)
             }
         }
         item {
@@ -169,31 +203,27 @@ private fun PerformanceTab(diagnostics: DiagnosticsSnapshot) {
                 modifier = Modifier.fillMaxWidth(),
                 subtitle = "These timings are sampled only for frames that miss their frame budget/deadline.",
             ) {
-                JankMetricRow(diagnostics, "Unknown/UI-thread delay", DiagnosticMetricId.UI_JANK_UNKNOWN_DELAY_MS)
-                JankMetricRow(diagnostics, "Input handling", DiagnosticMetricId.UI_JANK_INPUT_MS)
-                JankMetricRow(diagnostics, "Animation", DiagnosticMetricId.UI_JANK_ANIMATION_MS)
-                JankMetricRow(diagnostics, "Layout / measure", DiagnosticMetricId.UI_JANK_LAYOUT_MEASURE_MS)
-                JankMetricRow(diagnostics, "Draw", DiagnosticMetricId.UI_JANK_DRAW_MS)
-                JankMetricRow(diagnostics, "Render sync", DiagnosticMetricId.UI_JANK_SYNC_MS)
-                JankMetricRow(diagnostics, "GPU command issue", DiagnosticMetricId.UI_JANK_COMMAND_ISSUE_MS)
-                JankMetricRow(diagnostics, "Swap buffers", DiagnosticMetricId.UI_JANK_SWAP_BUFFERS_MS)
-                JankMetricRow(diagnostics, "GPU duration", DiagnosticMetricId.UI_JANK_GPU_MS)
+                KeyValueRow("Unknown/UI-thread delay", presentation.unknownDelay)
+                KeyValueRow("Input handling", presentation.input)
+                KeyValueRow("Animation", presentation.animation)
+                KeyValueRow("Layout / measure", presentation.layoutMeasure)
+                KeyValueRow("Draw", presentation.draw)
+                KeyValueRow("Render sync", presentation.sync)
+                KeyValueRow("GPU command issue", presentation.commandIssue)
+                KeyValueRow("Swap buffers", presentation.swapBuffers)
+                KeyValueRow("GPU duration", presentation.gpu)
             }
         }
     }
 }
 
 @Composable
-private fun JankMetricRow(
-    diagnostics: DiagnosticsSnapshot,
-    label: String,
-    metricId: DiagnosticMetricId,
-) {
-    KeyValueRow(label, diagnostics.metric(metricId).tailPercentiles("ms"))
-}
+private fun EventsTab(diagnostics: State<DiagnosticsSnapshot>) {
+    val events by remember(diagnostics) {
+        derivedStateOf { diagnostics.value.events }
+    }
+    val newestFirst = remember(events) { events.asReversed() }
 
-@Composable
-private fun EventsTab(diagnostics: DiagnosticsSnapshot) {
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -201,7 +231,7 @@ private fun EventsTab(diagnostics: DiagnosticsSnapshot) {
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         items(
-            items = diagnostics.events.asReversed(),
+            items = newestFirst,
             key = { it.eventId },
         ) { event ->
             StructuralCard(
@@ -218,8 +248,12 @@ private fun EventsTab(diagnostics: DiagnosticsSnapshot) {
 }
 
 @Composable
-private fun MetricsTab(diagnostics: DiagnosticsSnapshot) {
-    val observedMetrics = diagnostics.metrics.filter { it.sampleCount > 0 }
+private fun MetricsTab(diagnostics: State<DiagnosticsSnapshot>) {
+    val metrics by remember(diagnostics) {
+        derivedStateOf { diagnostics.value.metrics }
+    }
+    val observedMetrics = remember(metrics) { metrics.filter { it.sampleCount > 0 } }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -246,7 +280,11 @@ private fun MetricsTab(diagnostics: DiagnosticsSnapshot) {
 }
 
 @Composable
-private fun SessionsTab(diagnostics: DiagnosticsSnapshot) {
+private fun SessionsTab(diagnostics: State<DiagnosticsSnapshot>) {
+    val lifecycleOwners by remember(diagnostics) {
+        derivedStateOf { diagnostics.value.lifecycleOwners }
+    }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -254,7 +292,7 @@ private fun SessionsTab(diagnostics: DiagnosticsSnapshot) {
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         items(
-            items = diagnostics.lifecycleOwners,
+            items = lifecycleOwners,
             key = { it.ownerId },
         ) { owner ->
             StructuralCard(
@@ -272,17 +310,22 @@ private fun SessionsTab(diagnostics: DiagnosticsSnapshot) {
 
 @Composable
 private fun CapturesTab(
-    diagnostics: DiagnosticsSnapshot,
+    diagnostics: State<DiagnosticsSnapshot>,
     onSaveCapture: (DiagnosticCapture) -> Unit,
     onShareCapture: (DiagnosticCapture) -> Unit,
 ) {
+    val captures by remember(diagnostics) {
+        derivedStateOf { diagnostics.value.captures }
+    }
+    val dateFormat = remember { DateFormat.getDateTimeInstance() }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        if (diagnostics.captures.isEmpty()) {
+        if (captures.isEmpty()) {
             item {
                 Text(
                     "No finalized problem captures yet. Use the global Problem capture control while reproducing or immediately after noticing a problem.",
@@ -291,17 +334,23 @@ private fun CapturesTab(
             }
         }
         items(
-            items = diagnostics.captures,
+            items = captures,
             key = { it.captureId },
         ) { capture ->
-            val frames = capture.metric(DiagnosticMetricId.UI_FRAME_COUNT)?.current ?: 0.0
-            val jankFrames = capture.metric(DiagnosticMetricId.UI_JANK_FRAME_COUNT)?.current ?: 0.0
+            val metricIndex = remember(capture.metrics) {
+                capture.metrics.associateBy { it.metric }
+            }
+            val frames = metricIndex[DiagnosticMetricId.UI_FRAME_COUNT]?.takeIf { it.sampleCount > 0 }?.current ?: 0.0
+            val jankFrames = metricIndex[DiagnosticMetricId.UI_JANK_FRAME_COUNT]?.takeIf { it.sampleCount > 0 }?.current ?: 0.0
             val jankPercent = if (frames > 0.0) jankFrames / frames * 100.0 else 0.0
             val worstFrame = capture.worstFrames.firstOrNull()
+            val createdAt = remember(capture.createdAtWallClockMillis) {
+                dateFormat.format(Date(capture.createdAtWallClockMillis))
+            }
             StructuralCard(
                 title = "Problem capture #${capture.captureId}",
                 modifier = Modifier.fillMaxWidth(),
-                subtitle = DateFormat.getDateTimeInstance().format(Date(capture.createdAtWallClockMillis)),
+                subtitle = createdAt,
             ) {
                 KeyValueRow("Mode", capture.mode.name)
                 KeyValueRow("Events", capture.events.size.toString())
@@ -329,11 +378,54 @@ private fun CapturesTab(
     }
 }
 
-private fun DiagnosticsSnapshot.metric(id: DiagnosticMetricId): DiagnosticMetricSummary? =
-    metrics.firstOrNull { it.metric == id && it.sampleCount > 0 }
+private fun buildPerformancePresentation(metrics: List<DiagnosticMetricSummary>): PerformancePresentation {
+    val index = metrics.asSequence()
+        .filter { it.sampleCount > 0 }
+        .associateBy { it.metric }
 
-private fun DiagnosticCapture.metric(id: DiagnosticMetricId): DiagnosticMetricSummary? =
-    metrics.firstOrNull { it.metric == id && it.sampleCount > 0 }
+    fun metric(id: DiagnosticMetricId): DiagnosticMetricSummary? = index[id]
+
+    val frames = metric(DiagnosticMetricId.UI_FRAME_COUNT)?.current ?: 0.0
+    val jankFrames = metric(DiagnosticMetricId.UI_JANK_FRAME_COUNT)?.current ?: 0.0
+    val jankPercent = if (frames > 0.0) jankFrames / frames * 100.0 else 0.0
+    val frameTotal = metric(DiagnosticMetricId.UI_FRAME_TOTAL_MS)
+    val frameBudget = metric(DiagnosticMetricId.UI_FRAME_BUDGET_MS)
+    val overrun = metric(DiagnosticMetricId.UI_FRAME_OVERRUN_MS)
+    val vsyncDelay = metric(DiagnosticMetricId.UI_FRAME_VSYNC_DELAY_MS)
+    val cpu = metric(DiagnosticMetricId.PROCESS_CPU_PERCENT)
+    val javaHeap = metric(DiagnosticMetricId.PROCESS_JAVA_HEAP_USED_MB)
+    val nativeHeap = metric(DiagnosticMetricId.PROCESS_NATIVE_HEAP_ALLOCATED_MB)
+    val pss = metric(DiagnosticMetricId.PROCESS_PSS_MB)
+    val allocated = metric(DiagnosticMetricId.PROCESS_ALLOCATED_MB)
+    val gcCount = metric(DiagnosticMetricId.PROCESS_GC_COUNT)
+    val gcTime = metric(DiagnosticMetricId.PROCESS_GC_TIME_MS)
+
+    return PerformancePresentation(
+        framesMeasured = frames.toLong().toString(),
+        jankFrames = "${jankFrames.toLong()} (${jankPercent.formatMetric()}%)",
+        frameBudget = frameBudget?.current?.formatWithUnit("ms") ?: "waiting",
+        framePercentiles = frameTotal.percentiles("ms"),
+        frameSamples = frameTotal.sampleWindow(),
+        overrunPercentiles = overrun.tailPercentiles("ms"),
+        vsyncDelayPercentiles = vsyncDelay.tailPercentiles("ms"),
+        cpuPercentiles = cpu.percentiles("%"),
+        javaHeap = javaHeap.trend("MiB"),
+        nativeHeap = nativeHeap.trend("MiB"),
+        pss = pss.trend("MiB"),
+        allocated = allocated.trend("MiB"),
+        gcCount = gcCount.delta("count"),
+        gcTime = gcTime.delta("ms"),
+        unknownDelay = metric(DiagnosticMetricId.UI_JANK_UNKNOWN_DELAY_MS).tailPercentiles("ms"),
+        input = metric(DiagnosticMetricId.UI_JANK_INPUT_MS).tailPercentiles("ms"),
+        animation = metric(DiagnosticMetricId.UI_JANK_ANIMATION_MS).tailPercentiles("ms"),
+        layoutMeasure = metric(DiagnosticMetricId.UI_JANK_LAYOUT_MEASURE_MS).tailPercentiles("ms"),
+        draw = metric(DiagnosticMetricId.UI_JANK_DRAW_MS).tailPercentiles("ms"),
+        sync = metric(DiagnosticMetricId.UI_JANK_SYNC_MS).tailPercentiles("ms"),
+        commandIssue = metric(DiagnosticMetricId.UI_JANK_COMMAND_ISSUE_MS).tailPercentiles("ms"),
+        swapBuffers = metric(DiagnosticMetricId.UI_JANK_SWAP_BUFFERS_MS).tailPercentiles("ms"),
+        gpu = metric(DiagnosticMetricId.UI_JANK_GPU_MS).tailPercentiles("ms"),
+    )
+}
 
 private fun DiagnosticMetricSummary?.percentiles(unit: String): String =
     this?.let { "${p50.formatMetric()} / ${p95.formatMetric()} / ${p99.formatMetric()} $unit" } ?: "waiting"
