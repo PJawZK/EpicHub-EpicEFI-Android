@@ -123,6 +123,16 @@ android {
         }
     }
 
+    buildTypes {
+        create("performance") {
+            initWith(getByName("release"))
+            signingConfig = signingConfigs.getByName("debug")
+            isDebuggable = false
+            matchingFallbacks += listOf("release")
+            versionNameSuffix = "-performance"
+        }
+    }
+
     buildFeatures {
         compose = true
         buildConfig = true
@@ -170,6 +180,12 @@ androidComponents {
         )
     }
     onVariants(selector().withBuildType("release")) { variant ->
+        variant.sources.jniLibs?.addGeneratedSourceDirectory(
+            buildRustRelease,
+            CargoNdkBuildTask::outputDirectory,
+        )
+    }
+    onVariants(selector().withBuildType("performance")) { variant ->
         variant.sources.jniLibs?.addGeneratedSourceDirectory(
             buildRustRelease,
             CargoNdkBuildTask::outputDirectory,
