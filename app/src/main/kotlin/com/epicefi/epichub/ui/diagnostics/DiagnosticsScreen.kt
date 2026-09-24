@@ -1,5 +1,6 @@
 package com.epicefi.epichub.ui.diagnostics
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -8,10 +9,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ScrollableTabRow
-import androidx.compose.material3.Tab
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -20,6 +21,7 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -30,18 +32,25 @@ import com.epicefi.epichub.diagnostics.DiagnosticMetricId
 import com.epicefi.epichub.diagnostics.DiagnosticMetricSummary
 import com.epicefi.epichub.diagnostics.DiagnosticsSnapshot
 import com.epicefi.epichub.ui.components.KeyValueRow
+import com.epicefi.epichub.ui.components.StaticSelectionChoice
 import com.epicefi.epichub.ui.components.StructuralCard
 import java.text.DateFormat
 import java.util.Date
-import java.util.Locale
+import kotlin.math.abs
+import kotlin.math.roundToLong
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
-enum class DiagnosticsTab(val title: String) {
-    OVERVIEW("Overview"),
-    PERFORMANCE("Performance"),
-    EVENTS("Events"),
-    METRICS("Metrics"),
-    SESSIONS("Sessions"),
-    CAPTURES("Captures"),
+enum class DiagnosticsTab(
+    val title: String,
+    val contextId: String,
+) {
+    OVERVIEW("Overview", "diagnostics/overview"),
+    PERFORMANCE("Performance", "diagnostics/performance"),
+    EVENTS("Events", "diagnostics/events"),
+    METRICS("Metrics", "diagnostics/metrics"),
+    SESSIONS("Sessions", "diagnostics/sessions"),
+    CAPTURES("Captures", "diagnostics/captures"),
 }
 
 private data class OverviewPresentation(
@@ -54,6 +63,10 @@ private data class OverviewPresentation(
 private data class PerformancePresentation(
     val framesMeasured: String,
     val jankFrames: String,
+    val firstDrawJank: String,
+    val transitionJank: String,
+    val steadyJank: String,
+    val callbackDrops: String,
     val frameBudget: String,
     val framePercentiles: String,
     val frameSamples: String,
@@ -80,6 +93,49 @@ private data class PerformancePresentation(
     val gpu: String,
 )
 
+private data class MetricPresentation(
+    val stableId: String,
+    val unit: String,
+    val firstCurrent: String,
+    val delta: String,
+    val minMax: String,
+    val percentiles: String,
+    val samples: String,
+)
+
+private val emptyPerformancePresentation = PerformancePresentation(
+    framesMeasured = "waiting",
+    jankFrames = "waiting",
+    firstDrawJank = "waiting",
+    transitionJank = "waiting",
+    steadyJank = "waiting",
+    callbackDrops = "waiting",
+    frameBudget = "waiting",
+    framePercentiles = "waiting",
+    frameSamples = "waiting",
+    overrunPercentiles = "waiting",
+    vsyncDelayPercentiles = "waiting",
+    cpuPercentiles = "waiting",
+    javaHeap = "waiting",
+    nativeHeap = "waiting",
+    pss = "waiting",
+    allocated = "waiting",
+    gcCount = "waiting",
+    gcTime = "waiting",
+    projectionBuild = "waiting",
+    projectionAllocated = "waiting",
+    projectionCount = "waiting",
+    unknownDelay = "waiting",
+    input = "waiting",
+    animation = "waiting",
+    layoutMeasure = "waiting",
+    draw = "waiting",
+    sync = "waiting",
+    commandIssue = "waiting",
+    swapBuffers = "waiting",
+    gpu = "waiting",
+)
+
 @Composable
 fun DiagnosticsScreen(
     diagnostics: State<DiagnosticsSnapshot>,
@@ -104,15 +160,10 @@ fun DiagnosticsScreen(
             style = MaterialTheme.typography.headlineMedium,
             modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp),
         )
-        ScrollableTabRow(selectedTabIndex = selectedTabIndex) {
-            DiagnosticsTab.entries.forEachIndexed { index, tab ->
-                Tab(
-                    selected = selectedTabIndex == index,
-                    onClick = { selectedTabIndex = index },
-                    text = { Text(tab.title) },
-                )
-            }
-        }
+        DiagnosticsTabStrip(
+            selectedTabIndex = selectedTabIndex,
+            onSelected = { selectedTabIndex = it },
+        )
 
         when (selectedTab) {
             DiagnosticsTab.OVERVIEW -> OverviewTab(diagnostics)
@@ -121,6 +172,33 @@ fun DiagnosticsScreen(
             DiagnosticsTab.METRICS -> MetricsTab(diagnostics)
             DiagnosticsTab.SESSIONS -> SessionsTab(diagnostics)
             DiagnosticsTab.CAPTURES -> CapturesTab(diagnostics, onSaveCapture, onShareCapture)
+        }
+    }
+}
+
+@Composable
+private fun DiagnosticsTabStrip(
+    selectedTabIndex: Int,
+    onSelected: (Int) -> Unit,
+) {
+    val scrollState = rememberScrollState()
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+    ) {
+        Row(
+            modifier = Modifier
+                .horizontalScroll(scrollState)
+                .padding(horizontal = 6.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            DiagnosticsTab.entries.forEachIndexed { index, tab ->
+                StaticSelectionChoice(
+                    label = tab.title,
+                    selected = selectedTabIndex == index,
+                    onClick = { onSelected(index) },
+                )
+            }
         }
     }
 }
@@ -145,7 +223,7 @@ private fun OverviewTab(diagnostics: State<DiagnosticsSnapshot>) {
             .padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        item {
+        item(key = "recorder") {
             StructuralCard(
                 title = "Diagnostic recorder",
                 modifier = Modifier.fillMaxWidth(),
@@ -156,7 +234,7 @@ private fun OverviewTab(diagnostics: State<DiagnosticsSnapshot>) {
                 KeyValueRow("Problem-capture state", presentation.activeCapture)
             }
         }
-        item {
+        item(key = "subsystem-status") {
             StructuralCard(
                 title = "Subsystem status",
                 modifier = Modifier.fillMaxWidth(),
@@ -176,7 +254,14 @@ private fun OverviewTab(diagnostics: State<DiagnosticsSnapshot>) {
 @Composable
 private fun PerformanceTab(diagnostics: State<DiagnosticsSnapshot>) {
     val metrics = diagnostics.value.metrics
-    val presentation = remember(metrics) { buildPerformancePresentation(metrics) }
+    val presentation by produceState(
+        initialValue = emptyPerformancePresentation,
+        key1 = metrics,
+    ) {
+        value = withContext(Dispatchers.Default) {
+            buildPerformancePresentation(metrics)
+        }
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -184,14 +269,18 @@ private fun PerformanceTab(diagnostics: State<DiagnosticsSnapshot>) {
             .padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        item {
+        item(key = "performance-frames") {
             StructuralCard(
                 title = "Performance recording",
                 modifier = Modifier.fillMaxWidth(),
-                subtitle = "For a clean test: Problem capture → Start reproduction capture, reproduce the slowdown, then Stop and Save ZIP. Capture metrics are scoped to that reproduction window.",
+                subtitle = "Capture-local frame evidence stays independent of this presentation refresh.",
             ) {
                 KeyValueRow("Frames measured", presentation.framesMeasured)
                 KeyValueRow("Jank frames", presentation.jankFrames)
+                KeyValueRow("First-draw jank", presentation.firstDrawJank)
+                KeyValueRow("Jank ≤500 ms after route/tab change", presentation.transitionJank)
+                KeyValueRow("Steady-state jank", presentation.steadyJank)
+                KeyValueRow("Frame callback drops", presentation.callbackDrops)
                 KeyValueRow("Frame budget", presentation.frameBudget)
                 KeyValueRow("Frame p50 / p95 / p99", presentation.framePercentiles)
                 KeyValueRow("Frame samples total / retained", presentation.frameSamples)
@@ -199,11 +288,11 @@ private fun PerformanceTab(diagnostics: State<DiagnosticsSnapshot>) {
                 KeyValueRow("UI-thread vsync delay p95 / p99", presentation.vsyncDelayPercentiles)
             }
         }
-        item {
+        item(key = "performance-process") {
             StructuralCard(
                 title = "Process load",
                 modifier = Modifier.fillMaxWidth(),
-                subtitle = "CPU is process CPU time expressed as percent of one fully occupied core. Memory rows show first → current and capture/session delta.",
+                subtitle = "CPU is process CPU time as percent of one fully occupied core. Memory rows show first → current and delta.",
             ) {
                 KeyValueRow("CPU p50 / p95 / p99", presentation.cpuPercentiles)
                 KeyValueRow("Java heap", presentation.javaHeap)
@@ -214,22 +303,22 @@ private fun PerformanceTab(diagnostics: State<DiagnosticsSnapshot>) {
                 KeyValueRow("GC time", presentation.gcTime)
             }
         }
-        item {
+        item(key = "performance-diagnostics") {
             StructuralCard(
                 title = "Diagnostics UI cost",
                 modifier = Modifier.fillMaxWidth(),
-                subtitle = "Projection work is measured off the UI thread. Recording cadence is independent of this presentation refresh.",
+                subtitle = "Projection work is measured off the UI thread.",
             ) {
                 KeyValueRow("Projection build p50 / p95 / p99", presentation.projectionBuild)
                 KeyValueRow("Projection allocation p50 / p95 / p99", presentation.projectionAllocated)
                 KeyValueRow("Projection count", presentation.projectionCount)
             }
         }
-        item {
+        item(key = "performance-jank") {
             StructuralCard(
                 title = "Jank breakdown",
                 modifier = Modifier.fillMaxWidth(),
-                subtitle = "These timings are sampled only for frames that miss their frame budget/deadline.",
+                subtitle = "These timings are sampled only for frames that miss their frame deadline.",
             ) {
                 KeyValueRow("Unknown/UI-thread delay", presentation.unknownDelay)
                 KeyValueRow("Input handling", presentation.input)
@@ -261,6 +350,7 @@ private fun EventsTab(diagnostics: State<DiagnosticsSnapshot>) {
         items(
             items = newestFirst,
             key = { it.eventId },
+            contentType = { "diagnostic-event" },
         ) { event ->
             StructuralCard(
                 title = event.code.stableId,
@@ -280,7 +370,14 @@ private fun MetricsTab(diagnostics: State<DiagnosticsSnapshot>) {
     val metrics by remember(diagnostics) {
         derivedStateOf { diagnostics.value.metrics }
     }
-    val observedMetrics = remember(metrics) { metrics.filter { it.sampleCount > 0 } }
+    val presentations by produceState(
+        initialValue = emptyList<MetricPresentation>(),
+        key1 = metrics,
+    ) {
+        value = withContext(Dispatchers.Default) {
+            buildMetricPresentations(metrics)
+        }
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -289,19 +386,20 @@ private fun MetricsTab(diagnostics: State<DiagnosticsSnapshot>) {
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         items(
-            items = observedMetrics,
-            key = { it.metric.stableId },
+            items = presentations,
+            key = { it.stableId },
+            contentType = { "diagnostic-metric" },
         ) { metric ->
             StructuralCard(
-                title = metric.metric.stableId,
+                title = metric.stableId,
                 modifier = Modifier.fillMaxWidth(),
-                subtitle = metric.metric.unit,
+                subtitle = metric.unit,
             ) {
-                KeyValueRow("First / Current", "${metric.first.formatMetric()} / ${metric.current.formatMetric()}")
-                KeyValueRow("Delta", (metric.current - metric.first).formatMetric())
-                KeyValueRow("Min / Max", "${metric.minimum.formatMetric()} / ${metric.maximum.formatMetric()}")
-                KeyValueRow("p50 / p95 / p99", "${metric.p50.formatMetric()} / ${metric.p95.formatMetric()} / ${metric.p99.formatMetric()}")
-                KeyValueRow("Samples total / retained", "${metric.sampleCount} / ${metric.retainedSampleCount}")
+                KeyValueRow("First / Current", metric.firstCurrent)
+                KeyValueRow("Delta", metric.delta)
+                KeyValueRow("Min / Max", metric.minMax)
+                KeyValueRow("p50 / p95 / p99", metric.percentiles)
+                KeyValueRow("Samples total / retained", metric.samples)
             }
         }
     }
@@ -322,6 +420,7 @@ private fun SessionsTab(diagnostics: State<DiagnosticsSnapshot>) {
         items(
             items = lifecycleOwners,
             key = { it.ownerId },
+            contentType = { "lifecycle-owner" },
         ) { owner ->
             StructuralCard(
                 title = owner.ownerKind,
@@ -354,7 +453,7 @@ private fun CapturesTab(
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         if (captures.isEmpty()) {
-            item {
+            item(key = "empty-captures") {
                 Text(
                     "No finalized problem captures yet. Use the global Problem capture control while reproducing or immediately after noticing a problem.",
                     modifier = Modifier.padding(vertical = 16.dp),
@@ -364,6 +463,7 @@ private fun CapturesTab(
         items(
             items = captures,
             key = { it.captureId },
+            contentType = { "diagnostic-capture" },
         ) { capture ->
             val metricIndex = remember(capture.metrics) {
                 capture.metrics.associateBy { it.metric }
@@ -406,12 +506,29 @@ private fun CapturesTab(
     }
 }
 
+private fun buildMetricPresentations(metrics: List<DiagnosticMetricSummary>): List<MetricPresentation> =
+    metrics.asSequence()
+        .filter { it.sampleCount > 0 }
+        .map { metric ->
+            MetricPresentation(
+                stableId = metric.metric.stableId,
+                unit = metric.metric.unit,
+                firstCurrent = "${metric.first.formatMetric()} / ${metric.current.formatMetric()}",
+                delta = (metric.current - metric.first).formatMetric(),
+                minMax = "${metric.minimum.formatMetric()} / ${metric.maximum.formatMetric()}",
+                percentiles = "${metric.p50.formatMetric()} / ${metric.p95.formatMetric()} / ${metric.p99.formatMetric()}",
+                samples = "${metric.sampleCount} / ${metric.retainedSampleCount}",
+            )
+        }
+        .toList()
+
 private fun buildPerformancePresentation(metrics: List<DiagnosticMetricSummary>): PerformancePresentation {
     val index = metrics.asSequence()
         .filter { it.sampleCount > 0 }
         .associateBy { it.metric }
 
     fun metric(id: DiagnosticMetricId): DiagnosticMetricSummary? = index[id]
+    fun count(id: DiagnosticMetricId): String = metric(id)?.current?.toLong()?.toString() ?: "0"
 
     val frames = metric(DiagnosticMetricId.UI_FRAME_COUNT)?.current ?: 0.0
     val jankFrames = metric(DiagnosticMetricId.UI_JANK_FRAME_COUNT)?.current ?: 0.0
@@ -434,6 +551,10 @@ private fun buildPerformancePresentation(metrics: List<DiagnosticMetricSummary>)
     return PerformancePresentation(
         framesMeasured = frames.toLong().toString(),
         jankFrames = "${jankFrames.toLong()} (${jankPercent.formatMetric()}%)",
+        firstDrawJank = count(DiagnosticMetricId.UI_JANK_FIRST_DRAW_FRAME_COUNT),
+        transitionJank = count(DiagnosticMetricId.UI_JANK_WITHIN_500MS_OF_CONTEXT_CHANGE_COUNT),
+        steadyJank = count(DiagnosticMetricId.UI_JANK_STEADY_STATE_COUNT),
+        callbackDrops = count(DiagnosticMetricId.UI_FRAME_METRICS_CALLBACK_DROPPED_COUNT),
         frameBudget = frameBudget?.current?.formatWithUnit("ms") ?: "waiting",
         framePercentiles = frameTotal.percentiles("ms"),
         frameSamples = frameTotal.sampleWindow(),
@@ -481,6 +602,21 @@ private fun DiagnosticMetricSummary?.delta(unit: String): String =
 
 private fun Double.formatWithUnit(unit: String): String = "${formatMetric()} $unit"
 
-private fun Double.formatMetric(): String = String.format(Locale.US, "%.3f", this)
+private fun Double.formatMetric(): String = formatFixed3(signed = false)
 
-private fun Double.formatSignedMetric(): String = String.format(Locale.US, "%+.3f", this)
+private fun Double.formatSignedMetric(): String = formatFixed3(signed = true)
+
+private fun Double.formatFixed3(signed: Boolean): String {
+    if (!isFinite()) return toString()
+    val scaled = (this * 1_000.0).roundToLong()
+    val negative = scaled < 0L
+    val magnitude = abs(scaled)
+    val prefix = when {
+        negative -> "-"
+        signed -> "+"
+        else -> ""
+    }
+    val whole = magnitude / 1_000L
+    val fraction = (magnitude % 1_000L).toString().padStart(3, '0')
+    return "$prefix$whole.$fraction"
+}
