@@ -12,6 +12,9 @@ concurrency:
   group: foundation-quality-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  EPICHUB_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -20,6 +23,15 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          ref: ${{ env.EPICHUB_SOURCE_SHA }}
+
+      - name: Verify qualified source SHA
+        shell: bash
+        run: |
+          ACTUAL_SHA="$(git rev-parse HEAD)"
+          test "$ACTUAL_SHA" = "$EPICHUB_SOURCE_SHA"
+          echo "Qualifying source SHA: $ACTUAL_SHA"
 
       - name: Set up JDK 17
         uses: actions/setup-java@v5
