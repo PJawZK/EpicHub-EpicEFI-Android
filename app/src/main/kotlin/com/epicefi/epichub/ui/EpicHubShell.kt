@@ -27,6 +27,7 @@ import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -56,7 +57,7 @@ fun EpicHubShell(
     settingsOpen: Boolean,
     onOpenSettings: () -> Unit,
     onCloseSettings: () -> Unit,
-    runtimeSnapshot: RuntimeSnapshot?,
+    runtimeSnapshot: State<RuntimeSnapshot?>,
     diagnostics: DiagnosticsSnapshot,
     engineAlive: Boolean,
     activeEngineCount: Int,
@@ -134,7 +135,7 @@ fun EpicHubShell(
 
 @Composable
 private fun SystemStatusHeader(
-    snapshot: RuntimeSnapshot?,
+    snapshot: State<RuntimeSnapshot?>,
     diagnostics: DiagnosticsSnapshot,
     engineAlive: Boolean,
     activeEngineCount: Int,
@@ -145,6 +146,7 @@ private fun SystemStatusHeader(
     onAddCaptureMarker: () -> Unit,
     onStopCapture: () -> Unit,
 ) {
+    val currentSnapshot = snapshot.value
     Surface(
         color = MaterialTheme.colorScheme.surfaceContainer,
         tonalElevation = 2.dp,
@@ -192,7 +194,7 @@ private fun SystemStatusHeader(
                         style = MaterialTheme.typography.bodySmall,
                     )
                     Text(
-                        text = snapshot?.let { "Source ${it.sourceKind} · #${it.sequence}" }
+                        text = currentSnapshot?.let { "Source ${it.sourceKind} · #${it.sequence}" }
                             ?: "Source waiting",
                         style = MaterialTheme.typography.bodySmall,
                     )
@@ -215,7 +217,7 @@ private fun SystemStatusHeader(
                     style = MaterialTheme.typography.bodySmall,
                 )
                 Text(
-                    text = snapshot?.let { "Source ${it.sourceKind} · #${it.sequence}" } ?: "Source waiting",
+                    text = currentSnapshot?.let { "Source ${it.sourceKind} · #${it.sequence}" } ?: "Source waiting",
                     style = MaterialTheme.typography.bodySmall,
                 )
                 Spacer(modifier = Modifier.weight(1f))
@@ -351,7 +353,7 @@ private fun ShellContent(
     onDestinationSelected: (AppDestination) -> Unit,
     settingsOpen: Boolean,
     onCloseSettings: () -> Unit,
-    runtimeSnapshot: RuntimeSnapshot?,
+    runtimeSnapshot: State<RuntimeSnapshot?>,
     diagnostics: DiagnosticsSnapshot,
     onSaveCapture: (DiagnosticCapture) -> Unit,
     onShareCapture: (DiagnosticCapture) -> Unit,
@@ -362,7 +364,7 @@ private fun ShellContent(
     }
 
     when (destination.workspace) {
-        PrimaryWorkspace.DASHBOARD -> DashboardScreen(runtimeSnapshot)
+        PrimaryWorkspace.DASHBOARD -> DashboardScreen(runtimeSnapshot.value)
         PrimaryWorkspace.DIAGNOSTICS -> DiagnosticsScreen(
             diagnostics = diagnostics,
             onSaveCapture = onSaveCapture,
@@ -382,7 +384,7 @@ private fun ShellContent(
             Box(modifier = Modifier.weight(1f)) {
                 when (destination) {
                     AppDestination.ANALYZER -> AnalyzerScreen()
-                    else -> LoggerScreen(runtimeSnapshot)
+                    else -> LoggerScreen(runtimeSnapshot.value)
                 }
             }
         }
