@@ -2,6 +2,7 @@ package com.epicefi.epichub.ui.diagnostics
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -12,6 +13,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -29,7 +31,8 @@ import java.util.Date
 @Composable
 fun DiagnosticsScreen(
     diagnostics: DiagnosticsSnapshot,
-    onExportCapture: (DiagnosticCapture) -> Unit,
+    onSaveCapture: (DiagnosticCapture) -> Unit,
+    onShareCapture: (DiagnosticCapture) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
@@ -59,7 +62,7 @@ fun DiagnosticsScreen(
             1 -> EventsTab(diagnostics)
             2 -> MetricsTab(diagnostics)
             3 -> SessionsTab(diagnostics)
-            else -> CapturesTab(diagnostics, onExportCapture)
+            else -> CapturesTab(diagnostics, onSaveCapture, onShareCapture)
         }
     }
 }
@@ -182,7 +185,8 @@ private fun SessionsTab(diagnostics: DiagnosticsSnapshot) {
 @Composable
 private fun CapturesTab(
     diagnostics: DiagnosticsSnapshot,
-    onExportCapture: (DiagnosticCapture) -> Unit,
+    onSaveCapture: (DiagnosticCapture) -> Unit,
+    onShareCapture: (DiagnosticCapture) -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier
@@ -210,8 +214,13 @@ private fun CapturesTab(
                 KeyValueRow("Mode", capture.mode.name)
                 KeyValueRow("Events", capture.events.size.toString())
                 KeyValueRow("Markers", capture.markers.size.toString())
-                Button(onClick = { onExportCapture(capture) }) {
-                    Text("Export problem capture")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = { onSaveCapture(capture) }) {
+                        Text("Save ZIP")
+                    }
+                    TextButton(onClick = { onShareCapture(capture) }) {
+                        Text("Share ZIP")
+                    }
                 }
             }
         }
