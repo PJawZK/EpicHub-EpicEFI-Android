@@ -10,7 +10,8 @@ Mandatory durable rules:
 
 - D-022 — inherited behavior is understood piece-by-piece and reimplemented cleanly;
 - D-023 — production runtime is Kotlin/Compose + Rust, with typed/packed runtime boundaries and serialization only at explicit persistence/export/interoperability boundaries;
-- D-024 — historical tuning-plugin capabilities become native EpicHub Tuning Tools, not a runtime plugin system.
+- D-024 — historical tuning-plugin capabilities become native EpicHub Tuning Tools, not a runtime plugin system;
+- D-025 — four primary user workspaces may group distinct leaf/domain routes without merging their owners/dependencies.
 
 ---
 
@@ -49,7 +50,7 @@ app/src/main/kotlin/com/epicefi/epichub/
 ├── EpicHubActivity.kt           # Android Activity / lifecycle adaptation / Compose host
 ├── EpicHubApp.kt                # current app orchestration; synthetic RuntimeSnapshot polling
 ├── navigation/
-│   └── AppDestination.kt
+│   └── AppDestination.kt        # PrimaryWorkspace + distinct leaf AppDestination mapping
 ├── diagnostics/
 │   ├── DiagnosticCaptureArchive.kt
 │   ├── DiagnosticCaptureCborEncoder.kt
@@ -71,9 +72,9 @@ app/src/main/kotlin/com/epicefi/epichub/
     ├── components/
     ├── dashboard/
     ├── tuner/
-    ├── tools/                   # Tuning Tools presentation/workflow shell
+    ├── tools/                   # separate Tuning Tools presentation/workflow owner
     ├── logger/
-    ├── analyzer/
+    ├── analyzer/                # separate Analyzer presentation/workflow owner
     ├── diagnostics/
     └── settings/
 ```
@@ -86,15 +87,55 @@ Important ownership notes:
 - `EpicHubActivity` owns Android Activity lifecycle adaptation, not application/domain authority;
 - `EpicHubApp` is temporary composition/orchestration glue and must continue decomposing rather than becoming a catch-all controller;
 - `NativeEngine` is the Kotlin JNI façade, not the native semantic engine itself;
-- UI packages own presentation/workflow only.
+- UI packages own presentation/workflow only;
+- visual workspace grouping never grants one UI package ownership over another domain.
 
-The current shell exposes:
+---
+
+# Current navigation topology
+
+The current shell exposes four primary user workspaces:
 
 ```text
-Dashboard | Tuner | Tuning Tools | Logger | Analyzer | Diagnostics
+Dashboard | Tuner | Logger | Diagnostics
 ```
 
-Settings is global. Dashboard and Logger visual detail remains deliberately provisional while the user develops HTML prototypes that may later become accepted visual/layout authority.
+Distinct leaf/domain routes remain:
+
+```text
+Dashboard
+Tuner
+Tuning Tools
+Logger
+Analyzer
+Diagnostics
+```
+
+Current mapping:
+
+```text
+PrimaryWorkspace.DASHBOARD
+└─ AppDestination.DASHBOARD
+
+PrimaryWorkspace.TUNER
+├─ AppDestination.TUNER
+└─ AppDestination.TUNING_TOOLS
+
+PrimaryWorkspace.LOGGER
+├─ AppDestination.LOGGER
+└─ AppDestination.ANALYZER
+
+PrimaryWorkspace.DIAGNOSTICS
+└─ AppDestination.DIAGNOSTICS
+```
+
+The primary navigation renders only `PrimaryWorkspace` values. Workspace-local structural navigation selects leaf `AppDestination` values. The app remembers the most recent Tuner-workspace and Logger-workspace leaf route so returning to a workspace can restore the user's prior context.
+
+Diagnostics record the leaf route, so `analyzer` does not become indistinguishable from `logger`, and `tuning-tools` does not become indistinguishable from `tuner` merely because they share primary navigation.
+
+Settings is global.
+
+Dashboard and Logger visual detail remains deliberately provisional while the user develops separate HTML visual prototypes for tablet/phone landscape/portrait. Those prototypes may later become explicit presentation authority without changing this route/owner topology.
 
 ---
 
@@ -156,7 +197,9 @@ Prohibited structures:
 - WebView/JavaScript/DOM production presentation;
 - duplicate Kotlin high-rate ChannelStore;
 - Rust depending on Android UI framework types;
-- dynamic JAR/JavaScript plugin loading for Tuning Tools.
+- dynamic JAR/JavaScript plugin loading for Tuning Tools;
+- Analyzer calls routed through Logger merely because they share a workspace;
+- Tuning Tools calls routed through Tuner presentation merely because they share a workspace.
 
 CBOR currently exists only at the explicit diagnostic capture export boundary.
 
@@ -186,9 +229,11 @@ Android platform/diagnostics
 └─ capture.cbor + report.txt archive / FileProvider share
 ```
 
-The expensive full diagnostics UI projection is refreshed continuously only while the Diagnostics page is visible. Recording and native drain continue independently.
+The expensive full diagnostics UI projection is refreshed continuously only while the Diagnostics route is visible. Recording and native drain continue independently.
 
 Activity and NativeEngine generations are owners inside the process-scoped recorder. Destroyed-owner history is bounded; active owners are not evicted.
+
+Diagnostics remains observational. Future live connection controls route to the transport/session owner; persistent connection policy belongs under Settings → Connections. Warning incidents/history remain observable; rule configuration belongs under Settings → Warnings & alerts.
 
 ---
 
@@ -236,6 +281,15 @@ Possible future crate names are descriptive implementation choices, not architec
 
 # Tuning Tools topology
 
+Visual placement:
+
+```text
+Primary Tuner workspace
+└─ Tuning Tools leaf route
+```
+
+Runtime/ownership path:
+
 ```text
 Compose ui/tools
 → typed guided workflow/capture request
@@ -252,6 +306,28 @@ Analyzer remains generic data exploration. Tuning Tools owns guided domain workf
 
 ---
 
+# Logger / Analyzer topology
+
+Visual placement:
+
+```text
+Primary Logger workspace
+├─ Logger leaf route
+└─ Analyzer leaf route
+```
+
+Ownership remains parallel over shared lower-level contracts:
+
+```text
+ChannelStore / MeasurementStore
+├─ Logger owner → recording/session/writer health
+└─ Analyzer owner → query/plot/statistics/compare
+```
+
+Analyzer does not use Logger UI/state as a data gateway. Logger may hand a completed immutable session/source identity to Analyzer without transferring ownership.
+
+---
+
 # UI prototype rule
 
 HTML/CSS/light JavaScript may be used outside production to prototype screens rapidly.
@@ -262,6 +338,17 @@ prototype
 → native Compose translation
 → physical comparison
 ```
+
+The planned visual-authority family may contain separate references for:
+
+```text
+Tablet Landscape
+Tablet Portrait
+Phone Landscape
+Phone Portrait
+```
+
+These are presentation recipes over one semantic architecture, not four production implementations.
 
 No WebView package or browser runtime is created merely because a prototype was convenient.
 
@@ -311,4 +398,4 @@ Use permanent semantic names, never development-history labels such as T3/T4/T6/
 
 ## Summary
 
-> Keep the real tree as small as the current implementation permits, make process/platform/presentation/native ownership explicit, preserve coarse typed Kotlin↔Rust boundaries, and add packages/crates only when an actual responsibility boundary exists.
+> Keep the real tree as small as the current implementation permits, make process/platform/presentation/native ownership explicit, preserve coarse typed Kotlin↔Rust boundaries, and let four simple user workspaces group distinct domain routes without turning visual hierarchy into runtime dependency hierarchy.
