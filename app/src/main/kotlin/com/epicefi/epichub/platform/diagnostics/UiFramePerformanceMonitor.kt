@@ -94,6 +94,7 @@ class UiFramePerformanceMonitor(
         val overrunMs = totalMs - budgetMs
         if (overrunMs <= 0.0) return
 
+        val firstDrawFrame = frameMetrics.metricNanos(FrameMetrics.FIRST_DRAW_FRAME) == 1L
         val unknownDelayMs = frameMetrics.metricMs(FrameMetrics.UNKNOWN_DELAY_DURATION)
         val inputMs = frameMetrics.metricMs(FrameMetrics.INPUT_HANDLING_DURATION)
         val animationMs = frameMetrics.metricMs(FrameMetrics.ANIMATION_DURATION)
@@ -122,6 +123,7 @@ class UiFramePerformanceMonitor(
 
         diagnostics.recordWorstFrame(
             frameNumber = frameIndex,
+            firstDrawFrame = firstDrawFrame,
             totalMs = totalMs,
             budgetMs = budgetMs,
             overrunMs = overrunMs,
