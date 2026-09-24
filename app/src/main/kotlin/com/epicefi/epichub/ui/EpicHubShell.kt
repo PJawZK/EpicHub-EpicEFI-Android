@@ -22,6 +22,8 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -37,6 +39,7 @@ import com.epicefi.epichub.diagnostics.DiagnosticCapture
 import com.epicefi.epichub.diagnostics.DiagnosticsSnapshot
 import com.epicefi.epichub.engine.RuntimeSnapshot
 import com.epicefi.epichub.navigation.AppDestination
+import com.epicefi.epichub.navigation.PrimaryWorkspace
 import com.epicefi.epichub.ui.analyzer.AnalyzerScreen
 import com.epicefi.epichub.ui.dashboard.DashboardScreen
 import com.epicefi.epichub.ui.diagnostics.DiagnosticsScreen
@@ -49,6 +52,7 @@ import com.epicefi.epichub.ui.tuner.TunerScreen
 fun EpicHubShell(
     destination: AppDestination,
     onDestinationSelected: (AppDestination) -> Unit,
+    onWorkspaceSelected: (PrimaryWorkspace) -> Unit,
     settingsOpen: Boolean,
     onOpenSettings: () -> Unit,
     onCloseSettings: () -> Unit,
@@ -88,12 +92,13 @@ fun EpicHubShell(
                 if (wide) {
                     Row(modifier = Modifier.weight(1f)) {
                         PrimaryNavigationRail(
-                            destination = destination,
-                            onDestinationSelected = onDestinationSelected,
+                            workspace = destination.workspace,
+                            onWorkspaceSelected = onWorkspaceSelected,
                         )
                         Box(modifier = Modifier.weight(1f)) {
                             ShellContent(
                                 destination = destination,
+                                onDestinationSelected = onDestinationSelected,
                                 settingsOpen = settingsOpen,
                                 onCloseSettings = onCloseSettings,
                                 runtimeSnapshot = runtimeSnapshot,
@@ -106,6 +111,7 @@ fun EpicHubShell(
                     Box(modifier = Modifier.weight(1f)) {
                         ShellContent(
                             destination = destination,
+                            onDestinationSelected = onDestinationSelected,
                             settingsOpen = settingsOpen,
                             onCloseSettings = onCloseSettings,
                             runtimeSnapshot = runtimeSnapshot,
@@ -114,8 +120,8 @@ fun EpicHubShell(
                         )
                     }
                     PrimaryNavigationBar(
-                        destination = destination,
-                        onDestinationSelected = onDestinationSelected,
+                        workspace = destination.workspace,
+                        onWorkspaceSelected = onWorkspaceSelected,
                     )
                 }
             }
@@ -240,7 +246,7 @@ private fun HeaderCaptureControls(
     if (activeCapture == null) {
         Box {
             Button(onClick = { captureMenuExpanded = true }) {
-                Text(if (compact) "Capture" else "Capture")
+                Text(if (compact) "Problem" else "Problem capture")
             }
             DropdownMenu(
                 expanded = captureMenuExpanded,
@@ -264,7 +270,11 @@ private fun HeaderCaptureControls(
         }
     } else {
         Text(
-            text = if (compact) "#${activeCapture.captureId}" else "Capture #${activeCapture.captureId}",
+            text = if (compact) {
+                "Problem #${activeCapture.captureId}"
+            } else {
+                "Problem capture #${activeCapture.captureId}"
+            },
             style = MaterialTheme.typography.labelMedium,
         )
         TextButton(onClick = onAddCaptureMarker) {
@@ -278,14 +288,14 @@ private fun HeaderCaptureControls(
 
 @Composable
 private fun PrimaryNavigationRail(
-    destination: AppDestination,
-    onDestinationSelected: (AppDestination) -> Unit,
+    workspace: PrimaryWorkspace,
+    onWorkspaceSelected: (PrimaryWorkspace) -> Unit,
 ) {
     NavigationRail(modifier = Modifier.fillMaxHeight()) {
-        AppDestination.entries.forEach { item ->
+        PrimaryWorkspace.entries.forEach { item ->
             NavigationRailItem(
-                selected = item == destination,
-                onClick = { onDestinationSelected(item) },
+                selected = item == workspace,
+                onClick = { onWorkspaceSelected(item) },
                 icon = { Text(item.glyph) },
                 label = { Text(item.compactLabel) },
                 alwaysShowLabel = true,
@@ -296,14 +306,14 @@ private fun PrimaryNavigationRail(
 
 @Composable
 private fun PrimaryNavigationBar(
-    destination: AppDestination,
-    onDestinationSelected: (AppDestination) -> Unit,
+    workspace: PrimaryWorkspace,
+    onWorkspaceSelected: (PrimaryWorkspace) -> Unit,
 ) {
     NavigationBar {
-        AppDestination.entries.forEach { item ->
+        PrimaryWorkspace.entries.forEach { item ->
             NavigationBarItem(
-                selected = item == destination,
-                onClick = { onDestinationSelected(item) },
+                selected = item == workspace,
+                onClick = { onWorkspaceSelected(item) },
                 icon = { Text(item.glyph) },
                 label = { Text(item.compactLabel) },
                 alwaysShowLabel = true,
@@ -313,8 +323,29 @@ private fun PrimaryNavigationBar(
 }
 
 @Composable
+private fun WorkspaceRouteTabs(
+    destination: AppDestination,
+    onDestinationSelected: (AppDestination) -> Unit,
+) {
+    val routes = AppDestination.routesFor(destination.workspace)
+    if (routes.size <= 1) return
+
+    val selectedIndex = routes.indexOf(destination).coerceAtLeast(0)
+    TabRow(selectedTabIndex = selectedIndex) {
+        routes.forEach { route ->
+            Tab(
+                selected = route == destination,
+                onClick = { onDestinationSelected(route) },
+                text = { Text(route.compactLabel) },
+            )
+        }
+    }
+}
+
+@Composable
 private fun ShellContent(
     destination: AppDestination,
+    onDestinationSelected: (AppDestination) -> Unit,
     settingsOpen: Boolean,
     onCloseSettings: () -> Unit,
     runtimeSnapshot: RuntimeSnapshot?,
@@ -326,15 +357,29 @@ private fun ShellContent(
         return
     }
 
-    when (destination) {
-        AppDestination.DASHBOARD -> DashboardScreen(runtimeSnapshot)
-        AppDestination.TUNER -> TunerScreen()
-        AppDestination.TUNING_TOOLS -> TuningToolsScreen()
-        AppDestination.LOGGER -> LoggerScreen(runtimeSnapshot)
-        AppDestination.ANALYZER -> AnalyzerScreen()
-        AppDestination.DIAGNOSTICS -> DiagnosticsScreen(
+    when (destination.workspace) {
+        PrimaryWorkspace.DASHBOARD -> DashboardScreen(runtimeSnapshot)
+        PrimaryWorkspace.DIAGNOSTICS -> DiagnosticsScreen(
             diagnostics = diagnostics,
             onExportCapture = onExportCapture,
         )
+        PrimaryWorkspace.TUNER -> Column(modifier = Modifier.fillMaxSize()) {
+            WorkspaceRouteTabs(destination, onDestinationSelected)
+            Box(modifier = Modifier.weight(1f)) {
+                when (destination) {
+                    AppDestination.TUNING_TOOLS -> TuningToolsScreen()
+                    else -> TunerScreen()
+                }
+            }
+        }
+        PrimaryWorkspace.LOGGER -> Column(modifier = Modifier.fillMaxSize()) {
+            WorkspaceRouteTabs(destination, onDestinationSelected)
+            Box(modifier = Modifier.weight(1f)) {
+                when (destination) {
+                    AppDestination.ANALYZER -> AnalyzerScreen()
+                    else -> LoggerScreen(runtimeSnapshot)
+                }
+            }
+        }
     }
 }
