@@ -6,21 +6,29 @@ import java.io.DataOutputStream
 internal data class DiagnosticExportMetadata(
     val appVersion: String,
     val buildType: String,
+    val gitSha: String,
     val manufacturer: String,
     val model: String,
     val androidApi: Int,
     val supportedAbis: List<String>,
+    val processAbi: String,
+    val processIs64Bit: Boolean,
+    val displayWidthPx: Int,
+    val displayHeightPx: Int,
+    val densityDpi: Int,
+    val refreshRateHz: Double,
+    val orientation: String,
 )
 
 internal object DiagnosticCaptureCborEncoder {
-    const val SCHEMA_VERSION = 1L
+    const val SCHEMA_VERSION = 2L
 
     fun encode(
         capture: DiagnosticCapture,
         metadata: DiagnosticExportMetadata,
     ): ByteArray {
         val writer = CborWriter()
-        writer.writeMapHeader(13)
+        writer.writeMapHeader(14)
         writer.writeText("schemaVersion")
         writer.writeLong(SCHEMA_VERSION)
         writer.writeText("captureId")
@@ -51,15 +59,20 @@ internal object DiagnosticCaptureCborEncoder {
         writer.writeText("markers")
         writer.writeArrayHeader(capture.markers.size)
         capture.markers.forEach { writeMarker(writer, it) }
+        writer.writeText("worstFrames")
+        writer.writeArrayHeader(capture.worstFrames.size)
+        capture.worstFrames.forEach { writeWorstFrame(writer, it) }
         return writer.toByteArray()
     }
 
     private fun writeMetadata(writer: CborWriter, metadata: DiagnosticExportMetadata) {
-        writer.writeMapHeader(6)
+        writer.writeMapHeader(14)
         writer.writeText("appVersion")
         writer.writeText(metadata.appVersion)
         writer.writeText("buildType")
         writer.writeText(metadata.buildType)
+        writer.writeText("gitSha")
+        writer.writeText(metadata.gitSha)
         writer.writeText("manufacturer")
         writer.writeText(metadata.manufacturer)
         writer.writeText("model")
@@ -69,6 +82,20 @@ internal object DiagnosticCaptureCborEncoder {
         writer.writeText("supportedAbis")
         writer.writeArrayHeader(metadata.supportedAbis.size)
         metadata.supportedAbis.forEach(writer::writeText)
+        writer.writeText("processAbi")
+        writer.writeText(metadata.processAbi)
+        writer.writeText("processIs64Bit")
+        writer.writeBoolean(metadata.processIs64Bit)
+        writer.writeText("displayWidthPx")
+        writer.writeLong(metadata.displayWidthPx.toLong())
+        writer.writeText("displayHeightPx")
+        writer.writeLong(metadata.displayHeightPx.toLong())
+        writer.writeText("densityDpi")
+        writer.writeLong(metadata.densityDpi.toLong())
+        writer.writeText("refreshRateHz")
+        writer.writeDouble(metadata.refreshRateHz)
+        writer.writeText("orientation")
+        writer.writeText(metadata.orientation)
     }
 
     private fun writeEvent(writer: CborWriter, event: DiagnosticEvent) {
@@ -188,7 +215,7 @@ internal object DiagnosticCaptureCborEncoder {
     }
 
     private fun writeMetric(writer: CborWriter, metric: DiagnosticMetricSummary) {
-        writer.writeMapHeader(10)
+        writer.writeMapHeader(12)
         writer.writeText("id")
         writer.writeText(metric.metric.stableId)
         writer.writeText("unit")
@@ -197,6 +224,10 @@ internal object DiagnosticCaptureCborEncoder {
         writer.writeText(metric.metric.kind.name)
         writer.writeText("sampleCount")
         writer.writeLong(metric.sampleCount)
+        writer.writeText("retainedSampleCount")
+        writer.writeLong(metric.retainedSampleCount.toLong())
+        writer.writeText("first")
+        writer.writeDouble(metric.first)
         writer.writeText("current")
         writer.writeDouble(metric.current)
         writer.writeText("minimum")
@@ -239,6 +270,42 @@ internal object DiagnosticCaptureCborEncoder {
         writer.writeLong(marker.wallClockMillis)
         writer.writeText("label")
         writer.writeNullableText(marker.label)
+    }
+
+    private fun writeWorstFrame(writer: CborWriter, frame: DiagnosticWorstFrame) {
+        writer.writeMapHeader(16)
+        writer.writeText("frameNumber")
+        writer.writeLong(frame.frameNumber)
+        writer.writeText("monotonicNanos")
+        writer.writeLong(frame.monotonicNanos)
+        writer.writeText("wallClockMillis")
+        writer.writeLong(frame.wallClockMillis)
+        writer.writeText("destinationId")
+        writer.writeText(frame.destinationId)
+        writer.writeText("totalMs")
+        writer.writeDouble(frame.totalMs)
+        writer.writeText("budgetMs")
+        writer.writeDouble(frame.budgetMs)
+        writer.writeText("overrunMs")
+        writer.writeDouble(frame.overrunMs)
+        writer.writeText("vsyncDelayMs")
+        writer.writeNullableDouble(frame.vsyncDelayMs)
+        writer.writeText("unknownDelayMs")
+        writer.writeNullableDouble(frame.unknownDelayMs)
+        writer.writeText("animationMs")
+        writer.writeNullableDouble(frame.animationMs)
+        writer.writeText("layoutMeasureMs")
+        writer.writeNullableDouble(frame.layoutMeasureMs)
+        writer.writeText("drawMs")
+        writer.writeNullableDouble(frame.drawMs)
+        writer.writeText("syncMs")
+        writer.writeNullableDouble(frame.syncMs)
+        writer.writeText("commandIssueMs")
+        writer.writeNullableDouble(frame.commandIssueMs)
+        writer.writeText("swapBuffersMs")
+        writer.writeNullableDouble(frame.swapBuffersMs)
+        writer.writeText("gpuMs")
+        writer.writeNullableDouble(frame.gpuMs)
     }
 }
 
@@ -287,6 +354,14 @@ private class CborWriter {
     fun writeDouble(value: Double) {
         data.writeByte(0xFB)
         data.writeLong(java.lang.Double.doubleToRawLongBits(value))
+    }
+
+    fun writeNullableDouble(value: Double?) {
+        if (value == null) {
+            writeNull()
+        } else {
+            writeDouble(value)
+        }
     }
 
     fun toByteArray(): ByteArray = bytes.toByteArray()
