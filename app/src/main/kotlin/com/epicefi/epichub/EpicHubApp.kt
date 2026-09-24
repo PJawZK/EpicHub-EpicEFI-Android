@@ -365,8 +365,7 @@ private fun DiagnosticsTab.refreshIntervalMillis(): Long = when (this) {
     DiagnosticsTab.EVENTS -> 1_500L
     DiagnosticsTab.OVERVIEW,
     DiagnosticsTab.SESSIONS,
-    DiagnosticsTab.CAPTURES,
-    -> 2_000L
+    DiagnosticsTab.CAPTURES -> 2_000L
 }
 
 private fun DiagnosticHub.fullSnapshotForUi(): DiagnosticsSnapshot = measureUiProjection {
@@ -403,8 +402,7 @@ private fun DiagnosticHub.projectForUi(
         )
 
         DiagnosticsTab.PERFORMANCE,
-        DiagnosticsTab.METRICS,
-        -> previous.copy(
+        DiagnosticsTab.METRICS -> previous.copy(
             metrics = metricSummaries(),
             activeCapture = active,
             eventCount = nextEventCount,
