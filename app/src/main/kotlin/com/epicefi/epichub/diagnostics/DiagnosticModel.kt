@@ -163,6 +163,21 @@ enum class DiagnosticMetricId(
         unit = "frames",
         kind = DiagnosticMetricKind.COUNTER,
     ),
+    UI_JANK_FIRST_DRAW_FRAME_COUNT(
+        stableId = "ui.frame.jank_first_draw_count",
+        unit = "frames",
+        kind = DiagnosticMetricKind.COUNTER,
+    ),
+    UI_JANK_WITHIN_500MS_OF_CONTEXT_CHANGE_COUNT(
+        stableId = "ui.frame.jank_within_500ms_of_context_change_count",
+        unit = "frames",
+        kind = DiagnosticMetricKind.COUNTER,
+    ),
+    UI_JANK_STEADY_STATE_COUNT(
+        stableId = "ui.frame.jank_steady_state_count",
+        unit = "frames",
+        kind = DiagnosticMetricKind.COUNTER,
+    ),
     UI_FRAME_METRICS_CALLBACK_DROPPED_COUNT(
         stableId = "ui.frame.metrics_callback_dropped_count",
         unit = "frames",
@@ -298,6 +313,8 @@ data class DiagnosticWorstFrame(
     val monotonicNanos: Long,
     val wallClockMillis: Long,
     val destinationId: String,
+    val contextAgeMs: Double,
+    val firstDrawFrame: Boolean,
     val totalMs: Double,
     val budgetMs: Double,
     val overrunMs: Double,
