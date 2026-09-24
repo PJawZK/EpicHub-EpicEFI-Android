@@ -44,8 +44,14 @@ class DiagnosticHub(
     @Volatile
     private var currentDestinationId: String = "dashboard"
 
+    @Volatile
+    private var currentDestinationChangedAtNanos: Long = clock.monotonicNanos()
+
+    @Synchronized
     fun setCurrentDestination(destinationId: String) {
+        if (currentDestinationId == destinationId) return
         currentDestinationId = destinationId
+        currentDestinationChangedAtNanos = clock.monotonicNanos()
     }
 
     fun currentDestination(): String = currentDestinationId
@@ -89,6 +95,7 @@ class DiagnosticHub(
     @Synchronized
     fun recordWorstFrame(
         frameNumber: Long,
+        firstDrawFrame: Boolean,
         totalMs: Double,
         budgetMs: Double,
         overrunMs: Double,
@@ -102,11 +109,16 @@ class DiagnosticHub(
         swapBuffersMs: Double?,
         gpuMs: Double?,
     ): DiagnosticWorstFrame {
+        val monotonicNow = clock.monotonicNanos()
+        val contextAgeMs = (monotonicNow - currentDestinationChangedAtNanos)
+            .coerceAtLeast(0L) / NANOS_PER_MILLISECOND
         val frame = DiagnosticWorstFrame(
             frameNumber = frameNumber,
-            monotonicNanos = clock.monotonicNanos(),
+            monotonicNanos = monotonicNow,
             wallClockMillis = clock.wallClockMillis(),
             destinationId = currentDestinationId,
+            contextAgeMs = contextAgeMs,
+            firstDrawFrame = firstDrawFrame,
             totalMs = totalMs,
             budgetMs = budgetMs,
             overrunMs = overrunMs,
@@ -120,6 +132,15 @@ class DiagnosticHub(
             swapBuffersMs = swapBuffersMs,
             gpuMs = gpuMs,
         )
+
+        if (firstDrawFrame) {
+            incrementMetricInternal(DiagnosticMetricId.UI_JANK_FIRST_DRAW_FRAME_COUNT)
+        }
+        if (contextAgeMs <= CONTEXT_TRANSITION_WINDOW_MS) {
+            incrementMetricInternal(DiagnosticMetricId.UI_JANK_WITHIN_500MS_OF_CONTEXT_CHANGE_COUNT)
+        } else {
+            incrementMetricInternal(DiagnosticMetricId.UI_JANK_STEADY_STATE_COUNT)
+        }
 
         if (recentWorstFrames.size == recentWorstFrameCapacity) {
             recentWorstFrames.removeFirst()
@@ -136,6 +157,9 @@ class DiagnosticHub(
     fun eventCount(): Int = ring.size()
 
     fun metricSummaries(): List<DiagnosticMetricSummary> = metrics.snapshot()
+
+    fun metricSummaries(metricIds: Collection<DiagnosticMetricId>): List<DiagnosticMetricSummary> =
+        metrics.snapshot(metricIds)
 
     fun lifecycleOwners(): List<DiagnosticLifecycleOwner> = lifecycle.snapshot()
 
@@ -399,4 +423,9 @@ class DiagnosticHub(
         state = currentState,
         generation = generation,
     )
+
+    private companion object {
+        const val NANOS_PER_MILLISECOND = 1_000_000.0
+        const val CONTEXT_TRANSITION_WINDOW_MS = 500.0
+    }
 }
