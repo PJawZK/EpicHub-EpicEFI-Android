@@ -138,6 +138,21 @@ enum class DiagnosticMetricId(
         unit = "MiB",
         kind = DiagnosticMetricKind.DISTRIBUTION,
     ),
+    PROCESS_GC_COUNT(
+        stableId = "process.runtime.gc_count",
+        unit = "count",
+        kind = DiagnosticMetricKind.GAUGE,
+    ),
+    PROCESS_GC_TIME_MS(
+        stableId = "process.runtime.gc_time_ms",
+        unit = "ms",
+        kind = DiagnosticMetricKind.GAUGE,
+    ),
+    PROCESS_ALLOCATED_MB(
+        stableId = "process.runtime.bytes_allocated_mb",
+        unit = "MiB",
+        kind = DiagnosticMetricKind.GAUGE,
+    ),
     UI_FRAME_COUNT(
         stableId = "ui.frame.total_count",
         unit = "frames",
@@ -253,12 +268,33 @@ enum class DiagnosticMetricId(
 data class DiagnosticMetricSummary(
     val metric: DiagnosticMetricId,
     val sampleCount: Long,
+    val retainedSampleCount: Int,
+    val first: Double,
     val current: Double,
     val minimum: Double,
     val maximum: Double,
     val p50: Double,
     val p95: Double,
     val p99: Double,
+)
+
+data class DiagnosticWorstFrame(
+    val frameNumber: Long,
+    val monotonicNanos: Long,
+    val wallClockMillis: Long,
+    val destinationId: String,
+    val totalMs: Double,
+    val budgetMs: Double,
+    val overrunMs: Double,
+    val vsyncDelayMs: Double?,
+    val unknownDelayMs: Double?,
+    val animationMs: Double?,
+    val layoutMeasureMs: Double?,
+    val drawMs: Double?,
+    val syncMs: Double?,
+    val commandIssueMs: Double?,
+    val swapBuffersMs: Double?,
+    val gpuMs: Double?,
 )
 
 enum class DiagnosticCaptureMode {
@@ -294,6 +330,7 @@ data class DiagnosticCapture(
     val metrics: List<DiagnosticMetricSummary>,
     val lifecycleOwners: List<DiagnosticLifecycleOwner>,
     val markers: List<DiagnosticMarker>,
+    val worstFrames: List<DiagnosticWorstFrame>,
     val note: String?,
 )
 
