@@ -32,12 +32,33 @@ class DiagnosticCoreTest {
         }
 
         assertEquals(100L, summary.sampleCount)
+        assertEquals(100, summary.retainedSampleCount)
+        assertEquals(1.0, summary.first, 0.0)
         assertEquals(100.0, summary.current, 0.0)
         assertEquals(1.0, summary.minimum, 0.0)
         assertEquals(100.0, summary.maximum, 0.0)
         assertEquals(50.0, summary.p50, 0.0)
         assertEquals(95.0, summary.p95, 0.0)
         assertEquals(99.0, summary.p99, 0.0)
+    }
+
+    @Test
+    fun metricsReportTotalSamplesSeparatelyFromRetainedDistributionWindow() {
+        val metrics = DiagnosticMetrics(distributionCapacity = 3)
+        for (value in 1..5) {
+            metrics.observe(DiagnosticMetricId.UI_FRAME_TOTAL_MS, value.toDouble())
+        }
+
+        val summary = metrics.snapshot().first {
+            it.metric == DiagnosticMetricId.UI_FRAME_TOTAL_MS
+        }
+
+        assertEquals(5L, summary.sampleCount)
+        assertEquals(3, summary.retainedSampleCount)
+        assertEquals(1.0, summary.first, 0.0)
+        assertEquals(5.0, summary.current, 0.0)
+        assertEquals(4.0, summary.p50, 0.0)
+        assertEquals(5.0, summary.p95, 0.0)
     }
 
     @Test
@@ -139,10 +160,63 @@ class DiagnosticCoreTest {
         }
 
         assertEquals(2L, captured.sampleCount)
+        assertEquals(2, captured.retainedSampleCount)
+        assertEquals(10.0, captured.first, 0.0)
         assertEquals(10.0, captured.minimum, 0.0)
         assertEquals(20.0, captured.maximum, 0.0)
         assertEquals(3L, processLifetime.sampleCount)
         assertEquals(100.0, processLifetime.maximum, 0.0)
+    }
+
+    @Test
+    fun reproductionCaptureRetainsWorstFramesWithTheirActiveRoute() {
+        val clock = FakeDiagnosticClock(monotonic = 100, wall = 1_000)
+        val hub = DiagnosticHub(
+            capturedWorstFrameCount = 2,
+            clock = clock,
+        )
+        hub.startReproductionCapture()
+
+        hub.setCurrentDestination("analyzer")
+        hub.recordWorstFrame(
+            frameNumber = 1,
+            totalMs = 22.0,
+            budgetMs = 16.0,
+            overrunMs = 6.0,
+            vsyncDelayMs = 0.0,
+            unknownDelayMs = 1.0,
+            animationMs = 2.0,
+            layoutMeasureMs = 0.2,
+            drawMs = 3.0,
+            syncMs = 0.2,
+            commandIssueMs = 2.0,
+            swapBuffersMs = 2.0,
+            gpuMs = 4.0,
+        )
+        clock.advance(1)
+        hub.setCurrentDestination("tuning-tools")
+        hub.recordWorstFrame(
+            frameNumber = 2,
+            totalMs = 48.0,
+            budgetMs = 16.0,
+            overrunMs = 32.0,
+            vsyncDelayMs = 0.0,
+            unknownDelayMs = 2.0,
+            animationMs = 10.0,
+            layoutMeasureMs = 0.3,
+            drawMs = 20.0,
+            syncMs = 0.3,
+            commandIssueMs = 4.0,
+            swapBuffersMs = 3.0,
+            gpuMs = 8.0,
+        )
+
+        val capture = hub.finishCapture()
+
+        assertEquals(2, capture.worstFrames.size)
+        assertEquals(2L, capture.worstFrames.first().frameNumber)
+        assertEquals("tuning-tools", capture.worstFrames.first().destinationId)
+        assertEquals(32.0, capture.worstFrames.first().overrunMs, 0.0)
     }
 
     @Test
