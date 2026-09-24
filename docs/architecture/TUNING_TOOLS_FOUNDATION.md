@@ -4,9 +4,9 @@
 
 EpicHub must expose the former TunerStudio-plugin capabilities as native application tools without recreating a plugin runtime, mini-app ecosystem or second tuning authority.
 
-The working product label is **Tuning Tools**. A shorter compact-navigation label may be `Tools`. The exact user-facing label may still be refined during visual design without changing this responsibility contract.
+The working product label is **Tuning Tools**. A shorter workspace-local label may be `Tools`. The exact user-facing label may still be refined during visual design without changing this responsibility contract.
 
-Authority: D-020, D-022, D-023 and D-024.
+Authority: D-020, D-022, D-023, D-024 and D-025.
 
 ---
 
@@ -33,17 +33,30 @@ Each retained capability is reimplemented piece-by-piece under D-022 and integra
 
 # 2. Product/UI role
 
-`Tuning Tools` is a first-class functional destination in the EpicHub information architecture from the ground UI stage.
+`Tuning Tools` is a first-class **functional/domain route** presented inside the primary `Tuner` workspace under D-025.
 
-It must exist in the initial application shell even before every tool algorithm has been migrated.
+It must exist in the ground application structure even before every tool algorithm has been migrated.
 
-The shell may initially show tool cards such as:
+The visual hierarchy is conceptually:
+
+```text
+Tuner workspace
+├─ Tuner
+│  ├─ Parameters
+│  ├─ Tables
+│  └─ Curves
+└─ Tuning Tools
+```
+
+This visual nesting is presentation-only. Tuning Tools does not call through Tuner UI state to reach analysis, channels, profile identity or mutation authority.
+
+The shell/workspace may initially show tool cards such as:
 
 ```text
 Acceleration Enrichment
 PID Controller
 TCharge
-Injection Angle
+Injection Angle / Injection Phasing
 ```
 
 Each card exposes an honest capability/maturity state, for example:
@@ -53,6 +66,7 @@ Planned
 Evidence review
 Read-only analysis
 Guided capture
+Measurement qualified
 Recommendation qualified
 Bounded experiment qualified
 Unavailable for current profile/source
@@ -64,7 +78,7 @@ An unavailable or not-yet-implemented tool remains visible when that is useful f
 
 # 3. Tuning Tools versus Analyzer versus Tuner
 
-These three destinations have different responsibilities.
+These three domains have different responsibilities even when the UI groups them into larger user workspaces.
 
 ## Analyzer
 
@@ -78,6 +92,8 @@ Generic measurement exploration:
 - event/search/query work;
 - reusable analysis views.
 
+Analyzer is visually nested under the Logger workspace but does not depend on Logger UI/state.
+
 ## Tuning Tools
 
 Guided domain workflows:
@@ -85,7 +101,7 @@ Guided domain workflows:
 - AE capture/analysis/recommendation;
 - PID characterization/tuning assistance;
 - TCharge evidence/model work;
-- Injection Angle analysis;
+- Injection Angle/Phasing analysis;
 - future deliberately accepted tuning-assistance workflows.
 
 A tool may use the same source, channel, query, statistics and plotting infrastructure as Analyzer, but it adds domain-specific prerequisites, capture guidance, evidence classification, confidence/identifiability and recommendation policy.
@@ -102,7 +118,7 @@ A Tuning Tool may produce a semantic recommendation or `ExperimentProposal`, but
 
 ## Kotlin / Compose owns
 
-- Tuning Tools navigation;
+- Tuning Tools route/workspace-local navigation presentation;
 - tool cards and maturity/status presentation;
 - guided-capture instructions and user interaction;
 - progress/result presentation;
@@ -161,7 +177,7 @@ domain profile
         ├─ AE
         ├─ PID
         ├─ TCharge
-        └─ Injection Angle
+        └─ Injection phasing
         │
         ▼
 measurement/result/recommendation/proposal
@@ -190,11 +206,11 @@ A bounded active experiment is a higher authority level than analysis/recommenda
 
 # 7. Ground layout
 
-## Wide
+## Wide / tablet landscape
 
 ```text
 ┌──────────────────────────────────────────────────────────────┐
-│ Tuning Tools | source/session | profile | tool status        │
+│ Tuner workspace | Tuner / Tools | source/profile/status      │
 ├──────────────────┬──────────────────────────────┬─────────────┤
 │ tool browser     │ active tool workspace        │ evidence /  │
 │ categories       │ guidance / plots / results   │ details /   │
@@ -202,14 +218,11 @@ A bounded active experiment is a higher authority level than analysis/recommenda
 └──────────────────┴──────────────────────────────┴─────────────┘
 ```
 
-## Compact
+## Other presentation classes
 
-- tool selector/cards first;
-- active tool workspace occupies full width;
-- evidence/details/provenance move to a bottom sheet or subpage;
-- capture controls remain reachable without crowding the result surface.
+Tablet portrait, phone landscape and phone portrait may use deliberately different accepted arrangements over the same tool/domain state. Evidence/details/provenance may move to sheets/subpages and tool selection may become a compact menu/card surface.
 
-The first UI implementation may use fixture content, but it must use the real final navigation/state architecture rather than a temporary throwaway page.
+The first UI implementation may use fixture content, but it must use the real route/state architecture rather than a temporary throwaway page.
 
 ---
 
@@ -242,6 +255,7 @@ Every Tuning Tool participates in the common diagnostic system.
 
 At minimum diagnostics should be able to correlate:
 
+- active leaf route/tool/task;
 - tool start/stop;
 - source/session/profile identity;
 - required/missing channels;
@@ -280,16 +294,18 @@ The goal is to preserve proven knowledge while removing duplicated architecture 
 
 # 11. Initial shell acceptance
 
-Before real ECU integration, the UI foundation is considered structurally ready for Tuning Tools when:
+Before real ECU integration, the UI foundation is structurally ready for Tuning Tools when:
 
-- the destination/page exists in the real application shell;
+- the Tuning Tools leaf/domain route exists inside the Tuner primary workspace;
+- workspace navigation can enter/leave it without changing its underlying owner;
+- switching away/back can preserve the last meaningful Tuner-workspace leaf route;
 - AE/PID/TCharge/Injection Angle can be represented as tool cards/entries even if some are not yet implemented;
 - unavailable/not-qualified states are explicit;
-- tool pages can consume the same synthetic/shared channel projection used by other destinations;
+- tool pages can consume the same synthetic/shared channel projection used by other domains;
 - tool diagnostics can emit into the shared diagnostic system;
-- no dynamic plugin runtime or second ECU/channel authority has been introduced;
-- phone/tablet layouts provide a usable tool-selection/workspace pattern.
+- no dynamic plugin runtime, second ECU/channel authority or dependency through Tuner presentation has been introduced;
+- all four eventual presentation classes can map onto the same semantic tool state.
 
 ## Summary
 
-> EpicHub keeps the useful capabilities discovered in the historical TunerStudio plugins, but not the plugin architecture. They become native **Tuning Tools**: Compose workflows over common Rust analysis/domain-profile infrastructure, with all ECU mutation remaining behind the single semantic tuning authority.
+> EpicHub keeps the useful capabilities discovered in the historical TunerStudio plugins, but not the plugin architecture. They become native **Tuning Tools** inside the Tuner user workspace: separate Compose workflows over common Rust analysis/domain-profile infrastructure, with all ECU mutation remaining behind the single semantic tuning authority.
