@@ -20,8 +20,10 @@ private val groups = listOf(
     "Units & formatting",
     "Dashboard presentation",
     "Tuner presentation",
+    "Tuning Tools",
     "Logging & storage",
     "Connections",
+    "Warnings & alerts",
     "Accessories",
     "Diagnostics & privacy",
     "Appearance",
@@ -54,7 +56,13 @@ fun SettingsScreen(
                     title = group,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text("Settings surface reserved for this responsibility group.")
+                    val purpose = when (group) {
+                        "Connections" -> "Persistent connection policy/preferences live here; live connect/reconnect actions belong to the connection owner."
+                        "Warnings & alerts" -> "Rule definitions, thresholds, debounce/cooldown and enablement live here; active incidents/history remain observable elsewhere."
+                        "Diagnostics & privacy" -> "Diagnostic capture/export/privacy policy only; diagnostics do not own subsystem control."
+                        else -> "Settings surface reserved for this responsibility group."
+                    }
+                    Text(purpose)
                 }
             }
         }
