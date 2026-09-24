@@ -263,6 +263,21 @@ enum class DiagnosticMetricId(
         unit = "count",
         kind = DiagnosticMetricKind.COUNTER,
     ),
+    DIAGNOSTICS_UI_PROJECTION_BUILD_MS(
+        stableId = "diagnostics.ui.projection_build_ms",
+        unit = "ms",
+        kind = DiagnosticMetricKind.DISTRIBUTION,
+    ),
+    DIAGNOSTICS_UI_PROJECTION_ALLOCATED_KIB(
+        stableId = "diagnostics.ui.projection_allocated_kib",
+        unit = "KiB",
+        kind = DiagnosticMetricKind.DISTRIBUTION,
+    ),
+    DIAGNOSTICS_UI_PROJECTION_COUNT(
+        stableId = "diagnostics.ui.projection_count",
+        unit = "count",
+        kind = DiagnosticMetricKind.COUNTER,
+    ),
 }
 
 data class DiagnosticMetricSummary(
@@ -348,4 +363,7 @@ data class DiagnosticsSnapshot(
     val lifecycleOwners: List<DiagnosticLifecycleOwner>,
     val captures: List<DiagnosticCapture>,
     val activeCapture: ActiveDiagnosticCapture?,
+    val eventCount: Int = events.size,
+    val lifecycleOwnerCount: Int = lifecycleOwners.size,
+    val captureCount: Int = captures.size,
 )
