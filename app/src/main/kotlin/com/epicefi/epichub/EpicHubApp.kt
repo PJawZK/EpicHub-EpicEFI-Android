@@ -1,6 +1,8 @@
 package com.epicefi.epichub
 
 import android.os.SystemClock
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -12,6 +14,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import com.epicefi.epichub.diagnostics.DiagnosticCapture
 import com.epicefi.epichub.diagnostics.DiagnosticDomain
 import com.epicefi.epichub.diagnostics.DiagnosticEventCode
 import com.epicefi.epichub.diagnostics.DiagnosticHub
@@ -48,12 +51,37 @@ fun EpicHubApp(
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
     var runtimeSnapshot by remember(engine) { mutableStateOf<RuntimeSnapshot?>(null) }
     var diagnosticSnapshot by remember { mutableStateOf(diagnostics.snapshotForUi()) }
+    var pendingSaveCapture by remember { mutableStateOf<DiagnosticCapture?>(null) }
 
     val latestDestinationId by rememberUpdatedState(destinationId)
     val latestSettingsOpen by rememberUpdatedState(settingsOpen)
 
     fun refreshDiagnostics() {
         diagnosticSnapshot = diagnostics.snapshotForUi()
+    }
+
+    fun recordExportFailure(capture: DiagnosticCapture, error: Throwable) {
+        diagnostics.invariantViolation(
+            invariantId = "diagnostic.export.failed",
+            detail = error.message ?: error::class.java.simpleName,
+            domain = DiagnosticDomain.DIAGNOSTIC_CAPTURE,
+            correlationId = "capture-${capture.captureId}",
+        )
+        refreshDiagnostics()
+    }
+
+    val saveCaptureLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/zip"),
+    ) { destination ->
+        val capture = pendingSaveCapture
+        pendingSaveCapture = null
+        if (destination != null && capture != null) {
+            runCatching {
+                DiagnosticCaptureExporter.save(context, capture, destination)
+            }.onFailure { error ->
+                recordExportFailure(capture, error)
+            }
+        }
     }
 
     fun selectDestination(destination: AppDestination) {
@@ -187,17 +215,15 @@ fun EpicHubApp(
                     refreshDiagnostics()
                 }
             },
-            onExportCapture = { capture ->
+            onSaveCapture = { capture ->
+                pendingSaveCapture = capture
+                saveCaptureLauncher.launch(DiagnosticCaptureExporter.suggestedFileName(capture))
+            },
+            onShareCapture = { capture ->
                 runCatching {
                     DiagnosticCaptureExporter.share(context, capture)
                 }.onFailure { error ->
-                    diagnostics.invariantViolation(
-                        invariantId = "diagnostic.export.failed",
-                        detail = error.message ?: error::class.java.simpleName,
-                        domain = DiagnosticDomain.DIAGNOSTIC_CAPTURE,
-                        correlationId = "capture-${capture.captureId}",
-                    )
-                    refreshDiagnostics()
+                    recordExportFailure(capture, error)
                 }
             },
         )
