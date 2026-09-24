@@ -75,6 +75,9 @@ class DiagnosticLifecycleRegistry(
     @Synchronized
     fun snapshot(): List<DiagnosticLifecycleOwner> = owners.values.map { it.toImmutable() }
 
+    @Synchronized
+    fun size(): Int = owners.size
+
     private fun trimDestroyedHistory() {
         var destroyedCount = owners.values.count { it.destroyedAtNanos != null }
         if (destroyedCount <= retainedDestroyedCapacity) {
