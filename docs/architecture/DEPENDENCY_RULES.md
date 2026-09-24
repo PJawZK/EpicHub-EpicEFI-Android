@@ -8,6 +8,8 @@ These are accepted architecture rules carried from Phase 1 into Phase 2. Exact p
 
 D-023 / `RUNTIME_LANGUAGE_AND_SERIALIZATION.md` is also part of this contract: generic serializers are boundary codecs, not runtime/domain dependencies.
 
+D-025 also applies: primary-workspace grouping is presentation-only and must not introduce new domain dependency chains.
+
 ## Core direction
 
 ```text
@@ -55,6 +57,44 @@ Compose must not depend directly on:
 - JSON/CBOR codecs as a way to obtain live domain state.
 
 A UI draft is not verified ECU or persisted project authority.
+
+### Workspace grouping rule
+
+EpicHub currently presents four primary workspaces while retaining six functional/domain leaf routes.
+
+Allowed presentation grouping:
+
+```text
+Tuner workspace
+├─ Tuner route
+└─ Tuning Tools route
+
+Logger workspace
+├─ Logger route
+└─ Analyzer route
+```
+
+This grouping must not produce dependencies such as:
+
+```text
+Analyzer → Logger UI/ViewModel → analysis/native owner
+Tuning Tools → Tuner UI/ViewModel → analysis/tuning owner
+```
+
+Instead, sibling leaf routes depend independently on shared lower-level contracts/owners:
+
+```text
+Logger UI   → logging/measurement contracts
+Analyzer UI → analysis/measurement contracts
+Tuner UI    → tuning/profile contracts
+Tools UI    → analysis/channel/profile contracts
+```
+
+A completed Logger session may hand an immutable source/session identity to Analyzer; that is a semantic handoff, not shared mutable Logger UI ownership.
+
+A Tuning Tool may hand an `ExperimentProposal` to the sole tuning authority; it does not call through Tuner presentation state to obtain mutation authority.
+
+Primary-workspace state, leaf-route state and domain state are distinct.
 
 ## Kotlin platform rules
 
@@ -247,6 +287,8 @@ Therefore:
 
 Neither depends on Compose or on one mandatory file format. Compose owns interaction/cursors/viewport requests only.
 
+Analyzer remains analysis-owned even when its route is visually nested in the Logger workspace. Tuning Tools uses analysis/domain-profile infrastructure directly even when its route is visually nested in the Tuner workspace.
+
 ## Diagnostics rules
 
 Diagnostics observe/report but do not become subsystem decision authority.
@@ -258,6 +300,8 @@ Live events/metrics/lifecycle state are typed Kotlin/Rust state. Rust→Kotlin d
 The diagnostic CBOR serializer depends on a finalized immutable `DiagnosticCapture` and is invoked only for persistence/export. The live diagnostic rings do not depend on CBOR/JSON serializers.
 
 Warning evaluation emits warning state/incidents only. If a future automation reacts to warning state, that action is owned by a separate explicit AutomationRule/ActionPolicy path rather than by diagnostics/warning evaluation itself.
+
+Live connection actions shown near diagnostic evidence must route to the actual transport/session owner. Persistent auto-reconnect/connection policy belongs to Settings/connection policy, not Diagnostics. Warning-rule configuration likewise remains separate from warning incident observation/history.
 
 ## Interop rules
 
@@ -271,6 +315,7 @@ As each Phase-2 subsystem is introduced, translate important rules into practica
 
 - Rust crate dependency graph;
 - Kotlin visibility/package rules;
+- navigation/workspace mapping tests;
 - architecture tests for prohibited imports/serialization leaks;
 - FFI ABI tests;
 - diagnostic CBOR codec tests;
