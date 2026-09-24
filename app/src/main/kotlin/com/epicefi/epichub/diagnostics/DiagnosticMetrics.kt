@@ -18,6 +18,8 @@ class DiagnosticMetrics(
         private var storedCount = 0
         var totalCount: Long = 0
             private set
+        var first: Double = 0.0
+            private set
         var current: Double = 0.0
             private set
         var minimum: Double = Double.POSITIVE_INFINITY
@@ -26,6 +28,9 @@ class DiagnosticMetrics(
             private set
 
         fun observe(value: Double) {
+            if (totalCount == 0L) {
+                first = value
+            }
             current = value
             minimum = minOf(minimum, value)
             maximum = maxOf(maximum, value)
@@ -44,6 +49,8 @@ class DiagnosticMetrics(
                 return DiagnosticMetricSummary(
                     metric = metric,
                     sampleCount = 0,
+                    retainedSampleCount = 0,
+                    first = 0.0,
                     current = 0.0,
                     minimum = 0.0,
                     maximum = 0.0,
@@ -67,6 +74,8 @@ class DiagnosticMetrics(
             return DiagnosticMetricSummary(
                 metric = metric,
                 sampleCount = totalCount,
+                retainedSampleCount = storedCount,
+                first = first,
                 current = current,
                 minimum = minimum,
                 maximum = maximum,
