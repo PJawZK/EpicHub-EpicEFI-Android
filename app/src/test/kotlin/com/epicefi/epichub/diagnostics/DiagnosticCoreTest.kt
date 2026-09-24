@@ -43,6 +43,19 @@ class DiagnosticCoreTest {
     }
 
     @Test
+    fun metricsCanSnapshotOnlyRequestedSeries() {
+        val metrics = DiagnosticMetrics()
+        metrics.observe(DiagnosticMetricId.RUNTIME_SNAPSHOT_READ_MS, 1.0)
+        metrics.observe(DiagnosticMetricId.PROCESS_CPU_PERCENT, 50.0)
+
+        val snapshot = metrics.snapshot(listOf(DiagnosticMetricId.PROCESS_CPU_PERCENT))
+
+        assertEquals(1, snapshot.size)
+        assertEquals(DiagnosticMetricId.PROCESS_CPU_PERCENT, snapshot.single().metric)
+        assertEquals(50.0, snapshot.single().current, 0.0)
+    }
+
+    @Test
     fun metricsReportTotalSamplesSeparatelyFromRetainedDistributionWindow() {
         val metrics = DiagnosticMetrics(distributionCapacity = 3)
         for (value in 1..5) {
@@ -169,7 +182,7 @@ class DiagnosticCoreTest {
     }
 
     @Test
-    fun reproductionCaptureRetainsWorstFramesWithTheirActiveRoute() {
+    fun reproductionCaptureRetainsWorstFramesWithTheirActiveRouteAndTransitionAge() {
         val clock = FakeDiagnosticClock(monotonic = 100, wall = 1_000)
         val hub = DiagnosticHub(
             capturedWorstFrameCount = 2,
@@ -178,8 +191,10 @@ class DiagnosticCoreTest {
         hub.startReproductionCapture()
 
         hub.setCurrentDestination("analyzer")
+        clock.advance(100_000_000)
         hub.recordWorstFrame(
             frameNumber = 1,
+            firstDrawFrame = false,
             totalMs = 22.0,
             budgetMs = 16.0,
             overrunMs = 6.0,
@@ -193,10 +208,12 @@ class DiagnosticCoreTest {
             swapBuffersMs = 2.0,
             gpuMs = 4.0,
         )
-        clock.advance(1)
+
         hub.setCurrentDestination("tuning-tools")
+        clock.advance(600_000_000)
         hub.recordWorstFrame(
             frameNumber = 2,
+            firstDrawFrame = true,
             totalMs = 48.0,
             budgetMs = 16.0,
             overrunMs = 32.0,
@@ -214,9 +231,29 @@ class DiagnosticCoreTest {
         val capture = hub.finishCapture()
 
         assertEquals(2, capture.worstFrames.size)
-        assertEquals(2L, capture.worstFrames.first().frameNumber)
-        assertEquals("tuning-tools", capture.worstFrames.first().destinationId)
-        assertEquals(32.0, capture.worstFrames.first().overrunMs, 0.0)
+        val worst = capture.worstFrames.first()
+        assertEquals(2L, worst.frameNumber)
+        assertEquals("tuning-tools", worst.destinationId)
+        assertEquals(600.0, worst.contextAgeMs, 0.001)
+        assertTrue(worst.firstDrawFrame)
+        assertEquals(32.0, worst.overrunMs, 0.0)
+
+        val metricIndex = capture.metrics.associateBy { it.metric }
+        assertEquals(
+            1.0,
+            metricIndex.getValue(DiagnosticMetricId.UI_JANK_WITHIN_500MS_OF_CONTEXT_CHANGE_COUNT).current,
+            0.0,
+        )
+        assertEquals(
+            1.0,
+            metricIndex.getValue(DiagnosticMetricId.UI_JANK_STEADY_STATE_COUNT).current,
+            0.0,
+        )
+        assertEquals(
+            1.0,
+            metricIndex.getValue(DiagnosticMetricId.UI_JANK_FIRST_DRAW_FRAME_COUNT).current,
+            0.0,
+        )
     }
 
     @Test
