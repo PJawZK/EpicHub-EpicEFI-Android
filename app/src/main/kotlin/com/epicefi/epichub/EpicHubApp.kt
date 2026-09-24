@@ -9,6 +9,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.referentialEqualityPolicy
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -57,7 +58,7 @@ fun EpicHubApp(
     var lastLoggerDestinationId by rememberSaveable { mutableStateOf(AppDestination.LOGGER.id) }
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
     val runtimeSnapshot = remember(engine) { mutableStateOf<RuntimeSnapshot?>(null) }
-    var diagnosticSnapshot by remember {
+    val diagnosticSnapshotState = remember {
         mutableStateOf(
             DiagnosticsSnapshot(
                 events = emptyList(),
@@ -66,15 +67,23 @@ fun EpicHubApp(
                 captures = emptyList(),
                 activeCapture = diagnostics.activeCapture(),
             ),
+            policy = referentialEqualityPolicy(),
         )
     }
+    var activeCapture by remember { mutableStateOf(diagnostics.activeCapture()) }
     var pendingSaveCapture by remember { mutableStateOf<DiagnosticCapture?>(null) }
 
     fun diagnosticsVisible(): Boolean =
         AppDestination.fromId(destinationId) == AppDestination.DIAGNOSTICS && !settingsOpen
 
     fun refreshCaptureState() {
-        diagnosticSnapshot = diagnosticSnapshot.copy(activeCapture = diagnostics.activeCapture())
+        val nextActiveCapture = diagnostics.activeCapture()
+        activeCapture = nextActiveCapture
+        if (diagnosticsVisible()) {
+            diagnosticSnapshotState.value = diagnosticSnapshotState.value.copy(
+                activeCapture = nextActiveCapture,
+            )
+        }
     }
 
     fun requestDiagnosticsRefresh() {
@@ -82,7 +91,7 @@ fun EpicHubApp(
             val next = withContext(Dispatchers.Default) {
                 diagnostics.snapshotForUi()
             }
-            diagnosticSnapshot = next
+            diagnosticSnapshotState.value = next
         }
     }
 
@@ -93,7 +102,9 @@ fun EpicHubApp(
             domain = DiagnosticDomain.DIAGNOSTIC_CAPTURE,
             correlationId = "capture-${capture.captureId}",
         )
-        requestDiagnosticsRefresh()
+        if (diagnosticsVisible()) {
+            requestDiagnosticsRefresh()
+        }
     }
 
     val saveCaptureLauncher = rememberLauncherForActivityResult(
@@ -176,7 +187,7 @@ fun EpicHubApp(
             AppDestination.fromId(destinationId) == AppDestination.DIAGNOSTICS && !settingsOpen
         if (visible) {
             while (true) {
-                diagnosticSnapshot = withContext(Dispatchers.Default) {
+                diagnosticSnapshotState.value = withContext(Dispatchers.Default) {
                     diagnostics.snapshotForUi()
                 }
                 delay(DIAGNOSTICS_PRESENTATION_REFRESH_MS)
@@ -255,7 +266,8 @@ fun EpicHubApp(
                 }
             },
             runtimeSnapshot = runtimeSnapshot,
-            diagnostics = diagnosticSnapshot,
+            diagnostics = diagnosticSnapshotState,
+            activeCapture = activeCapture,
             engineAlive = engine.isAlive,
             activeEngineCount = NativeEngine.activeCount(),
             onCaptureRecentProblem = {
