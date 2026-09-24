@@ -21,7 +21,7 @@ internal data class DiagnosticExportMetadata(
 )
 
 internal object DiagnosticCaptureCborEncoder {
-    const val SCHEMA_VERSION = 2L
+    const val SCHEMA_VERSION = 3L
 
     fun encode(
         capture: DiagnosticCapture,
@@ -273,7 +273,7 @@ internal object DiagnosticCaptureCborEncoder {
     }
 
     private fun writeWorstFrame(writer: CborWriter, frame: DiagnosticWorstFrame) {
-        writer.writeMapHeader(16)
+        writer.writeMapHeader(18)
         writer.writeText("frameNumber")
         writer.writeLong(frame.frameNumber)
         writer.writeText("monotonicNanos")
@@ -282,6 +282,10 @@ internal object DiagnosticCaptureCborEncoder {
         writer.writeLong(frame.wallClockMillis)
         writer.writeText("destinationId")
         writer.writeText(frame.destinationId)
+        writer.writeText("contextAgeMs")
+        writer.writeDouble(frame.contextAgeMs)
+        writer.writeText("firstDrawFrame")
+        writer.writeBoolean(frame.firstDrawFrame)
         writer.writeText("totalMs")
         writer.writeDouble(frame.totalMs)
         writer.writeText("budgetMs")
