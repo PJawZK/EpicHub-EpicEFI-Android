@@ -189,8 +189,46 @@ EpicHub does not recreate a runtime TunerStudio-style plugin subsystem for AE, P
 
 Retained behavior is reimplemented piece-by-piece under D-022 as native EpicHub functionality. Shared analysis/statistical/provenance/capture infrastructure lives in Rust under D-020; Compose owns the Android workflow/presentation; any ECU mutation remains behind the single semantic tuning authority defined by D-019.
 
-`Tuning Tools` is a first-class functional destination in the ground application information architecture. It exists from the initial UI shell even if individual tools are initially placeholders or explicitly marked unavailable/not-qualified. Exact compact-navigation placement may vary by screen geometry so the phone UI is not overloaded, but the capability is not treated as an optional afterthought.
+`Tuning Tools` is a first-class functional domain in the ground application information architecture and is presented within the primary `Tuner` workspace under D-025. It exists from the initial UI shell even if individual tools are initially placeholders or explicitly marked unavailable/not-qualified. Visual nesting does not make Tuning Tools dependent on Tuner presentation code.
 
-Analyzer remains the generic measurement exploration/query workspace. Tuning Tools provides guided domain workflows over the same shared source/channel/analysis infrastructure and may deep-link to or reuse Analyzer views without becoming a separate data engine.
+Analyzer remains the generic measurement exploration/query domain. Tuning Tools provides guided domain workflows over the same shared source/channel/analysis infrastructure and may deep-link to or reuse Analyzer views without becoming a separate data engine.
 
 No dynamic JAR/JavaScript/plugin loader, per-tool ECU connection, per-tool ChannelStore or per-tool write/Burn authority is introduced merely to preserve historical plugin packaging. The detailed UI/runtime contract is defined in `TUNING_TOOLS_FOUNDATION.md`.
+
+## D-025 — Four primary user workspaces group distinct functional/domain routes
+
+EpicHub presents four primary user workspaces:
+
+```text
+Dashboard
+Tuner
+Logger
+Diagnostics
+```
+
+The underlying functional/domain routes remain distinct:
+
+```text
+Dashboard
+Tuner
+Tuning Tools
+Logger
+Analyzer
+Diagnostics
+```
+
+`Tuning Tools` is visually nested under the `Tuner` workspace. `Analyzer` is visually nested under the `Logger` workspace. This is a presentation/navigation grouping only.
+
+Visual nesting must never become dependency nesting or authority nesting. In particular:
+
+- Analyzer does not obtain data, commands or ownership by passing through Logger UI/state;
+- Tuning Tools does not obtain analysis or tuning authority by passing through Tuner UI/state;
+- Logger and Analyzer consume shared lower-level measurement/channel contracts directly according to their own responsibilities;
+- Tuning Tools consumes shared analysis/channel/profile contracts directly and hands any qualified mutation proposal to the single tuning authority under D-019;
+- primary-workspace selection and leaf-route selection are separate presentation state;
+- diagnostics record the leaf route as well as allowing the primary workspace to be derived;
+- restoring/switching workspaces should preserve the last meaningful leaf route for that workspace when practical.
+
+Settings remains global rather than a fifth primary workspace.
+
+This model intentionally lets the UI follow the accepted tablet/phone visual references without paying for that simplicity with extra runtime barriers or merged domain owners.
