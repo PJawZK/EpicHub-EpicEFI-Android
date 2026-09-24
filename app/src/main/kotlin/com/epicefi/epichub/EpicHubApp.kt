@@ -30,10 +30,11 @@ import com.epicefi.epichub.navigation.PrimaryWorkspace
 import com.epicefi.epichub.platform.diagnostics.DiagnosticCaptureExporter
 import com.epicefi.epichub.platform.diagnostics.ProcessPerformanceSampler
 import com.epicefi.epichub.ui.EpicHubShell
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 
 private const val RECENT_PROBLEM_POST_TRIGGER_NANOS = 3_000_000_000L
-private const val PROCESS_PERFORMANCE_SAMPLE_TICKS = 4
 
 @Composable
 fun EpicHubApp(
@@ -140,8 +141,16 @@ fun EpicHubApp(
         }
     }
 
-    LaunchedEffect(engine, diagnostics, nativeDiagnostics, processPerformanceSampler) {
-        var performanceSampleTicks = 0
+    LaunchedEffect(diagnostics, processPerformanceSampler) {
+        while (true) {
+            delay(1_000)
+            withContext(Dispatchers.Default) {
+                processPerformanceSampler.sample(diagnostics)
+            }
+        }
+    }
+
+    LaunchedEffect(engine, diagnostics, nativeDiagnostics) {
         while (true) {
             val startedAt = SystemClock.elapsedRealtimeNanos()
             val next = engine.readRuntimeSnapshot()
@@ -170,12 +179,6 @@ fun EpicHubApp(
                         correlationId = "native-session-${next.sessionId}",
                     )
                 }
-
-            performanceSampleTicks += 1
-            if (performanceSampleTicks >= PROCESS_PERFORMANCE_SAMPLE_TICKS) {
-                processPerformanceSampler.sample(diagnostics)
-                performanceSampleTicks = 0
-            }
 
             val recentCaptureFinished = diagnostics.finishRecentProblemCaptureIfDue(
                 RECENT_PROBLEM_POST_TRIGGER_NANOS,
