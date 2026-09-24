@@ -26,6 +26,11 @@ class DiagnosticHub(
         val worstFrames: MutableList<DiagnosticWorstFrame>,
     )
 
+    private data class PresentationContext(
+        val destinationId: String,
+        val changedAtNanos: Long,
+    )
+
     private val nextEventId = AtomicLong(1)
     private val nextCaptureId = AtomicLong(1)
     private val nextMarkerId = AtomicLong(1)
@@ -42,19 +47,21 @@ class DiagnosticHub(
     private var activeCaptureMetrics: DiagnosticMetrics? = null
 
     @Volatile
-    private var currentDestinationId: String = "dashboard"
+    private var presentationContext = PresentationContext(
+        destinationId = "dashboard",
+        changedAtNanos = clock.monotonicNanos(),
+    )
 
-    @Volatile
-    private var currentDestinationChangedAtNanos: Long = clock.monotonicNanos()
-
-    @Synchronized
     fun setCurrentDestination(destinationId: String) {
-        if (currentDestinationId == destinationId) return
-        currentDestinationId = destinationId
-        currentDestinationChangedAtNanos = clock.monotonicNanos()
+        val current = presentationContext
+        if (current.destinationId == destinationId) return
+        presentationContext = PresentationContext(
+            destinationId = destinationId,
+            changedAtNanos = clock.monotonicNanos(),
+        )
     }
 
-    fun currentDestination(): String = currentDestinationId
+    fun currentDestination(): String = presentationContext.destinationId
 
     fun record(
         severity: DiagnosticSeverity,
@@ -109,14 +116,15 @@ class DiagnosticHub(
         swapBuffersMs: Double?,
         gpuMs: Double?,
     ): DiagnosticWorstFrame {
+        val context = presentationContext
         val monotonicNow = clock.monotonicNanos()
-        val contextAgeMs = (monotonicNow - currentDestinationChangedAtNanos)
+        val contextAgeMs = (monotonicNow - context.changedAtNanos)
             .coerceAtLeast(0L) / NANOS_PER_MILLISECOND
         val frame = DiagnosticWorstFrame(
             frameNumber = frameNumber,
             monotonicNanos = monotonicNow,
             wallClockMillis = clock.wallClockMillis(),
-            destinationId = currentDestinationId,
+            destinationId = context.destinationId,
             contextAgeMs = contextAgeMs,
             firstDrawFrame = firstDrawFrame,
             totalMs = totalMs,
