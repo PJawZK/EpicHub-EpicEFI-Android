@@ -23,6 +23,7 @@ import com.epicefi.epichub.diagnostics.NativeDiagnosticIngestor
 import com.epicefi.epichub.engine.NativeEngine
 import com.epicefi.epichub.engine.RuntimeSnapshot
 import com.epicefi.epichub.navigation.AppDestination
+import com.epicefi.epichub.navigation.PrimaryWorkspace
 import com.epicefi.epichub.platform.diagnostics.DiagnosticCaptureExporter
 import com.epicefi.epichub.ui.EpicHubShell
 import kotlinx.coroutines.delay
@@ -42,6 +43,8 @@ fun EpicHubApp(
     }
 
     var destinationId by rememberSaveable { mutableStateOf(AppDestination.DASHBOARD.id) }
+    var lastTunerDestinationId by rememberSaveable { mutableStateOf(AppDestination.TUNER.id) }
+    var lastLoggerDestinationId by rememberSaveable { mutableStateOf(AppDestination.LOGGER.id) }
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
     var runtimeSnapshot by remember(engine) { mutableStateOf<RuntimeSnapshot?>(null) }
     var diagnosticSnapshot by remember { mutableStateOf(diagnostics.snapshotForUi()) }
@@ -51,6 +54,34 @@ fun EpicHubApp(
 
     fun refreshDiagnostics() {
         diagnosticSnapshot = diagnostics.snapshotForUi()
+    }
+
+    fun selectDestination(destination: AppDestination) {
+        destinationId = destination.id
+        when (destination.workspace) {
+            PrimaryWorkspace.TUNER -> lastTunerDestinationId = destination.id
+            PrimaryWorkspace.LOGGER -> lastLoggerDestinationId = destination.id
+            else -> Unit
+        }
+        settingsOpen = false
+        diagnostics.record(
+            severity = DiagnosticSeverity.TRACE,
+            domain = DiagnosticDomain.APP_UI,
+            code = DiagnosticEventCode.APP_DESTINATION_CHANGED,
+            payload = DiagnosticPayload.DestinationChanged(destination.id),
+        )
+        refreshDiagnostics()
+    }
+
+    fun selectWorkspace(workspace: PrimaryWorkspace) {
+        val remembered = when (workspace) {
+            PrimaryWorkspace.TUNER -> AppDestination.fromId(lastTunerDestinationId)
+            PrimaryWorkspace.LOGGER -> AppDestination.fromId(lastLoggerDestinationId)
+            else -> AppDestination.defaultFor(workspace)
+        }
+        val target = remembered.takeIf { it.workspace == workspace }
+            ?: AppDestination.defaultFor(workspace)
+        selectDestination(target)
     }
 
     DisposableEffect(engine, diagnostics, nativeEngineOwnerId) {
@@ -124,17 +155,8 @@ fun EpicHubApp(
     MaterialTheme {
         EpicHubShell(
             destination = AppDestination.fromId(destinationId),
-            onDestinationSelected = { destination ->
-                destinationId = destination.id
-                settingsOpen = false
-                diagnostics.record(
-                    severity = DiagnosticSeverity.TRACE,
-                    domain = DiagnosticDomain.APP_UI,
-                    code = DiagnosticEventCode.APP_DESTINATION_CHANGED,
-                    payload = DiagnosticPayload.DestinationChanged(destination.id),
-                )
-                refreshDiagnostics()
-            },
+            onDestinationSelected = ::selectDestination,
+            onWorkspaceSelected = ::selectWorkspace,
             settingsOpen = settingsOpen,
             onOpenSettings = { settingsOpen = true },
             onCloseSettings = {
