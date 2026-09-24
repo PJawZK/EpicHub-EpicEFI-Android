@@ -47,10 +47,10 @@ object DiagnosticCaptureExporter {
         }
     }
 
-    fun share(
+    fun createShareIntent(
         context: Context,
         capture: DiagnosticCapture,
-    ) {
+    ): Intent {
         val file = exportToCache(context, capture)
         val uri = FileProvider.getUriForFile(
             context,
@@ -63,11 +63,10 @@ object DiagnosticCaptureExporter {
             putExtra(Intent.EXTRA_SUBJECT, "EpicHub diagnostic capture #${capture.captureId}")
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        val chooser = Intent.createChooser(send, "Share EpicHub diagnostic capture").apply {
+        return Intent.createChooser(send, "Share EpicHub diagnostic capture").apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        context.startActivity(chooser)
     }
 
     private fun writeArchive(
