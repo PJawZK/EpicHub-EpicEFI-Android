@@ -10,6 +10,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -32,9 +33,11 @@ import com.epicefi.epichub.platform.diagnostics.ProcessPerformanceSampler
 import com.epicefi.epichub.ui.EpicHubShell
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 private const val RECENT_PROBLEM_POST_TRIGGER_NANOS = 3_000_000_000L
+private const val DIAGNOSTICS_PRESENTATION_REFRESH_MS = 1_000L
 
 @Composable
 fun EpicHubApp(
@@ -42,6 +45,7 @@ fun EpicHubApp(
     nativeEngineGeneration: Long,
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val engine = remember { NativeEngine.create() }
     val nativeDiagnostics = remember { NativeDiagnosticIngestor() }
     val processPerformanceSampler = remember { ProcessPerformanceSampler() }
@@ -53,15 +57,42 @@ fun EpicHubApp(
     var lastTunerDestinationId by rememberSaveable { mutableStateOf(AppDestination.TUNER.id) }
     var lastLoggerDestinationId by rememberSaveable { mutableStateOf(AppDestination.LOGGER.id) }
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
-    var runtimeSnapshot by remember(engine) { mutableStateOf<RuntimeSnapshot?>(null) }
-    var diagnosticSnapshot by remember { mutableStateOf(diagnostics.snapshotForUi()) }
+    val runtimeSnapshot = remember(engine) { mutableStateOf<RuntimeSnapshot?>(null) }
+    var diagnosticSnapshot by remember {
+        mutableStateOf(
+            DiagnosticsSnapshot(
+                events = emptyList(),
+                metrics = emptyList(),
+                lifecycleOwners = emptyList(),
+                captures = emptyList(),
+                activeCapture = diagnostics.activeCapture(),
+            ),
+        )
+    }
     var pendingSaveCapture by remember { mutableStateOf<DiagnosticCapture?>(null) }
 
     val latestDestinationId by rememberUpdatedState(destinationId)
     val latestSettingsOpen by rememberUpdatedState(settingsOpen)
 
-    fun refreshDiagnostics() {
-        diagnosticSnapshot = diagnostics.snapshotForUi()
+    remember(diagnostics) {
+        diagnostics.setCurrentDestination(AppDestination.DASHBOARD.id)
+        true
+    }
+
+    fun diagnosticsVisible(): Boolean =
+        AppDestination.fromId(destinationId) == AppDestination.DIAGNOSTICS && !settingsOpen
+
+    fun refreshCaptureState() {
+        diagnosticSnapshot = diagnosticSnapshot.copy(activeCapture = diagnostics.activeCapture())
+    }
+
+    fun requestDiagnosticsRefresh() {
+        scope.launch {
+            val next = withContext(Dispatchers.Default) {
+                diagnostics.snapshotForUi()
+            }
+            diagnosticSnapshot = next
+        }
     }
 
     fun recordExportFailure(capture: DiagnosticCapture, error: Throwable) {
@@ -71,7 +102,7 @@ fun EpicHubApp(
             domain = DiagnosticDomain.DIAGNOSTIC_CAPTURE,
             correlationId = "capture-${capture.captureId}",
         )
-        refreshDiagnostics()
+        requestDiagnosticsRefresh()
     }
 
     val saveCaptureLauncher = rememberLauncherForActivityResult(
@@ -80,16 +111,22 @@ fun EpicHubApp(
         val capture = pendingSaveCapture
         pendingSaveCapture = null
         if (destination != null && capture != null) {
-            runCatching {
-                DiagnosticCaptureExporter.save(context, capture, destination)
-            }.onFailure { error ->
-                recordExportFailure(capture, error)
+            scope.launch {
+                val failure = runCatching {
+                    withContext(Dispatchers.IO) {
+                        DiagnosticCaptureExporter.save(context, capture, destination)
+                    }
+                }.exceptionOrNull()
+                if (failure != null) {
+                    recordExportFailure(capture, failure)
+                }
             }
         }
     }
 
     fun selectDestination(destination: AppDestination) {
         destinationId = destination.id
+        diagnostics.setCurrentDestination(destination.id)
         when (destination.workspace) {
             PrimaryWorkspace.TUNER -> lastTunerDestinationId = destination.id
             PrimaryWorkspace.LOGGER -> lastLoggerDestinationId = destination.id
@@ -102,7 +139,6 @@ fun EpicHubApp(
             code = DiagnosticEventCode.APP_DESTINATION_CHANGED,
             payload = DiagnosticPayload.DestinationChanged(destination.id),
         )
-        refreshDiagnostics()
     }
 
     fun selectWorkspace(workspace: PrimaryWorkspace) {
@@ -123,7 +159,6 @@ fun EpicHubApp(
             generation = nativeEngineGeneration,
             initialState = "active",
         )
-        refreshDiagnostics()
 
         onDispose {
             engine.close()
@@ -141,6 +176,19 @@ fun EpicHubApp(
         }
     }
 
+    LaunchedEffect(destinationId, settingsOpen, diagnostics) {
+        val visible =
+            AppDestination.fromId(destinationId) == AppDestination.DIAGNOSTICS && !settingsOpen
+        if (visible) {
+            while (true) {
+                diagnosticSnapshot = withContext(Dispatchers.Default) {
+                    diagnostics.snapshotForUi()
+                }
+                delay(DIAGNOSTICS_PRESENTATION_REFRESH_MS)
+            }
+        }
+    }
+
     LaunchedEffect(diagnostics, processPerformanceSampler) {
         while (true) {
             delay(1_000)
@@ -152,42 +200,47 @@ fun EpicHubApp(
 
     LaunchedEffect(engine, diagnostics, nativeDiagnostics) {
         while (true) {
-            val startedAt = SystemClock.elapsedRealtimeNanos()
-            val next = engine.readRuntimeSnapshot()
-            val elapsedMs = (SystemClock.elapsedRealtimeNanos() - startedAt) / 1_000_000.0
-            runtimeSnapshot = next
-            diagnostics.observeMetric(DiagnosticMetricId.RUNTIME_SNAPSHOT_READ_MS, elapsedMs)
-            diagnostics.observeMetric(DiagnosticMetricId.RUNTIME_SNAPSHOT_SEQUENCE, next.sequence.toDouble())
-            diagnostics.observeMetric(
-                DiagnosticMetricId.ACTIVE_NATIVE_ENGINES,
-                NativeEngine.activeCount().toDouble(),
-            )
+            val next = withContext(Dispatchers.Default) {
+                val startedAt = SystemClock.elapsedRealtimeNanos()
+                val snapshot = engine.readRuntimeSnapshot()
+                val elapsedMs = (SystemClock.elapsedRealtimeNanos() - startedAt) / 1_000_000.0
+                diagnostics.observeMetric(DiagnosticMetricId.RUNTIME_SNAPSHOT_READ_MS, elapsedMs)
+                diagnostics.observeMetric(DiagnosticMetricId.RUNTIME_SNAPSHOT_SEQUENCE, snapshot.sequence.toDouble())
+                diagnostics.observeMetric(
+                    DiagnosticMetricId.ACTIVE_NATIVE_ENGINES,
+                    NativeEngine.activeCount().toDouble(),
+                )
 
-            runCatching { engine.drainDiagnosticEvents() }
-                .onSuccess { batch ->
-                    nativeDiagnostics.ingest(
-                        batch = batch,
-                        diagnostics = diagnostics,
-                        sessionId = next.sessionId,
-                    )
-                }
-                .onFailure { error ->
-                    diagnostics.invariantViolation(
-                        invariantId = "native.diagnostics.drain_failed",
-                        detail = error.message ?: error::class.java.simpleName,
-                        domain = DiagnosticDomain.NATIVE_ENGINE,
-                        correlationId = "native-session-${next.sessionId}",
-                    )
-                }
+                runCatching { engine.drainDiagnosticEvents() }
+                    .onSuccess { batch ->
+                        nativeDiagnostics.ingest(
+                            batch = batch,
+                            diagnostics = diagnostics,
+                            sessionId = snapshot.sessionId,
+                        )
+                    }
+                    .onFailure { error ->
+                        diagnostics.invariantViolation(
+                            invariantId = "native.diagnostics.drain_failed",
+                            detail = error.message ?: error::class.java.simpleName,
+                            domain = DiagnosticDomain.NATIVE_ENGINE,
+                            correlationId = "native-session-${snapshot.sessionId}",
+                        )
+                    }
+                snapshot
+            }
+            runtimeSnapshot.value = next
 
-            val recentCaptureFinished = diagnostics.finishRecentProblemCaptureIfDue(
-                RECENT_PROBLEM_POST_TRIGGER_NANOS,
-            ) != null
-            val diagnosticsVisible =
-                AppDestination.fromId(latestDestinationId) == AppDestination.DIAGNOSTICS &&
-                    !latestSettingsOpen
-            if (diagnosticsVisible || recentCaptureFinished) {
-                refreshDiagnostics()
+            val recentCaptureFinished = withContext(Dispatchers.Default) {
+                diagnostics.finishRecentProblemCaptureIfDue(
+                    RECENT_PROBLEM_POST_TRIGGER_NANOS,
+                )
+            } != null
+            if (recentCaptureFinished) {
+                refreshCaptureState()
+                if (diagnosticsVisible()) {
+                    requestDiagnosticsRefresh()
+                }
             }
             delay(250)
         }
@@ -203,7 +256,7 @@ fun EpicHubApp(
             onCloseSettings = {
                 settingsOpen = false
                 if (AppDestination.fromId(destinationId) == AppDestination.DIAGNOSTICS) {
-                    refreshDiagnostics()
+                    requestDiagnosticsRefresh()
                 }
             },
             runtimeSnapshot = runtimeSnapshot,
@@ -212,20 +265,29 @@ fun EpicHubApp(
             activeEngineCount = NativeEngine.activeCount(),
             onCaptureRecentProblem = {
                 diagnostics.startRecentProblemCapture()
-                refreshDiagnostics()
+                refreshCaptureState()
             },
             onStartReproductionCapture = {
                 diagnostics.startReproductionCapture()
-                refreshDiagnostics()
+                refreshCaptureState()
             },
             onAddCaptureMarker = {
                 diagnostics.addMarker()
-                refreshDiagnostics()
+                refreshCaptureState()
             },
             onStopCapture = {
-                if (diagnostics.activeCapture() != null) {
-                    diagnostics.finishCapture()
-                    refreshDiagnostics()
+                scope.launch {
+                    val finished = withContext(Dispatchers.Default) {
+                        if (diagnostics.activeCapture() != null) {
+                            diagnostics.finishCapture()
+                        } else {
+                            null
+                        }
+                    }
+                    refreshCaptureState()
+                    if (finished != null && diagnosticsVisible()) {
+                        requestDiagnosticsRefresh()
+                    }
                 }
             },
             onSaveCapture = { capture ->
