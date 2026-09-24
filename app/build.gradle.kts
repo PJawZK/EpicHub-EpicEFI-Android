@@ -21,6 +21,7 @@ plugins {
 }
 
 val pinnedNdkVersion = "30.0.16248370"
+val buildGitSha = System.getenv("GITHUB_SHA")?.takeIf { it.isNotBlank() } ?: "unknown"
 val rustCrateDirectory = rootProject.layout.projectDirectory.dir("rust/engine")
 val rustManifest = rustCrateDirectory.file("Cargo.toml")
 val rustSources = rustCrateDirectory.dir("src")
@@ -117,6 +118,7 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "0.1.0-dev"
+        buildConfigField("String", "GIT_SHA", "\"$buildGitSha\"")
 
         ndk {
             abiFilters += listOf("armeabi-v7a", "arm64-v8a")
