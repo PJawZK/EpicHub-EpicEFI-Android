@@ -29,6 +29,7 @@ import com.epicefi.epichub.ui.components.KeyValueRow
 import com.epicefi.epichub.ui.components.StructuralCard
 import java.text.DateFormat
 import java.util.Date
+import java.util.Locale
 
 @Composable
 fun DiagnosticsScreen(
@@ -122,6 +123,9 @@ private fun PerformanceTab(diagnostics: DiagnosticsSnapshot) {
     val javaHeap = diagnostics.metric(DiagnosticMetricId.PROCESS_JAVA_HEAP_USED_MB)
     val nativeHeap = diagnostics.metric(DiagnosticMetricId.PROCESS_NATIVE_HEAP_ALLOCATED_MB)
     val pss = diagnostics.metric(DiagnosticMetricId.PROCESS_PSS_MB)
+    val allocated = diagnostics.metric(DiagnosticMetricId.PROCESS_ALLOCATED_MB)
+    val gcCount = diagnostics.metric(DiagnosticMetricId.PROCESS_GC_COUNT)
+    val gcTime = diagnostics.metric(DiagnosticMetricId.PROCESS_GC_TIME_MS)
 
     LazyColumn(
         modifier = Modifier
@@ -139,6 +143,7 @@ private fun PerformanceTab(diagnostics: DiagnosticsSnapshot) {
                 KeyValueRow("Jank frames", "${jankFrames.toLong()} (${jankPercent.formatMetric()}%)")
                 KeyValueRow("Frame budget", frameBudget?.current?.formatWithUnit("ms") ?: "waiting")
                 KeyValueRow("Frame p50 / p95 / p99", frameTotal.percentiles("ms"))
+                KeyValueRow("Frame samples total / retained", frameTotal.sampleWindow())
                 KeyValueRow("Jank overrun p95 / p99", overrun.tailPercentiles("ms"))
                 KeyValueRow("UI-thread vsync delay p95 / p99", vsyncDelay.tailPercentiles("ms"))
             }
@@ -147,12 +152,15 @@ private fun PerformanceTab(diagnostics: DiagnosticsSnapshot) {
             StructuralCard(
                 title = "Process load",
                 modifier = Modifier.fillMaxWidth(),
-                subtitle = "CPU is process CPU time expressed as percent of one fully occupied core.",
+                subtitle = "CPU is process CPU time expressed as percent of one fully occupied core. Memory rows show first → current and capture/session delta.",
             ) {
                 KeyValueRow("CPU p50 / p95 / p99", cpu.percentiles("%"))
-                KeyValueRow("Java heap current / max", javaHeap.currentAndMax("MiB"))
-                KeyValueRow("Native heap current / max", nativeHeap.currentAndMax("MiB"))
-                KeyValueRow("PSS current / max", pss.currentAndMax("MiB"))
+                KeyValueRow("Java heap", javaHeap.trend("MiB"))
+                KeyValueRow("Native heap", nativeHeap.trend("MiB"))
+                KeyValueRow("PSS", pss.trend("MiB"))
+                KeyValueRow("Allocated bytes", allocated.trend("MiB"))
+                KeyValueRow("GC count", gcCount.delta("count"))
+                KeyValueRow("GC time", gcTime.delta("ms"))
             }
         }
         item {
@@ -227,10 +235,11 @@ private fun MetricsTab(diagnostics: DiagnosticsSnapshot) {
                 modifier = Modifier.fillMaxWidth(),
                 subtitle = metric.metric.unit,
             ) {
-                KeyValueRow("Current", metric.current.formatMetric())
+                KeyValueRow("First / Current", "${metric.first.formatMetric()} / ${metric.current.formatMetric()}")
+                KeyValueRow("Delta", (metric.current - metric.first).formatMetric())
                 KeyValueRow("Min / Max", "${metric.minimum.formatMetric()} / ${metric.maximum.formatMetric()}")
                 KeyValueRow("p50 / p95 / p99", "${metric.p50.formatMetric()} / ${metric.p95.formatMetric()} / ${metric.p99.formatMetric()}")
-                KeyValueRow("Samples", metric.sampleCount.toString())
+                KeyValueRow("Samples total / retained", "${metric.sampleCount} / ${metric.retainedSampleCount}")
             }
         }
     }
@@ -288,6 +297,7 @@ private fun CapturesTab(
             val frames = capture.metric(DiagnosticMetricId.UI_FRAME_COUNT)?.current ?: 0.0
             val jankFrames = capture.metric(DiagnosticMetricId.UI_JANK_FRAME_COUNT)?.current ?: 0.0
             val jankPercent = if (frames > 0.0) jankFrames / frames * 100.0 else 0.0
+            val worstFrame = capture.worstFrames.firstOrNull()
             StructuralCard(
                 title = "Problem capture #${capture.captureId}",
                 modifier = Modifier.fillMaxWidth(),
@@ -299,6 +309,12 @@ private fun CapturesTab(
                 if (frames > 0.0) {
                     KeyValueRow("Performance frames", frames.toLong().toString())
                     KeyValueRow("Jank", "${jankFrames.toLong()} (${jankPercent.formatMetric()}%)")
+                }
+                if (worstFrame != null) {
+                    KeyValueRow(
+                        "Worst frame",
+                        "${worstFrame.destinationId} · +${worstFrame.overrunMs.formatMetric()} ms",
+                    )
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = { onSaveCapture(capture) }) {
@@ -325,9 +341,20 @@ private fun DiagnosticMetricSummary?.percentiles(unit: String): String =
 private fun DiagnosticMetricSummary?.tailPercentiles(unit: String): String =
     this?.let { "${p95.formatMetric()} / ${p99.formatMetric()} $unit" } ?: "none observed"
 
-private fun DiagnosticMetricSummary?.currentAndMax(unit: String): String =
-    this?.let { "${current.formatMetric()} / ${maximum.formatMetric()} $unit" } ?: "waiting"
+private fun DiagnosticMetricSummary?.sampleWindow(): String =
+    this?.let { "$sampleCount / $retainedSampleCount" } ?: "waiting"
+
+private fun DiagnosticMetricSummary?.trend(unit: String): String =
+    this?.let {
+        "${first.formatMetric()} → ${current.formatMetric()} " +
+            "(Δ ${(current - first).formatSignedMetric()}) $unit; max ${maximum.formatMetric()}"
+    } ?: "waiting"
+
+private fun DiagnosticMetricSummary?.delta(unit: String): String =
+    this?.let { "Δ ${(current - first).formatSignedMetric()} $unit; current ${current.formatMetric()}" } ?: "waiting"
 
 private fun Double.formatWithUnit(unit: String): String = "${formatMetric()} $unit"
 
-private fun Double.formatMetric(): String = "%.3f".format(this)
+private fun Double.formatMetric(): String = String.format(Locale.US, "%.3f", this)
+
+private fun Double.formatSignedMetric(): String = String.format(Locale.US, "%+.3f", this)
