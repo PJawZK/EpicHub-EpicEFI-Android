@@ -11,7 +11,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
@@ -70,14 +69,6 @@ fun EpicHubApp(
         )
     }
     var pendingSaveCapture by remember { mutableStateOf<DiagnosticCapture?>(null) }
-
-    val latestDestinationId by rememberUpdatedState(destinationId)
-    val latestSettingsOpen by rememberUpdatedState(settingsOpen)
-
-    remember(diagnostics) {
-        diagnostics.setCurrentDestination(AppDestination.DASHBOARD.id)
-        true
-    }
 
     fun diagnosticsVisible(): Boolean =
         AppDestination.fromId(destinationId) == AppDestination.DIAGNOSTICS && !settingsOpen
@@ -174,6 +165,10 @@ fun EpicHubApp(
             )
             diagnostics.destroyLifecycleOwner(nativeEngineOwnerId)
         }
+    }
+
+    LaunchedEffect(destinationId, diagnostics) {
+        diagnostics.setCurrentDestination(destinationId)
     }
 
     LaunchedEffect(destinationId, settingsOpen, diagnostics) {
