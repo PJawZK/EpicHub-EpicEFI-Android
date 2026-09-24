@@ -58,7 +58,8 @@ fun EpicHubShell(
     onOpenSettings: () -> Unit,
     onCloseSettings: () -> Unit,
     runtimeSnapshot: State<RuntimeSnapshot?>,
-    diagnostics: DiagnosticsSnapshot,
+    diagnostics: State<DiagnosticsSnapshot>,
+    activeCapture: ActiveDiagnosticCapture?,
     engineAlive: Boolean,
     activeEngineCount: Int,
     onCaptureRecentProblem: () -> Unit,
@@ -80,7 +81,7 @@ fun EpicHubShell(
             Column(modifier = Modifier.fillMaxSize()) {
                 SystemStatusHeader(
                     snapshot = runtimeSnapshot,
-                    diagnostics = diagnostics,
+                    activeCapture = activeCapture,
                     engineAlive = engineAlive,
                     activeEngineCount = activeEngineCount,
                     compact = !wide,
@@ -136,7 +137,7 @@ fun EpicHubShell(
 @Composable
 private fun SystemStatusHeader(
     snapshot: State<RuntimeSnapshot?>,
-    diagnostics: DiagnosticsSnapshot,
+    activeCapture: ActiveDiagnosticCapture?,
     engineAlive: Boolean,
     activeEngineCount: Int,
     compact: Boolean,
@@ -169,7 +170,7 @@ private fun SystemStatusHeader(
                     )
                     Spacer(modifier = Modifier.weight(1f))
                     HeaderCaptureControls(
-                        activeCapture = diagnostics.activeCapture,
+                        activeCapture = activeCapture,
                         compact = true,
                         onCaptureRecentProblem = onCaptureRecentProblem,
                         onStartReproductionCapture = onStartReproductionCapture,
@@ -222,7 +223,7 @@ private fun SystemStatusHeader(
                 )
                 Spacer(modifier = Modifier.weight(1f))
                 HeaderCaptureControls(
-                    activeCapture = diagnostics.activeCapture,
+                    activeCapture = activeCapture,
                     compact = false,
                     onCaptureRecentProblem = onCaptureRecentProblem,
                     onStartReproductionCapture = onStartReproductionCapture,
@@ -354,7 +355,7 @@ private fun ShellContent(
     settingsOpen: Boolean,
     onCloseSettings: () -> Unit,
     runtimeSnapshot: State<RuntimeSnapshot?>,
-    diagnostics: DiagnosticsSnapshot,
+    diagnostics: State<DiagnosticsSnapshot>,
     onSaveCapture: (DiagnosticCapture) -> Unit,
     onShareCapture: (DiagnosticCapture) -> Unit,
 ) {
@@ -366,7 +367,7 @@ private fun ShellContent(
     when (destination.workspace) {
         PrimaryWorkspace.DASHBOARD -> DashboardScreen(runtimeSnapshot.value)
         PrimaryWorkspace.DIAGNOSTICS -> DiagnosticsScreen(
-            diagnostics = diagnostics,
+            diagnostics = diagnostics.value,
             onSaveCapture = onSaveCapture,
             onShareCapture = onShareCapture,
         )
