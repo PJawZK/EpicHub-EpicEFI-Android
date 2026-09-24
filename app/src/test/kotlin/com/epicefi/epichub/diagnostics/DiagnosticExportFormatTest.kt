@@ -25,6 +25,8 @@ class DiagnosticExportFormatTest {
         assertTrue(encoded.containsUtf8("worstFrames"))
         assertTrue(encoded.containsUtf8("retainedSampleCount"))
         assertTrue(encoded.containsUtf8("gitSha"))
+        assertTrue(encoded.containsUtf8("contextAgeMs"))
+        assertTrue(encoded.containsUtf8("firstDrawFrame"))
     }
 
     @Test
@@ -97,6 +99,8 @@ class DiagnosticExportFormatTest {
                 monotonicNanos = 15,
                 wallClockMillis = 35,
                 destinationId = "analyzer",
+                contextAgeMs = 12.5,
+                firstDrawFrame = false,
                 totalMs = 40.0,
                 budgetMs = 16.0,
                 overrunMs = 24.0,
