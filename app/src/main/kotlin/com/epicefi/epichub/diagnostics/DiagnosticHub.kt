@@ -5,10 +5,14 @@ import java.util.concurrent.atomic.AtomicLong
 class DiagnosticHub(
     eventCapacity: Int = 512,
     private val retainedCaptureCount: Int = 20,
+    private val recentWorstFrameCapacity: Int = 32,
+    private val capturedWorstFrameCount: Int = 16,
     private val clock: DiagnosticClock = SystemDiagnosticClock,
 ) {
     init {
         require(retainedCaptureCount > 0) { "Retained capture count must be positive." }
+        require(recentWorstFrameCapacity > 0) { "Recent worst-frame capacity must be positive." }
+        require(capturedWorstFrameCount > 0) { "Captured worst-frame count must be positive." }
     }
 
     private data class CaptureBuilder(
@@ -19,6 +23,7 @@ class DiagnosticHub(
         val firstLiveEventId: Long,
         val preTriggerEvents: List<DiagnosticEvent>,
         val markers: MutableList<DiagnosticMarker>,
+        val worstFrames: MutableList<DiagnosticWorstFrame>,
     )
 
     private val nextEventId = AtomicLong(1)
@@ -28,12 +33,22 @@ class DiagnosticHub(
     private val metrics = DiagnosticMetrics()
     private val lifecycle = DiagnosticLifecycleRegistry()
     private val captures = ArrayDeque<DiagnosticCapture>()
+    private val recentWorstFrames = ArrayDeque<DiagnosticWorstFrame>()
 
     @Volatile
     private var activeCapture: CaptureBuilder? = null
 
     @Volatile
     private var activeCaptureMetrics: DiagnosticMetrics? = null
+
+    @Volatile
+    private var currentDestinationId: String = "dashboard"
+
+    fun setCurrentDestination(destinationId: String) {
+        currentDestinationId = destinationId
+    }
+
+    fun currentDestination(): String = currentDestinationId
 
     fun record(
         severity: DiagnosticSeverity,
@@ -71,6 +86,51 @@ class DiagnosticHub(
         incrementMetricInternal(metric, delta)
     }
 
+    @Synchronized
+    fun recordWorstFrame(
+        frameNumber: Long,
+        totalMs: Double,
+        budgetMs: Double,
+        overrunMs: Double,
+        vsyncDelayMs: Double?,
+        unknownDelayMs: Double?,
+        animationMs: Double?,
+        layoutMeasureMs: Double?,
+        drawMs: Double?,
+        syncMs: Double?,
+        commandIssueMs: Double?,
+        swapBuffersMs: Double?,
+        gpuMs: Double?,
+    ): DiagnosticWorstFrame {
+        val frame = DiagnosticWorstFrame(
+            frameNumber = frameNumber,
+            monotonicNanos = clock.monotonicNanos(),
+            wallClockMillis = clock.wallClockMillis(),
+            destinationId = currentDestinationId,
+            totalMs = totalMs,
+            budgetMs = budgetMs,
+            overrunMs = overrunMs,
+            vsyncDelayMs = vsyncDelayMs,
+            unknownDelayMs = unknownDelayMs,
+            animationMs = animationMs,
+            layoutMeasureMs = layoutMeasureMs,
+            drawMs = drawMs,
+            syncMs = syncMs,
+            commandIssueMs = commandIssueMs,
+            swapBuffersMs = swapBuffersMs,
+            gpuMs = gpuMs,
+        )
+
+        if (recentWorstFrames.size == recentWorstFrameCapacity) {
+            recentWorstFrames.removeFirst()
+        }
+        recentWorstFrames.addLast(frame)
+        activeCapture?.let { builder ->
+            retainWorstFrame(builder.worstFrames, frame)
+        }
+        return frame
+    }
+
     fun events(): List<DiagnosticEvent> = ring.snapshot()
 
     fun metricSummaries(): List<DiagnosticMetricSummary> = metrics.snapshot()
@@ -103,6 +163,10 @@ class DiagnosticHub(
             firstLiveEventId = ring.newestEventId(),
             preTriggerEvents = preTrigger,
             markers = mutableListOf(),
+            worstFrames = recentWorstFrames
+                .sortedByDescending(DiagnosticWorstFrame::overrunMs)
+                .take(capturedWorstFrameCount)
+                .toMutableList(),
         )
         activeCaptureMetrics = DiagnosticMetrics()
         activeCapture = builder
@@ -147,6 +211,7 @@ class DiagnosticHub(
             firstLiveEventId = ring.newestEventId(),
             preTriggerEvents = emptyList(),
             markers = mutableListOf(),
+            worstFrames = mutableListOf(),
         )
         activeCaptureMetrics = DiagnosticMetrics()
         activeCapture = builder
@@ -224,6 +289,7 @@ class DiagnosticHub(
             metrics = captureMetricWindow?.snapshot() ?: emptyList(),
             lifecycleOwners = lifecycle.snapshot(),
             markers = builder.markers.toList(),
+            worstFrames = builder.worstFrames.sortedByDescending(DiagnosticWorstFrame::overrunMs),
             note = note?.trim()?.takeIf { it.isNotEmpty() },
         )
         activeCapture = null
@@ -306,6 +372,19 @@ class DiagnosticHub(
     private fun incrementMetricInternal(metric: DiagnosticMetricId, delta: Double = 1.0) {
         metrics.increment(metric, delta)
         activeCaptureMetrics?.increment(metric, delta)
+    }
+
+    private fun retainWorstFrame(
+        frames: MutableList<DiagnosticWorstFrame>,
+        frame: DiagnosticWorstFrame,
+    ) {
+        frames += frame
+        if (frames.size > capturedWorstFrameCount) {
+            val leastBad = frames.indices.minByOrNull { frames[it].overrunMs }
+            if (leastBad != null) {
+                frames.removeAt(leastBad)
+            }
+        }
     }
 
     private fun DiagnosticLifecycleOwner.asPayload() = DiagnosticPayload.LifecycleState(
