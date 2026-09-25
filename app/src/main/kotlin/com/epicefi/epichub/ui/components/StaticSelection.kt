@@ -9,6 +9,7 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -22,11 +23,12 @@ import androidx.compose.ui.unit.dp
 private val StaticSelectionShape = RoundedCornerShape(10.dp)
 
 /**
- * Immediate, non-animated selection surface for high-frequency workspace/tab navigation.
+ * Structural selection helper retained for provisional foundation surfaces.
  *
- * The accepted visual authorities will eventually replace this structural styling. The
- * important foundation property is that selecting a route does not start an independent
- * Material indicator/ripple animation that competes with the destination's first draw.
+ * Horizontal text-only navigation now delegates to Material3 Tab. Physical qualification
+ * showed that the custom selectable Surface path produced substantially more transition jank
+ * than the previously proven Material navigation primitives. The custom flat path remains as
+ * a fallback for vertical/glyph presentation until those provisional surfaces are retired.
  */
 @Composable
 fun StaticSelectionChoice(
@@ -37,6 +39,20 @@ fun StaticSelectionChoice(
     glyph: String? = null,
     vertical: Boolean = false,
 ) {
+    if (!vertical && glyph == null) {
+        Tab(
+            selected = selected,
+            onClick = {
+                if (!selected) {
+                    onClick()
+                }
+            },
+            modifier = modifier,
+            text = { Text(label) },
+        )
+        return
+    }
+
     val interactionSource = remember { MutableInteractionSource() }
     val containerColor = if (selected) {
         MaterialTheme.colorScheme.secondaryContainer
