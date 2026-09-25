@@ -12,18 +12,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationRail
-import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -43,6 +38,7 @@ import com.epicefi.epichub.engine.RuntimeSnapshot
 import com.epicefi.epichub.navigation.AppDestination
 import com.epicefi.epichub.navigation.PrimaryWorkspace
 import com.epicefi.epichub.ui.analyzer.AnalyzerScreen
+import com.epicefi.epichub.ui.components.StaticSelectionChoice
 import com.epicefi.epichub.ui.dashboard.DashboardScreen
 import com.epicefi.epichub.ui.diagnostics.DiagnosticsScreen
 import com.epicefi.epichub.ui.diagnostics.DiagnosticsTab
@@ -304,15 +300,26 @@ private fun PrimaryNavigationRail(
     workspace: PrimaryWorkspace,
     onWorkspaceSelected: (PrimaryWorkspace) -> Unit,
 ) {
-    NavigationRail(modifier = Modifier.fillMaxHeight()) {
-        PrimaryWorkspace.entries.forEach { item ->
-            NavigationRailItem(
-                selected = item == workspace,
-                onClick = { onWorkspaceSelected(item) },
-                icon = { Text(item.glyph) },
-                label = { Text(item.compactLabel) },
-                alwaysShowLabel = true,
-            )
+    Surface(
+        modifier = Modifier
+            .fillMaxHeight()
+            .width(96.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+    ) {
+        Column(
+            modifier = Modifier.padding(4.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            PrimaryWorkspace.entries.forEach { item ->
+                StaticSelectionChoice(
+                    label = item.compactLabel,
+                    glyph = item.glyph,
+                    selected = item == workspace,
+                    onClick = { onWorkspaceSelected(item) },
+                    modifier = Modifier.fillMaxWidth(),
+                    vertical = true,
+                )
+            }
         }
     }
 }
@@ -322,15 +329,23 @@ private fun PrimaryNavigationBar(
     workspace: PrimaryWorkspace,
     onWorkspaceSelected: (PrimaryWorkspace) -> Unit,
 ) {
-    NavigationBar {
-        PrimaryWorkspace.entries.forEach { item ->
-            NavigationBarItem(
-                selected = item == workspace,
-                onClick = { onWorkspaceSelected(item) },
-                icon = { Text(item.glyph) },
-                label = { Text(item.compactLabel) },
-                alwaysShowLabel = true,
-            )
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            PrimaryWorkspace.entries.forEach { item ->
+                StaticSelectionChoice(
+                    label = item.compactLabel,
+                    glyph = item.glyph,
+                    selected = item == workspace,
+                    onClick = { onWorkspaceSelected(item) },
+                    modifier = Modifier.weight(1f),
+                    vertical = true,
+                )
+            }
         }
     }
 }
@@ -343,14 +358,19 @@ private fun WorkspaceRouteTabs(
     val routes = AppDestination.routesFor(destination.workspace)
     if (routes.size <= 1) return
 
-    val selectedIndex = routes.indexOf(destination).coerceAtLeast(0)
-    TabRow(selectedTabIndex = selectedIndex) {
-        routes.forEach { route ->
-            Tab(
-                selected = route == destination,
-                onClick = { onDestinationSelected(route) },
-                text = { Text(route.compactLabel) },
-            )
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+    ) {
+        Row(modifier = Modifier.fillMaxWidth()) {
+            routes.forEach { route ->
+                StaticSelectionChoice(
+                    label = route.compactLabel,
+                    selected = route == destination,
+                    onClick = { onDestinationSelected(route) },
+                    modifier = Modifier.weight(1f),
+                )
+            }
         }
     }
 }
