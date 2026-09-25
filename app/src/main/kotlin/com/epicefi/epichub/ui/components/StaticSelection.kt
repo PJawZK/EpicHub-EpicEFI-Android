@@ -1,15 +1,13 @@
 package com.epicefi.epichub.ui.components
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -20,15 +18,18 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
-private val StaticSelectionShape = RoundedCornerShape(10.dp)
-
 /**
- * Structural selection helper retained for provisional foundation surfaces.
+ * Lightweight immediate selection control for provisional high-frequency navigation.
  *
- * Horizontal text-only navigation now delegates to Material3 Tab. Physical qualification
- * showed that the custom selectable Surface path produced substantially more transition jank
- * than the previously proven Material navigation primitives. The custom flat path remains as
- * a fallback for vertical/glyph presentation until those provisional surfaces are retired.
+ * Physical qualification showed two undesirable extremes:
+ * - Material navigation primitives reduced transition misses but brought back noticeable
+ *   animation/allocation/CPU pressure.
+ * - The earlier custom per-item Surface path was cheap at steady state but produced heavy
+ *   transition drawing/jank.
+ *
+ * This implementation deliberately keeps only the essentials: rectangular background draw,
+ * selection semantics and text. There is no per-item Surface, clip/shape, ripple or selection
+ * animation. Selected-item taps are ignored before dispatching navigation work.
  */
 @Composable
 fun StaticSelectionChoice(
@@ -39,20 +40,6 @@ fun StaticSelectionChoice(
     glyph: String? = null,
     vertical: Boolean = false,
 ) {
-    if (!vertical && glyph == null) {
-        Tab(
-            selected = selected,
-            onClick = {
-                if (!selected) {
-                    onClick()
-                }
-            },
-            modifier = modifier,
-            text = { Text(label) },
-        )
-        return
-    }
-
     val interactionSource = remember { MutableInteractionSource() }
     val containerColor = if (selected) {
         MaterialTheme.colorScheme.secondaryContainer
@@ -64,9 +51,9 @@ fun StaticSelectionChoice(
     } else {
         MaterialTheme.colorScheme.onSurfaceVariant
     }
-
-    Surface(
-        modifier = modifier.selectable(
+    val selectionModifier = modifier
+        .background(containerColor)
+        .selectable(
             selected = selected,
             onClick = {
                 if (!selected) {
@@ -76,41 +63,47 @@ fun StaticSelectionChoice(
             role = Role.Tab,
             interactionSource = interactionSource,
             indication = null,
-        ),
-        color = containerColor,
-        contentColor = contentColor,
-        shape = StaticSelectionShape,
-    ) {
-        if (vertical) {
-            Column(
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 9.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(2.dp),
-            ) {
-                glyph?.let {
-                    Text(
-                        text = it,
-                        style = MaterialTheme.typography.labelLarge,
-                        textAlign = TextAlign.Center,
-                    )
-                }
+        )
+
+    if (vertical) {
+        Column(
+            modifier = selectionModifier.padding(horizontal = 8.dp, vertical = 9.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            glyph?.let {
                 Text(
-                    text = label,
-                    style = MaterialTheme.typography.labelMedium,
+                    text = it,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = contentColor,
                     textAlign = TextAlign.Center,
                 )
             }
-        } else {
-            Row(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                glyph?.let {
-                    Text(text = it, style = MaterialTheme.typography.labelLarge)
-                }
-                Text(text = label, style = MaterialTheme.typography.labelLarge)
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                color = contentColor,
+                textAlign = TextAlign.Center,
+            )
+        }
+    } else {
+        Row(
+            modifier = selectionModifier.padding(horizontal = 12.dp, vertical = 9.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            glyph?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = contentColor,
+                )
             }
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge,
+                color = contentColor,
+            )
         }
     }
 }
