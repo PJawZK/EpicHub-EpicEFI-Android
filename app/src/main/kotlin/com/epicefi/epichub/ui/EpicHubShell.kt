@@ -22,6 +22,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReusableContentHost
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -387,36 +388,58 @@ private fun ShellContent(
     onSaveCapture: (DiagnosticCapture) -> Unit,
     onShareCapture: (DiagnosticCapture) -> Unit,
 ) {
-    if (settingsOpen) {
-        SettingsScreen(onClose = onCloseSettings)
-        return
-    }
+    Box(modifier = Modifier.fillMaxSize()) {
+        ReusableContentHost(
+            active = !settingsOpen && destination.workspace == PrimaryWorkspace.DASHBOARD,
+        ) {
+            DashboardScreen(runtimeSnapshot)
+        }
 
-    when (destination.workspace) {
-        PrimaryWorkspace.DASHBOARD -> DashboardScreen(runtimeSnapshot)
-        PrimaryWorkspace.DIAGNOSTICS -> DiagnosticsScreen(
-            diagnostics = diagnostics,
-            onTabSelected = onDiagnosticsTabSelected,
-            onSaveCapture = onSaveCapture,
-            onShareCapture = onShareCapture,
-        )
-        PrimaryWorkspace.TUNER -> Column(modifier = Modifier.fillMaxSize()) {
-            WorkspaceRouteTabs(destination, onDestinationSelected)
-            Box(modifier = Modifier.weight(1f)) {
-                when (destination) {
-                    AppDestination.TUNING_TOOLS -> TuningToolsScreen()
-                    else -> TunerScreen()
+        ReusableContentHost(
+            active = !settingsOpen && destination.workspace == PrimaryWorkspace.DIAGNOSTICS,
+        ) {
+            DiagnosticsScreen(
+                diagnostics = diagnostics,
+                onTabSelected = onDiagnosticsTabSelected,
+                onSaveCapture = onSaveCapture,
+                onShareCapture = onShareCapture,
+            )
+        }
+
+        ReusableContentHost(
+            active = !settingsOpen && destination.workspace == PrimaryWorkspace.TUNER,
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                WorkspaceRouteTabs(destination, onDestinationSelected)
+                Box(modifier = Modifier.weight(1f)) {
+                    ReusableContentHost(active = destination == AppDestination.TUNER) {
+                        TunerScreen()
+                    }
+                    ReusableContentHost(active = destination == AppDestination.TUNING_TOOLS) {
+                        TuningToolsScreen()
+                    }
                 }
             }
         }
-        PrimaryWorkspace.LOGGER -> Column(modifier = Modifier.fillMaxSize()) {
-            WorkspaceRouteTabs(destination, onDestinationSelected)
-            Box(modifier = Modifier.weight(1f)) {
-                when (destination) {
-                    AppDestination.ANALYZER -> AnalyzerScreen()
-                    else -> LoggerScreen(runtimeSnapshot)
+
+        ReusableContentHost(
+            active = !settingsOpen && destination.workspace == PrimaryWorkspace.LOGGER,
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                WorkspaceRouteTabs(destination, onDestinationSelected)
+                Box(modifier = Modifier.weight(1f)) {
+                    ReusableContentHost(active = destination == AppDestination.LOGGER) {
+                        LoggerScreen(runtimeSnapshot)
+                    }
+                    ReusableContentHost(active = destination == AppDestination.ANALYZER) {
+                        AnalyzerScreen()
+                    }
                 }
             }
+        }
+
+        ReusableContentHost(active = settingsOpen) {
+            SettingsScreen(onClose = onCloseSettings)
         }
     }
 }
