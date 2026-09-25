@@ -17,6 +17,8 @@ android {
     buildTypes {
         create("performance") {
             isDebuggable = true
+            isMinifyEnabled = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
             matchingFallbacks += listOf("performance")
         }
     }
