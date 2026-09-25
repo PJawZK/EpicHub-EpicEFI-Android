@@ -140,3 +140,11 @@ jobs:
           path: app/build/outputs/apk/performance/app-performance.apk
           if-no-files-found: error
           retention-days: 14
+
+      - name: Publish qualified Macrobenchmark APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: epichub-macrobenchmark-performance
+          path: benchmark/build/outputs/apk/performance/*.apk
+          if-no-files-found: error
+          retention-days: 14
