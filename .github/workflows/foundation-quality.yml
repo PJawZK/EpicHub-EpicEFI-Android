@@ -125,6 +125,34 @@ jobs:
             printf 'Verified %s native libraries:\n%s\n' "$APK" "${EPICHUB_LIBS[*]}"
           done
 
+      - name: Prepare physical benchmark kit
+        shell: bash
+        run: |
+          KIT="$RUNNER_TEMP/epichub-performance-benchmark-kit"
+          rm -rf "$KIT"
+          mkdir -p "$KIT"
+
+          cp app/build/outputs/apk/performance/app-performance.apk \
+            "$KIT/EpicHub-Performance.apk"
+          cp benchmark/build/outputs/apk/performance/benchmark-performance.apk \
+            "$KIT/EpicHub-Macrobenchmark.apk"
+          cp scripts/run-performance-benchmark.ps1 \
+            "$KIT/run-performance-benchmark.ps1"
+          cp docs/PERFORMANCE_BENCHMARKING.md \
+            "$KIT/PERFORMANCE_BENCHMARKING.md"
+
+          {
+            echo "EpicHub qualified physical benchmark kit"
+            echo "sourceSha=$EPICHUB_SOURCE_SHA"
+            echo "workflowRun=${{ github.run_id }}"
+            echo "workflowRunNumber=${{ github.run_number }}"
+            echo
+            sha256sum \
+              "$KIT/EpicHub-Performance.apk" \
+              "$KIT/EpicHub-Macrobenchmark.apk" \
+              | sed "s#  $KIT/#  #"
+          } > "$KIT/QUALIFIED_BUILD.txt"
+
       - name: Publish qualified foundation debug APK
         uses: actions/upload-artifact@v7
         with:
@@ -146,5 +174,13 @@ jobs:
         with:
           name: epichub-macrobenchmark-performance
           path: benchmark/build/outputs/apk/performance/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Publish physical benchmark kit
+        uses: actions/upload-artifact@v7
+        with:
+          name: epichub-performance-benchmark-kit
+          path: ${{ runner.temp }}/epichub-performance-benchmark-kit
           if-no-files-found: error
           retention-days: 14
