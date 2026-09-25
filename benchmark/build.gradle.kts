@@ -13,6 +13,7 @@ android {
     }
 
     targetProjectPath = ":app"
+    experimentalProperties["android.experimental.self-instrumenting"] = true
 
     buildTypes {
         create("performance") {
@@ -22,6 +23,11 @@ android {
             matchingFallbacks += listOf("performance")
         }
     }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
 }
 
 dependencies {
@@ -29,4 +35,11 @@ dependencies {
     implementation("androidx.test.ext:junit:1.3.0")
     implementation("androidx.test:runner:1.7.0")
     implementation("androidx.test.uiautomator:uiautomator:2.4.0")
+
+    // The test APK is independently shrunk because the target performance APK is R8-shrunk.
+    // Keep the benchmark process self-contained without changing EpicHub's measured runtime.
+    implementation("androidx.arch.core:core-runtime:2.2.0")
+    implementation("androidx.profileinstaller:profileinstaller:1.4.1")
+    implementation("androidx.startup:startup-runtime:1.2.0")
+    implementation("com.google.errorprone:error_prone_annotations:2.50.0")
 }
