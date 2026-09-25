@@ -17,15 +17,17 @@ android {
 
     buildTypes {
         create("performance") {
-            // The benchmark APK is instrumentation only. Keep it non-debuggable so AGP/R8
-            // can actually apply the shrink/obfuscation configuration required when testing
-            // EpicHub's R8-shrunk performance build.
+            // The tested EpicHub performance APK is R8-shrunk, so AGP requires the
+            // instrumentation APK to be shrunk as well. Keep the benchmark process
+            // non-debuggable and apply the compatibility rules to both the ordinary
+            // shrink configuration and the test-code shrink pass.
             isDebuggable = false
             isMinifyEnabled = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+            testProguardFiles("proguard-rules.pro")
             matchingFallbacks += listOf("performance")
         }
     }
