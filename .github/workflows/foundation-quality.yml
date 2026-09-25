@@ -104,6 +104,9 @@ jobs:
       - name: Android performance build
         run: gradle :app:assemblePerformance --stacktrace
 
+      - name: Android Macrobenchmark harness build
+        run: gradle :benchmark:assemblePerformance --stacktrace
+
       - name: Verify production ARM libraries in APKs
         shell: bash
         run: |
