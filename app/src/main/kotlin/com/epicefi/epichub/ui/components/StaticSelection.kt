@@ -15,6 +15,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
@@ -30,6 +32,9 @@ import androidx.compose.ui.unit.dp
  * This implementation deliberately keeps only the essentials: rectangular background draw,
  * selection semantics and text. There is no per-item Surface, clip/shape, ripple or selection
  * animation. Selected-item taps are ignored before dispatching navigation work.
+ *
+ * [automationDescription] is an accessibility-safe stable description used by the external
+ * Macrobenchmark/UI Automator harness. It adds no benchmark logic to the app process.
  */
 @Composable
 fun StaticSelectionChoice(
@@ -39,6 +44,7 @@ fun StaticSelectionChoice(
     modifier: Modifier = Modifier,
     glyph: String? = null,
     vertical: Boolean = false,
+    automationDescription: String? = null,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val containerColor = if (selected) {
@@ -51,7 +57,14 @@ fun StaticSelectionChoice(
     } else {
         MaterialTheme.colorScheme.onSurfaceVariant
     }
-    val selectionModifier = modifier
+    val describedModifier = if (automationDescription == null) {
+        modifier
+    } else {
+        modifier.semantics {
+            contentDescription = automationDescription
+        }
+    }
+    val selectionModifier = describedModifier
         .background(containerColor)
         .selectable(
             selected = selected,
