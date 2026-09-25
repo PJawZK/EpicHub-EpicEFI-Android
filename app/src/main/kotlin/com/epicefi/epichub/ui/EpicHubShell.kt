@@ -319,6 +319,7 @@ private fun PrimaryNavigationRail(
                     onClick = { onWorkspaceSelected(item) },
                     modifier = Modifier.fillMaxWidth(),
                     vertical = true,
+                    automationDescription = "${item.label} workspace",
                 )
             }
         }
@@ -345,6 +346,7 @@ private fun PrimaryNavigationBar(
                     onClick = { onWorkspaceSelected(item) },
                     modifier = Modifier.weight(1f),
                     vertical = true,
+                    automationDescription = "${item.label} workspace",
                 )
             }
         }
@@ -370,6 +372,7 @@ private fun WorkspaceRouteTabs(
                     selected = route == destination,
                     onClick = { onDestinationSelected(route) },
                     modifier = Modifier.weight(1f),
+                    automationDescription = "${route.label} route",
                 )
             }
         }
