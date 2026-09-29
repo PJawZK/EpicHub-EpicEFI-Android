@@ -138,6 +138,9 @@ jobs:
             "$KIT/EpicHub-Macrobenchmark.apk"
           cp scripts/run-performance-benchmark.ps1 \
             "$KIT/run-performance-benchmark.ps1"
+          cp scripts/run-performance-benchmark.sh \
+            "$KIT/run-performance-benchmark.sh"
+          chmod +x "$KIT/run-performance-benchmark.sh"
           cp docs/PERFORMANCE_BENCHMARKING.md \
             "$KIT/PERFORMANCE_BENCHMARKING.md"
 
