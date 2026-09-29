@@ -45,23 +45,54 @@ This intentionally represents a pessimistic fresh-install / first-use path and m
 
 ## Running on the physical qualification device
 
-Connect exactly one physical Android device through ADB and run from PowerShell:
+The qualified physical benchmark kit contains the exact CI-built EpicHub performance APK, Macrobenchmark APK and both Windows PowerShell and Linux Bash runners. The Macrobenchmark APK is an instrumentation/test APK; do not attempt to install it by tapping it in a file manager. The runner installs it with ADB's test-package flag.
+
+Connect exactly one physical Android device through ADB, keep it awake and unlocked, and do not interact with it while the benchmark runs.
+
+### Linux / Zorin OS
+
+Install the small host-side requirements:
+
+```bash
+sudo apt install adb zip
+```
+
+From the extracted benchmark kit:
+
+```bash
+chmod +x run-performance-benchmark.sh
+./run-performance-benchmark.sh
+```
+
+Run one benchmark method only:
+
+```bash
+./run-performance-benchmark.sh --method warmWorkspaceNavigation
+./run-performance-benchmark.sh --method warmDiagnosticsTabs
+./run-performance-benchmark.sh --method coldFirstVisitJourney
+```
+
+### Windows PowerShell
+
+From the extracted benchmark kit:
 
 ```powershell
-./scripts/run-performance-benchmark.ps1
+./run-performance-benchmark.ps1
 ```
 
 Run one benchmark method only:
 
 ```powershell
-./scripts/run-performance-benchmark.ps1 -Method warmWorkspaceNavigation
-./scripts/run-performance-benchmark.ps1 -Method warmDiagnosticsTabs
-./scripts/run-performance-benchmark.ps1 -Method coldFirstVisitJourney
+./run-performance-benchmark.ps1 -Method warmWorkspaceNavigation
+./run-performance-benchmark.ps1 -Method warmDiagnosticsTabs
+./run-performance-benchmark.ps1 -Method coldFirstVisitJourney
 ```
 
-The script refuses emulator execution by default. `-AllowEmulator` exists only for debugging the harness; emulator numbers are not valid performance qualification evidence.
+Both prebuilt runners install/reinstall the exact qualified APK pair, invoke instrumentation directly, pull benchmark JSON and Perfetto trace evidence, record device/build/APK hashes, and create one `EpicHub-Benchmark-<timestamp>.zip` for analysis.
 
-Android Gradle/Macrobenchmark pulls benchmark JSON and Perfetto trace artifacts into the benchmark module build outputs. The script prints the newest result files after a successful run.
+The runners refuse emulator execution by default. Emulator numbers are useful only for harness debugging, not performance qualification evidence.
+
+When running from a repository checkout instead of a prebuilt CI kit, the PowerShell runner can also use Gradle `connectedPerformanceAndroidTest`; the qualified physical-kit path is preferred for reproducible device comparison because it avoids rebuilding the target locally.
 
 ## Qualification policy
 
