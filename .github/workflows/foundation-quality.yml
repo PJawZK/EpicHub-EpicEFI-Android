@@ -66,6 +66,7 @@ jobs:
 
           test -f "$SDK_ROOT/platforms/android-37.0/android.jar"
           test -x "$SDK_ROOT/build-tools/37.0.0/aapt2"
+          test -x "$SDK_ROOT/build-tools/37.0.0/apksigner"
           test -d "$SDK_ROOT/ndk/30.0.16248370"
 
       - name: Set up Gradle 9.6
@@ -106,6 +107,19 @@ jobs:
 
       - name: Android Macrobenchmark harness build
         run: gradle :benchmark:assemblePerformance --stacktrace
+
+      - name: Verify APK signatures
+        shell: bash
+        run: |
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          APKSIGNER="$SDK_ROOT/build-tools/37.0.0/apksigner"
+          for APK in \
+            app/build/outputs/apk/performance/app-performance.apk \
+            benchmark/build/outputs/apk/performance/benchmark-performance.apk
+          do
+            test -f "$APK"
+            "$APKSIGNER" verify --verbose --print-certs "$APK"
+          done
 
       - name: Verify production ARM libraries in APKs
         shell: bash
