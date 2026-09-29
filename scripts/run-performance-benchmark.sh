@@ -162,6 +162,9 @@ EOF
 INSTRUMENTATION="com.epicefi.epichub.benchmark/androidx.test.runner.AndroidJUnitRunner"
 LOG_PATH="$OUTPUT_DIRECTORY/instrumentation-output.txt"
 
+# Keep failure evidence scoped to this run. This is outside the measured app process.
+adb -s "$SERIAL" logcat -c >/dev/null 2>&1 || true
+
 echo "Running benchmark. Keep the device connected, awake and unlocked."
 echo
 set +e
@@ -173,14 +176,31 @@ adb -s "$SERIAL" shell am instrument -w -r \
 INSTRUMENT_EXIT=${PIPESTATUS[0]}
 set -e
 
+BENCHMARK_FAILED=0
 if [[ $INSTRUMENT_EXIT -ne 0 ]] || grep -Eq 'INSTRUMENTATION_FAILED|FAILURES!!!|Process crashed' "$LOG_PATH"; then
-  echo "Macrobenchmark instrumentation failed. See: $LOG_PATH" >&2
-  exit 1
+  BENCHMARK_FAILED=1
+fi
+
+# Always preserve enough device state to diagnose a failed harness run instead of forcing the
+# operator to reproduce it manually. These are collected after instrumentation has stopped.
+adb -s "$SERIAL" shell dumpsys gfxinfo com.epicefi.epichub framestats \
+  > "$OUTPUT_DIRECTORY/gfxinfo-framestats.txt" 2>&1 || true
+adb -s "$SERIAL" shell dumpsys activity activities \
+  > "$OUTPUT_DIRECTORY/activity-state.txt" 2>&1 || true
+adb -s "$SERIAL" shell dumpsys window windows \
+  > "$OUTPUT_DIRECTORY/window-state.txt" 2>&1 || true
+adb -s "$SERIAL" logcat -d -v threadtime \
+  > "$OUTPUT_DIRECTORY/device-logcat.txt" 2>&1 || true
+
+UI_DUMP_DEVICE="/sdcard/epichub-benchmark-window.xml"
+if adb -s "$SERIAL" shell uiautomator dump "$UI_DUMP_DEVICE" >/dev/null 2>&1; then
+  adb -s "$SERIAL" pull "$UI_DUMP_DEVICE" "$OUTPUT_DIRECTORY/ui-hierarchy.xml" >/dev/null 2>&1 || true
+  adb -s "$SERIAL" shell rm -f "$UI_DUMP_DEVICE" >/dev/null 2>&1 || true
 fi
 
 PULLED_ROOT="$OUTPUT_DIRECTORY/device-output"
 mkdir -p "$PULLED_ROOT"
-adb -s "$SERIAL" pull "$DEVICE_OUTPUT" "$PULLED_ROOT"
+adb -s "$SERIAL" pull "$DEVICE_OUTPUT" "$PULLED_ROOT" >/dev/null 2>&1 || true
 
 mapfile -t RESULT_FILES < <(
   find "$OUTPUT_DIRECTORY" -type f \
@@ -189,8 +209,8 @@ mapfile -t RESULT_FILES < <(
 )
 
 if [[ ${#RESULT_FILES[@]} -eq 0 ]]; then
-  echo "Benchmark finished but no JSON/Perfetto result files were pulled from $DEVICE_OUTPUT." >&2
-  exit 1
+  echo "No benchmark JSON/Perfetto result files were produced." >&2
+  BENCHMARK_FAILED=1
 fi
 
 ZIP_PATH="$SCRIPT_DIR/EpicHub-Benchmark-$TIMESTAMP.zip"
@@ -199,6 +219,14 @@ rm -f "$ZIP_PATH"
   cd "$OUTPUT_DIRECTORY"
   zip -qr "$ZIP_PATH" .
 )
+
+if [[ $BENCHMARK_FAILED -ne 0 ]]; then
+  echo >&2
+  echo "Macrobenchmark failed, but failure evidence was preserved." >&2
+  echo "Upload this ZIP for analysis:" >&2
+  echo "$ZIP_PATH" >&2
+  exit 1
+fi
 
 echo
 echo "Benchmark completed successfully."
