@@ -11,9 +11,9 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
+import androidx.test.uiautomator.BySelector
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.UiObject2
-import androidx.test.uiautomator.Until
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -47,9 +47,9 @@ class EpicHubNavigationBenchmark {
         startupMode = StartupMode.WARM,
         setupBlock = {
             pressHome()
-            startActivityAndWait()
+            launchWarmTargetAndWaitForUi()
             warmAllDestinations()
-            clickDescription(DASHBOARD_WORKSPACE)
+            clickTarget(DASHBOARD_WORKSPACE, DASHBOARD_WORKSPACE_TEXT)
             settle(LONG_SETTLE_MS)
         },
     ) {
@@ -71,9 +71,9 @@ class EpicHubNavigationBenchmark {
         startupMode = StartupMode.WARM,
         setupBlock = {
             pressHome()
-            startActivityAndWait()
+            launchWarmTargetAndWaitForUi()
             warmAllDestinations()
-            clickDescription(DIAGNOSTICS_WORKSPACE)
+            clickTarget(DIAGNOSTICS_WORKSPACE, DIAGNOSTICS_WORKSPACE_TEXT)
             clickDiagnosticsTab("Overview")
             settle(LONG_SETTLE_MS)
         },
@@ -103,53 +103,80 @@ class EpicHubNavigationBenchmark {
         },
     ) {
         startActivityAndWait()
-        clickDescription(TUNER_WORKSPACE)
-        clickDescription(TUNING_TOOLS_ROUTE)
-        clickDescription(LOGGER_WORKSPACE)
-        clickDescription(ANALYZER_ROUTE)
-        clickDescription(DIAGNOSTICS_WORKSPACE)
+        waitForAppUi()
+        clickTarget(TUNER_WORKSPACE, TUNER_WORKSPACE_TEXT)
+        clickTarget(TUNING_TOOLS_ROUTE, TUNING_TOOLS_ROUTE_TEXT)
+        clickTarget(LOGGER_WORKSPACE, LOGGER_WORKSPACE_TEXT)
+        clickTarget(ANALYZER_ROUTE, ANALYZER_ROUTE_TEXT)
+        clickTarget(DIAGNOSTICS_WORKSPACE, DIAGNOSTICS_WORKSPACE_TEXT)
         clickDiagnosticsTab("Performance")
-        clickDescription(DASHBOARD_WORKSPACE)
+        clickTarget(DASHBOARD_WORKSPACE, DASHBOARD_WORKSPACE_TEXT)
+    }
+
+    /**
+     * The two warm navigation benchmarks do not measure app startup. On the physical SM-A137F,
+     * AndroidX startActivityAndWait() can fail its gfxinfo/framestats completion check when a fully
+     * retained warm activity is resumed without producing a fresh frame. Launch with am start -W
+     * instead, then establish readiness from the actual visible UI before setup continues.
+     */
+    private fun launchWarmTargetAndWaitForUi() {
+        val output = device.executeShellCommand("am start -W -n $TARGET_COMPONENT")
+        if (output.contains("Error", ignoreCase = true) || output.contains("Exception", ignoreCase = true)) {
+            error("EpicHub warm launch failed: $output")
+        }
+        waitForAppUi()
+    }
+
+    private fun waitForAppUi() {
+        waitForVisible(
+            selectors = arrayOf(By.text(APP_TITLE), By.desc(DASHBOARD_WORKSPACE)),
+            timeoutMs = APP_READY_TIMEOUT_MS,
+        ) ?: error("EpicHub benchmark launched the target but could not observe its UI")
     }
 
     private fun warmAllDestinations() {
-        clickDescription(TUNER_WORKSPACE)
-        clickDescription(TUNING_TOOLS_ROUTE)
-        clickDescription(TUNER_ROUTE)
+        clickTarget(TUNER_WORKSPACE, TUNER_WORKSPACE_TEXT)
+        clickTarget(TUNING_TOOLS_ROUTE, TUNING_TOOLS_ROUTE_TEXT)
+        clickTarget(TUNER_ROUTE, TUNER_ROUTE_TEXT)
 
-        clickDescription(LOGGER_WORKSPACE)
-        clickDescription(ANALYZER_ROUTE)
-        clickDescription(LOGGER_ROUTE)
+        clickTarget(LOGGER_WORKSPACE, LOGGER_WORKSPACE_TEXT)
+        clickTarget(ANALYZER_ROUTE, ANALYZER_ROUTE_TEXT)
+        clickTarget(LOGGER_ROUTE, LOGGER_ROUTE_TEXT)
 
-        clickDescription(DIAGNOSTICS_WORKSPACE)
+        clickTarget(DIAGNOSTICS_WORKSPACE, DIAGNOSTICS_WORKSPACE_TEXT)
         diagnosticsTabCycle()
 
-        clickDescription(DASHBOARD_WORKSPACE)
+        clickTarget(DASHBOARD_WORKSPACE, DASHBOARD_WORKSPACE_TEXT)
         settle(LONG_SETTLE_MS)
     }
 
     private fun workspaceAndLeafCycle() {
-        clickDescription(TUNER_WORKSPACE)
-        clickDescription(TUNING_TOOLS_ROUTE)
-        clickDescription(TUNER_ROUTE)
+        clickTarget(TUNER_WORKSPACE, TUNER_WORKSPACE_TEXT)
+        clickTarget(TUNING_TOOLS_ROUTE, TUNING_TOOLS_ROUTE_TEXT)
+        clickTarget(TUNER_ROUTE, TUNER_ROUTE_TEXT)
 
-        clickDescription(LOGGER_WORKSPACE)
-        clickDescription(ANALYZER_ROUTE)
-        clickDescription(LOGGER_ROUTE)
+        clickTarget(LOGGER_WORKSPACE, LOGGER_WORKSPACE_TEXT)
+        clickTarget(ANALYZER_ROUTE, ANALYZER_ROUTE_TEXT)
+        clickTarget(LOGGER_ROUTE, LOGGER_ROUTE_TEXT)
 
-        clickDescription(DIAGNOSTICS_WORKSPACE)
-        clickDescription(DASHBOARD_WORKSPACE)
+        clickTarget(DIAGNOSTICS_WORKSPACE, DIAGNOSTICS_WORKSPACE_TEXT)
+        clickTarget(DASHBOARD_WORKSPACE, DASHBOARD_WORKSPACE_TEXT)
     }
 
     private fun diagnosticsTabCycle() {
         DIAGNOSTICS_TABS.forEach(::clickDiagnosticsTab)
     }
 
-    private fun clickDescription(description: String) {
-        val target = device.wait(
-            Until.findObject(By.desc(description)),
-            FIND_TIMEOUT_MS,
-        ) ?: error("EpicHub benchmark could not find accessibility node: $description")
+    /**
+     * Prefer the stable accessibility description, but fall back to the visible label. The latter
+     * keeps the external harness robust across Compose semantics merging differences on OEM builds
+     * without adding benchmark-only state or code paths to EpicHub itself.
+     */
+    private fun clickTarget(description: String, fallbackText: String) {
+        val target = waitForVisible(
+            selectors = arrayOf(By.desc(description), By.text(fallbackText)),
+            timeoutMs = FIND_TIMEOUT_MS,
+        ) ?: error("EpicHub benchmark could not find UI target: $description / $fallbackText")
 
         target.click()
         settle(CLICK_SETTLE_MS)
@@ -189,7 +216,18 @@ class EpicHubNavigationBenchmark {
         settle(CLICK_SETTLE_MS)
     }
 
-    private fun findVisible(selector: androidx.test.uiautomator.BySelector): UiObject2? =
+    private fun waitForVisible(selectors: Array<BySelector>, timeoutMs: Long): UiObject2? {
+        val deadline = SystemClock.uptimeMillis() + timeoutMs
+        do {
+            selectors.forEach { selector ->
+                findVisible(selector)?.let { return it }
+            }
+            SystemClock.sleep(FIND_POLL_MS)
+        } while (SystemClock.uptimeMillis() < deadline)
+        return null
+    }
+
+    private fun findVisible(selector: BySelector): UiObject2? =
         device.findObjects(selector).firstOrNull { objectIsVisible(it.visibleBounds) }
 
     private fun objectIsVisible(bounds: Rect): Boolean =
@@ -206,6 +244,8 @@ class EpicHubNavigationBenchmark {
 
     private companion object {
         const val TARGET_PACKAGE = "com.epicefi.epichub"
+        const val TARGET_COMPONENT = "$TARGET_PACKAGE/.EpicHubActivity"
+        const val APP_TITLE = "EpicHub"
 
         const val DASHBOARD_WORKSPACE = "Dashboard workspace"
         const val TUNER_WORKSPACE = "Tuner workspace"
@@ -216,6 +256,16 @@ class EpicHubNavigationBenchmark {
         const val TUNING_TOOLS_ROUTE = "Tuning Tools route"
         const val LOGGER_ROUTE = "Logger route"
         const val ANALYZER_ROUTE = "Analyzer route"
+
+        // Compact labels are identical on phone and tablet navigation presentations.
+        const val DASHBOARD_WORKSPACE_TEXT = "Dash"
+        const val TUNER_WORKSPACE_TEXT = "Tuner"
+        const val LOGGER_WORKSPACE_TEXT = "Log"
+        const val DIAGNOSTICS_WORKSPACE_TEXT = "Diag"
+        const val TUNER_ROUTE_TEXT = "Tuner"
+        const val TUNING_TOOLS_ROUTE_TEXT = "Tools"
+        const val LOGGER_ROUTE_TEXT = "Logger"
+        const val ANALYZER_ROUTE_TEXT = "Analyzer"
 
         val DIAGNOSTICS_TABS = listOf(
             "Overview",
@@ -231,7 +281,9 @@ class EpicHubNavigationBenchmark {
         const val WORKSPACE_CYCLES_PER_ITERATION = 4
         const val DIAGNOSTICS_CYCLES_PER_ITERATION = 4
 
-        const val FIND_TIMEOUT_MS = 3_000L
+        const val FIND_TIMEOUT_MS = 10_000L
+        const val APP_READY_TIMEOUT_MS = 15_000L
+        const val FIND_POLL_MS = 50L
         const val CLICK_SETTLE_MS = 90L
         const val LONG_SETTLE_MS = 350L
         const val MAX_DIAGNOSTICS_REVEAL_ATTEMPTS = 4
