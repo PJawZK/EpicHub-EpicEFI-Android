@@ -1,5 +1,6 @@
 package com.epicefi.epichub.benchmark
 
+import android.graphics.Point
 import android.graphics.Rect
 import android.os.SystemClock
 import androidx.benchmark.macro.CompilationMode
@@ -69,6 +70,9 @@ class EpicHubNavigationBenchmark {
         }
     }
 
+    // Selector-driven leaf benchmarks are retained as harness/accessibility regression tests.
+    // Use the coordinate variants below as the performance authority because they do not walk
+    // the Compose accessibility tree between measured route transitions.
     @Test
     fun warmTunerLeafNavigation() = measureWarmLeafNavigation(
         placeholderContent = false,
@@ -116,6 +120,50 @@ class EpicHubNavigationBenchmark {
         clickTarget(ANALYZER_ROUTE, ANALYZER_ROUTE_TEXT)
         clickTarget(LOGGER_ROUTE, LOGGER_ROUTE_TEXT)
     }
+
+    @Test
+    fun warmTunerLeafNavigationCoordinates() = measureWarmLeafNavigationCoordinates(
+        placeholderContent = false,
+        workspaceDescription = TUNER_WORKSPACE,
+        workspaceText = TUNER_WORKSPACE_TEXT,
+        initialRouteDescription = TUNER_ROUTE,
+        initialRouteText = TUNER_ROUTE_TEXT,
+        alternateRouteDescription = TUNING_TOOLS_ROUTE,
+        alternateRouteText = TUNING_TOOLS_ROUTE_TEXT,
+    )
+
+    @Test
+    fun warmTunerLeafNavigationPlaceholderCoordinates() = measureWarmLeafNavigationCoordinates(
+        placeholderContent = true,
+        workspaceDescription = TUNER_WORKSPACE,
+        workspaceText = TUNER_WORKSPACE_TEXT,
+        initialRouteDescription = TUNER_ROUTE,
+        initialRouteText = TUNER_ROUTE_TEXT,
+        alternateRouteDescription = TUNING_TOOLS_ROUTE,
+        alternateRouteText = TUNING_TOOLS_ROUTE_TEXT,
+    )
+
+    @Test
+    fun warmLoggerLeafNavigationCoordinates() = measureWarmLeafNavigationCoordinates(
+        placeholderContent = false,
+        workspaceDescription = LOGGER_WORKSPACE,
+        workspaceText = LOGGER_WORKSPACE_TEXT,
+        initialRouteDescription = LOGGER_ROUTE,
+        initialRouteText = LOGGER_ROUTE_TEXT,
+        alternateRouteDescription = ANALYZER_ROUTE,
+        alternateRouteText = ANALYZER_ROUTE_TEXT,
+    )
+
+    @Test
+    fun warmLoggerLeafNavigationPlaceholderCoordinates() = measureWarmLeafNavigationCoordinates(
+        placeholderContent = true,
+        workspaceDescription = LOGGER_WORKSPACE,
+        workspaceText = LOGGER_WORKSPACE_TEXT,
+        initialRouteDescription = LOGGER_ROUTE,
+        initialRouteText = LOGGER_ROUTE_TEXT,
+        alternateRouteDescription = ANALYZER_ROUTE,
+        alternateRouteText = ANALYZER_ROUTE_TEXT,
+    )
 
     @Test
     fun warmDiagnosticsTabs() = benchmarkRule.measureRepeated(
@@ -190,6 +238,54 @@ class EpicHubNavigationBenchmark {
         }
     }
 
+    private fun measureWarmLeafNavigationCoordinates(
+        placeholderContent: Boolean,
+        workspaceDescription: String,
+        workspaceText: String,
+        initialRouteDescription: String,
+        initialRouteText: String,
+        alternateRouteDescription: String,
+        alternateRouteText: String,
+    ) {
+        var initialRouteCenter: Point? = null
+        var alternateRouteCenter: Point? = null
+
+        benchmarkRule.measureRepeated(
+            packageName = TARGET_PACKAGE,
+            metrics = listOf(FrameTimingMetric()),
+            compilationMode = CompilationMode.Full(),
+            iterations = WARM_ITERATIONS,
+            startupMode = StartupMode.WARM,
+            setupBlock = {
+                pressHome()
+                launchWarmTargetAndWaitForUi(placeholderContent)
+                warmAllDestinations()
+                clickTarget(workspaceDescription, workspaceText)
+                clickTarget(initialRouteDescription, initialRouteText)
+                settle(LONG_SETTLE_MS)
+
+                // Resolve both stable tab centers outside the measured block. The measured loop
+                // then injects direct coordinates only: no selector tree walk and no shell pidof.
+                initialRouteCenter = resolveTargetCenter(
+                    initialRouteDescription,
+                    initialRouteText,
+                )
+                alternateRouteCenter = resolveTargetCenter(
+                    alternateRouteDescription,
+                    alternateRouteText,
+                )
+                ensureTargetProcessAlive("before coordinate leaf measurement")
+            },
+        ) {
+            val initial = checkNotNull(initialRouteCenter)
+            val alternate = checkNotNull(alternateRouteCenter)
+            repeat(LEAF_CYCLES_PER_ITERATION) {
+                clickCoordinate(alternate)
+                clickCoordinate(initial)
+            }
+        }
+    }
+
     private fun launchWarmTargetAndWaitForUi(placeholderContent: Boolean = false) {
         val placeholderArg = if (placeholderContent) {
             " --ez $PLACEHOLDER_EXTRA true"
@@ -258,6 +354,23 @@ class EpicHubNavigationBenchmark {
         }
         settle(CLICK_SETTLE_MS)
         ensureTargetProcessAlive("after clicking $description / $fallbackText")
+    }
+
+    private fun clickCoordinate(point: Point) {
+        if (!device.click(point.x, point.y)) {
+            error("EpicHub benchmark could not inject coordinate tap at ${point.x},${point.y}")
+        }
+        settle(CLICK_SETTLE_MS)
+    }
+
+    private fun resolveTargetCenter(description: String, fallbackText: String): Point {
+        val selectors = arrayOf(By.desc(description), By.text(fallbackText))
+        selectors.forEach { selector ->
+            findVisibleBounds(selector)?.let { bounds ->
+                return Point(bounds.centerX(), bounds.centerY())
+            }
+        }
+        error("EpicHub benchmark could not resolve target center: $description / $fallbackText")
     }
 
     private fun clickDiagnosticsTab(label: String) {
