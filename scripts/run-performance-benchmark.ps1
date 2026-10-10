@@ -31,22 +31,20 @@ function Resolve-OptionalPath([string]$Value) {
     return (Resolve-Path $Value).Path
 }
 
+function Get-AdbText([string[]]$Arguments) {
+    return ((& $script:adb -s $script:serial @Arguments 2>$null) -join "`n").Trim()
+}
+
 $adb = Require-Command "adb"
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 
-# A CI benchmark kit places the qualified APKs beside this script. Auto-detect them so the
-# physical run can use the exact CI artifacts without rebuilding anything locally.
 if ([string]::IsNullOrWhiteSpace($AppApk)) {
     $candidate = Join-Path $scriptRoot "EpicHub-Performance.apk"
-    if (Test-Path $candidate) {
-        $AppApk = $candidate
-    }
+    if (Test-Path $candidate) { $AppApk = $candidate }
 }
 if ([string]::IsNullOrWhiteSpace($BenchmarkApk)) {
     $candidate = Join-Path $scriptRoot "EpicHub-Macrobenchmark.apk"
-    if (Test-Path $candidate) {
-        $BenchmarkApk = $candidate
-    }
+    if (Test-Path $candidate) { $BenchmarkApk = $candidate }
 }
 
 $AppApk = Resolve-OptionalPath $AppApk
@@ -62,10 +60,12 @@ if ($deviceLines.Count -ne 1) {
 }
 
 $serial = (($deviceLines[0].ToString() -split "\s+")[0]).Trim()
-$model = (& $adb -s $serial shell getprop ro.product.model).Trim()
-$apiLevel = (& $adb -s $serial shell getprop ro.build.version.sdk).Trim()
-$fingerprint = (& $adb -s $serial shell getprop ro.build.fingerprint).Trim()
-$qemu = (& $adb -s $serial shell getprop ro.boot.qemu).Trim()
+$script:serial = $serial
+$model = (Get-AdbText @("shell", "getprop", "ro.product.model"))
+$apiLevel = (Get-AdbText @("shell", "getprop", "ro.build.version.sdk"))
+$fingerprint = (Get-AdbText @("shell", "getprop", "ro.build.fingerprint"))
+$qemu = (Get-AdbText @("shell", "getprop", "ro.boot.qemu"))
+$deviceAbis = (Get-AdbText @("shell", "getprop", "ro.product.cpu.abilist"))
 
 if (($qemu -eq "1") -and (-not $AllowEmulator)) {
     throw "Refusing to run performance qualification on emulator '$model'. Use -AllowEmulator only for harness debugging, not performance acceptance."
@@ -89,27 +89,9 @@ if (-not $prebuiltMode) {
     if ($LASTEXITCODE -ne 0) {
         throw "Macrobenchmark Gradle task failed with exit code $LASTEXITCODE."
     }
-
-    $repoRoot = Resolve-Path (Join-Path $scriptRoot "..")
-    $outputRoot = Join-Path $repoRoot "benchmark\build\outputs"
-
-    Write-Host ""
-    Write-Host "Benchmark completed successfully."
-    Write-Host "Searchable result artifacts:"
-    if (Test-Path $outputRoot) {
-        Get-ChildItem $outputRoot -Recurse -File |
-            Where-Object { $_.Extension -in @(".json", ".trace", ".perfetto-trace") } |
-            Sort-Object LastWriteTime -Descending |
-            Select-Object -First 30 FullName, Length, LastWriteTime |
-            Format-Table -AutoSize
-    } else {
-        Write-Host "No benchmark/build/outputs directory was found. Check Gradle instrumentation output above."
-    }
     exit 0
 }
 
-# Prebuilt mode: install exactly the APK pair emitted by CI, invoke instrumentation directly,
-# and pull all benchmark JSON / Perfetto evidence into one uploadable ZIP.
 $appHash = (Get-FileHash -Algorithm SHA256 $AppApk).Hash.ToLowerInvariant()
 $benchmarkHash = (Get-FileHash -Algorithm SHA256 $BenchmarkApk).Hash.ToLowerInvariant()
 
@@ -122,6 +104,37 @@ Write-Host ""
 Invoke-Adb @("-s", $serial, "install", "-r", "-t", $AppApk) "Could not install EpicHub performance APK"
 Invoke-Adb @("-s", $serial, "install", "-r", "-t", $BenchmarkApk) "Could not install EpicHub Macrobenchmark APK"
 
+$packageDump = Get-AdbText @("shell", "dumpsys", "package", "com.epicefi.epichub")
+$appAbiMatch = [regex]::Match($packageDump, "(?m)^\s*primaryCpuAbi=(.+)$")
+$appAbi = if ($appAbiMatch.Success) { $appAbiMatch.Groups[1].Value.Trim() } else { "unknown" }
+
+$wmSize = Get-AdbText @("shell", "wm", "size")
+$wmDensity = Get-AdbText @("shell", "wm", "density")
+$physicalSize = [regex]::Match($wmSize, "Physical size:\s*(\d+x\d+)").Groups[1].Value
+$overrideSize = [regex]::Match($wmSize, "Override size:\s*(\d+x\d+)").Groups[1].Value
+$displaySize = if ($overrideSize) { $overrideSize } else { $physicalSize }
+$physicalDensity = [regex]::Match($wmDensity, "Physical density:\s*(\d+)").Groups[1].Value
+$overrideDensity = [regex]::Match($wmDensity, "Override density:\s*(\d+)").Groups[1].Value
+$displayDensity = if ($overrideDensity) { $overrideDensity } else { $physicalDensity }
+
+$displayWidthDp = "unknown"
+$displayHeightDp = "unknown"
+$orientation = "unknown"
+$sizeMatch = [regex]::Match($displaySize, "^(\d+)x(\d+)$")
+if ($sizeMatch.Success) {
+    $widthPx = [int]$sizeMatch.Groups[1].Value
+    $heightPx = [int]$sizeMatch.Groups[2].Value
+    $orientation = if ($widthPx -gt $heightPx) { "landscape" } else { "portrait" }
+    if ($displayDensity -match "^\d+$" -and [int]$displayDensity -gt 0) {
+        $displayWidthDp = [math]::Floor($widthPx * 160 / [int]$displayDensity)
+        $displayHeightDp = [math]::Floor($heightPx * 160 / [int]$displayDensity)
+    }
+}
+
+$displayDump = Get-AdbText @("shell", "dumpsys", "display")
+$refreshMatch = [regex]::Match($displayDump, "refreshRate=([0-9.]+)")
+$refreshRate = if ($refreshMatch.Success) { $refreshMatch.Groups[1].Value } else { "unknown" }
+
 $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
 if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
     $OutputDirectory = Join-Path $scriptRoot "benchmark-results\$timestamp"
@@ -130,25 +143,37 @@ $OutputDirectory = [System.IO.Path]::GetFullPath($OutputDirectory)
 New-Item -ItemType Directory -Force -Path $OutputDirectory | Out-Null
 
 $deviceOutput = "/sdcard/Android/media/com.epicefi.epichub.benchmark/epichub-benchmark"
-# This is the benchmark package's app-specific media directory, so it remains writable without
-# broad storage permissions on modern Android.
 & $adb -s $serial shell rm -rf $deviceOutput | Out-Null
 & $adb -s $serial shell mkdir -p $deviceOutput | Out-Null
 
+$manifestPath = Join-Path $OutputDirectory "benchmark-run-manifest.txt"
 $runManifest = @(
     "EpicHub physical Macrobenchmark",
     "timestamp=$timestamp",
     "deviceModel=$model",
     "apiLevel=$apiLevel",
     "buildFingerprint=$fingerprint",
+    "deviceAbis=$deviceAbis",
+    "selectedAppAbi=$appAbi",
+    "displaySizePx=$displaySize",
+    "displayDensityDpi=$displayDensity",
+    "displayWidthDpApprox=$displayWidthDp",
+    "displayHeightDpApprox=$displayHeightDp",
+    "orientation=$orientation",
+    "refreshRateHz=$refreshRate",
+    "cpuLockRequestedByRunner=false",
+    "sustainedPerformanceRequestedByRunner=false",
     "selector=$selector",
     "appApkSha256=$appHash",
     "benchmarkApkSha256=$benchmarkHash"
 )
-$runManifest | Set-Content -Encoding utf8 (Join-Path $OutputDirectory "benchmark-run-manifest.txt")
+$runManifest | Set-Content -Encoding utf8 $manifestPath
 
 $instrumentation = "com.epicefi.epichub.benchmark/androidx.test.runner.AndroidJUnitRunner"
 $logPath = Join-Path $OutputDirectory "instrumentation-output.txt"
+
+& $adb -s $serial logcat -c | Out-Null
+
 $instrumentArgs = @(
     "-s", $serial,
     "shell", "am", "instrument", "-w", "-r",
@@ -162,33 +187,57 @@ Write-Host "Running benchmark. Keep the device connected, awake and unlocked."
 Write-Host ""
 $instrumentOutput = & $adb @instrumentArgs 2>&1 | Tee-Object -FilePath $logPath
 $instrumentExit = $LASTEXITCODE
-if ($instrumentExit -ne 0 -or ($instrumentOutput -match "INSTRUMENTATION_FAILED|FAILURES!!!|Process crashed")) {
-    throw "Macrobenchmark instrumentation failed. See $logPath"
+$benchmarkFailed = $instrumentExit -ne 0 -or ($instrumentOutput -match "INSTRUMENTATION_FAILED|FAILURES!!!|Process crashed")
+
+& $adb -s $serial shell dumpsys gfxinfo com.epicefi.epichub framestats *> (Join-Path $OutputDirectory "gfxinfo-framestats.txt")
+& $adb -s $serial shell dumpsys activity activities *> (Join-Path $OutputDirectory "activity-state.txt")
+& $adb -s $serial shell dumpsys window windows *> (Join-Path $OutputDirectory "window-state.txt")
+& $adb -s $serial logcat -d -v threadtime *> (Join-Path $OutputDirectory "device-logcat.txt")
+
+$uiDumpDevice = "/sdcard/epichub-benchmark-window.xml"
+& $adb -s $serial shell uiautomator dump $uiDumpDevice *> $null
+if ($LASTEXITCODE -eq 0) {
+    & $adb -s $serial pull $uiDumpDevice (Join-Path $OutputDirectory "ui-hierarchy.xml") *> $null
+    & $adb -s $serial shell rm -f $uiDumpDevice *> $null
 }
 
 $pulledRoot = Join-Path $OutputDirectory "device-output"
 New-Item -ItemType Directory -Force -Path $pulledRoot | Out-Null
-Invoke-Adb @("-s", $serial, "pull", $deviceOutput, $pulledRoot) "Could not pull benchmark result files"
+& $adb -s $serial pull $deviceOutput $pulledRoot *> $null
 
 $files = @(Get-ChildItem $OutputDirectory -Recurse -File |
     Where-Object { $_.Name -like "*benchmarkData.json" -or $_.Extension -in @(".trace", ".perfetto-trace") })
+
+$benchmarkJson = @(Get-ChildItem $OutputDirectory -Recurse -File | Where-Object { $_.Name -like "*benchmarkData.json" } | Select-Object -First 1)
+$cpuLocked = "unknown"
+$sustainedMode = "unknown"
+if ($benchmarkJson.Count -gt 0) {
+    $jsonText = Get-Content -Raw $benchmarkJson[0].FullName
+    $cpuMatch = [regex]::Match($jsonText, '"cpuLocked"\s*:\s*(true|false)')
+    $sustainedMatch = [regex]::Match($jsonText, '"sustainedPerformanceModeEnabled"\s*:\s*(true|false)')
+    if ($cpuMatch.Success) { $cpuLocked = $cpuMatch.Groups[1].Value }
+    if ($sustainedMatch.Success) { $sustainedMode = $sustainedMatch.Groups[1].Value }
+}
+Add-Content -Encoding utf8 $manifestPath "macrobenchmarkCpuLocked=$cpuLocked"
+Add-Content -Encoding utf8 $manifestPath "macrobenchmarkSustainedPerformanceModeEnabled=$sustainedMode"
+
 if ($files.Count -eq 0) {
-    throw "Benchmark finished but no JSON/Perfetto result files were pulled from $deviceOutput."
+    $benchmarkFailed = $true
 }
 
 $zipPath = Join-Path $scriptRoot "EpicHub-Benchmark-$timestamp.zip"
-if (Test-Path $zipPath) {
-    Remove-Item -Force $zipPath
-}
+if (Test-Path $zipPath) { Remove-Item -Force $zipPath }
 Compress-Archive -Path (Join-Path $OutputDirectory "*") -DestinationPath $zipPath -CompressionLevel Optimal
+
+if ($benchmarkFailed) {
+    Write-Error "Macrobenchmark failed, but failure evidence was preserved. Upload: $zipPath"
+    exit 1
+}
 
 Write-Host ""
 Write-Host "Benchmark completed successfully."
 Write-Host "Result files:"
-$files |
-    Sort-Object LastWriteTime -Descending |
-    Select-Object FullName, Length, LastWriteTime |
-    Format-Table -AutoSize
+$files | Sort-Object LastWriteTime -Descending | Select-Object FullName, Length, LastWriteTime | Format-Table -AutoSize
 Write-Host ""
 Write-Host "Upload this ZIP for analysis:"
 Write-Host $zipPath
