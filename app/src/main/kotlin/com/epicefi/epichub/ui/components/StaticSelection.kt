@@ -33,8 +33,9 @@ import androidx.compose.ui.unit.dp
  * selection semantics and text. There is no per-item Surface, clip/shape, ripple or selection
  * animation. Selected-item taps are ignored before dispatching navigation work.
  *
- * [automationDescription] is an accessibility-safe stable description used by the external
- * Macrobenchmark/UI Automator harness. It adds no benchmark logic to the app process.
+ * [automationDescription] is a stable accessibility description used by the external
+ * Macrobenchmark/UI Automator harness. It is merged onto the same selectable semantics node so
+ * OEM accessibility trees expose the target as clickable rather than as a separate wrapper node.
  */
 @Composable
 fun StaticSelectionChoice(
@@ -57,14 +58,8 @@ fun StaticSelectionChoice(
     } else {
         MaterialTheme.colorScheme.onSurfaceVariant
     }
-    val describedModifier = if (automationDescription == null) {
-        modifier
-    } else {
-        modifier.semantics {
-            contentDescription = automationDescription
-        }
-    }
-    val selectionModifier = describedModifier
+
+    var selectionModifier = modifier
         .background(containerColor)
         .selectable(
             selected = selected,
@@ -77,6 +72,12 @@ fun StaticSelectionChoice(
             interactionSource = interactionSource,
             indication = null,
         )
+
+    if (automationDescription != null) {
+        selectionModifier = selectionModifier.semantics(mergeDescendants = true) {
+            contentDescription = automationDescription
+        }
+    }
 
     if (vertical) {
         Column(
