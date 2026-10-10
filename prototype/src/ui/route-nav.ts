@@ -4,6 +4,14 @@ import {
   type WorkspaceId,
 } from "../app/routes";
 
+const COMPACT_ROUTE_LABELS: Partial<Record<RouteId, string>> = {
+  "tuning-tools": "Tools",
+};
+
+export function compactRouteLabel(routeId: RouteId, label: string): string {
+  return COMPACT_ROUTE_LABELS[routeId] ?? label;
+}
+
 export function renderRouteNav(
   workspace: WorkspaceId,
   activeRoute: RouteId,
@@ -23,9 +31,20 @@ export function renderRouteNav(
     const active = route.id === activeRoute;
     button.type = "button";
     button.className = "route-nav__item";
-    button.textContent = route.label;
     button.dataset.active = String(active);
+    button.dataset.route = route.id;
     button.setAttribute("aria-current", active ? "page" : "false");
+    button.setAttribute("aria-label", route.label);
+
+    const fullLabel = document.createElement("span");
+    fullLabel.className = "route-nav__label route-nav__label--full";
+    fullLabel.textContent = route.label;
+
+    const compactLabel = document.createElement("span");
+    compactLabel.className = "route-nav__label route-nav__label--compact";
+    compactLabel.textContent = compactRouteLabel(route.id, route.label);
+
+    button.append(fullLabel, compactLabel);
     button.addEventListener("click", () => onSelect(route.id));
     nav.append(button);
   }
