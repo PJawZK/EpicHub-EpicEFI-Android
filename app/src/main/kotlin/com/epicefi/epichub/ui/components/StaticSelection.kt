@@ -15,11 +15,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
@@ -37,10 +37,11 @@ import androidx.compose.ui.unit.dp
  * animation. Selected-item taps are ignored before dispatching navigation work.
  *
  * [automationDescription] is a stable accessibility description used by the external
- * Macrobenchmark/UI Automator harness. Samsung physical qualification showed that a description
- * merged after selectable can still surface as a non-clickable accessibility node. The explicit
- * semantics click action below therefore mirrors the real selectable action so the description-
- * bearing node remains a valid automation target without changing the touch implementation.
+ * Macrobenchmark/UI Automator harness. Samsung physical qualification showed that stacking a
+ * separate semantics modifier over selectable can expose the description-bearing node as
+ * non-clickable. When an automation description is supplied, clearAndSetSemantics now makes one
+ * authoritative accessibility node containing description, role, selected state and click action.
+ * The underlying selectable modifier remains responsible for real pointer input.
  */
 @Composable
 fun StaticSelectionChoice(
@@ -81,7 +82,7 @@ fun StaticSelectionChoice(
         )
 
     if (automationDescription != null) {
-        selectionModifier = selectionModifier.semantics(mergeDescendants = true) {
+        selectionModifier = selectionModifier.clearAndSetSemantics {
             contentDescription = automationDescription
             this.selected = selected
             role = Role.Tab
