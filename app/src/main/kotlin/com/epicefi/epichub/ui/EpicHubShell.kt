@@ -1,5 +1,6 @@
 package com.epicefi.epichub.ui
 
+import android.os.Trace
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -60,6 +61,7 @@ fun EpicHubShell(
     activeCapture: ActiveDiagnosticCapture?,
     engineAlive: Boolean,
     activeEngineCount: Int,
+    benchmarkPlaceholderContent: Boolean = false,
     onDiagnosticsTabSelected: (DiagnosticsTab) -> Unit,
     onCaptureRecentProblem: () -> Unit,
     onStartReproductionCapture: () -> Unit,
@@ -105,6 +107,7 @@ fun EpicHubShell(
                                 onCloseSettings = onCloseSettings,
                                 runtimeSnapshot = runtimeSnapshot,
                                 diagnostics = diagnostics,
+                                benchmarkPlaceholderContent = benchmarkPlaceholderContent,
                                 onDiagnosticsTabSelected = onDiagnosticsTabSelected,
                                 onSaveCapture = onSaveCapture,
                                 onShareCapture = onShareCapture,
@@ -120,6 +123,7 @@ fun EpicHubShell(
                             onCloseSettings = onCloseSettings,
                             runtimeSnapshot = runtimeSnapshot,
                             diagnostics = diagnostics,
+                            benchmarkPlaceholderContent = benchmarkPlaceholderContent,
                             onDiagnosticsTabSelected = onDiagnosticsTabSelected,
                             onSaveCapture = onSaveCapture,
                             onShareCapture = onShareCapture,
@@ -358,42 +362,69 @@ private fun ShellContent(
     onCloseSettings: () -> Unit,
     runtimeSnapshot: State<RuntimeSnapshot?>,
     diagnostics: State<DiagnosticsSnapshot>,
+    benchmarkPlaceholderContent: Boolean,
     onDiagnosticsTabSelected: (DiagnosticsTab) -> Unit,
     onSaveCapture: (DiagnosticCapture) -> Unit,
     onShareCapture: (DiagnosticCapture) -> Unit,
 ) {
-    if (settingsOpen) {
-        SettingsScreen(onClose = onCloseSettings)
-        return
-    }
+    Trace.beginSection("EpicHub.ShellContent:${destination.id}")
+    try {
+        if (settingsOpen) {
+            SettingsScreen(onClose = onCloseSettings)
+            return
+        }
 
-    when (destination.workspace) {
-        PrimaryWorkspace.DASHBOARD -> DashboardScreen(runtimeSnapshot)
-        PrimaryWorkspace.DIAGNOSTICS -> DiagnosticsScreen(
-            diagnostics = diagnostics,
-            onTabSelected = onDiagnosticsTabSelected,
-            onSaveCapture = onSaveCapture,
-            onShareCapture = onShareCapture,
+        when (destination.workspace) {
+            PrimaryWorkspace.DASHBOARD -> DashboardScreen(runtimeSnapshot)
+            PrimaryWorkspace.DIAGNOSTICS -> DiagnosticsScreen(
+                diagnostics = diagnostics,
+                onTabSelected = onDiagnosticsTabSelected,
+                onSaveCapture = onSaveCapture,
+                onShareCapture = onShareCapture,
+            )
+            PrimaryWorkspace.TUNER -> Column(modifier = Modifier.fillMaxSize()) {
+                WorkspaceRouteTabs(destination, onDestinationSelected)
+                Box(modifier = Modifier.weight(1f)) {
+                    if (benchmarkPlaceholderContent) {
+                        BenchmarkRoutePlaceholder(destination)
+                    } else {
+                        when (destination) {
+                            AppDestination.TUNER -> TunerScreen()
+                            AppDestination.TUNING_TOOLS -> TuningToolsScreen()
+                            else -> Unit
+                        }
+                    }
+                }
+            }
+            PrimaryWorkspace.LOGGER -> Column(modifier = Modifier.fillMaxSize()) {
+                WorkspaceRouteTabs(destination, onDestinationSelected)
+                Box(modifier = Modifier.weight(1f)) {
+                    if (benchmarkPlaceholderContent) {
+                        BenchmarkRoutePlaceholder(destination)
+                    } else {
+                        when (destination) {
+                            AppDestination.LOGGER -> LoggerScreen(runtimeSnapshot)
+                            AppDestination.ANALYZER -> AnalyzerScreen()
+                            else -> Unit
+                        }
+                    }
+                }
+            }
+        }
+    } finally {
+        Trace.endSection()
+    }
+}
+
+@Composable
+private fun BenchmarkRoutePlaceholder(destination: AppDestination) {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = "Benchmark placeholder: ${destination.compactLabel}",
+            style = MaterialTheme.typography.bodySmall,
         )
-        PrimaryWorkspace.TUNER -> Column(modifier = Modifier.fillMaxSize()) {
-            WorkspaceRouteTabs(destination, onDestinationSelected)
-            Box(modifier = Modifier.weight(1f)) {
-                when (destination) {
-                    AppDestination.TUNER -> TunerScreen()
-                    AppDestination.TUNING_TOOLS -> TuningToolsScreen()
-                    else -> Unit
-                }
-            }
-        }
-        PrimaryWorkspace.LOGGER -> Column(modifier = Modifier.fillMaxSize()) {
-            WorkspaceRouteTabs(destination, onDestinationSelected)
-            Box(modifier = Modifier.weight(1f)) {
-                when (destination) {
-                    AppDestination.LOGGER -> LoggerScreen(runtimeSnapshot)
-                    AppDestination.ANALYZER -> AnalyzerScreen()
-                    else -> Unit
-                }
-            }
-        }
     }
 }
