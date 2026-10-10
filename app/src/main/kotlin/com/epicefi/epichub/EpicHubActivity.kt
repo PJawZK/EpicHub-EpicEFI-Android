@@ -27,11 +27,17 @@ class EpicHubActivity : ComponentActivity() {
             initialState = "created",
         )
 
+        val benchmarkPlaceholderContent = intent.getBooleanExtra(
+            EXTRA_BENCHMARK_PLACEHOLDER_CONTENT,
+            false,
+        )
+
         enableEdgeToEdge()
         setContent {
             EpicHubApp(
                 diagnostics = epicHubApplication.diagnostics,
                 nativeEngineGeneration = nativeEngineGeneration,
+                benchmarkPlaceholderContent = benchmarkPlaceholderContent,
             )
         }
         uiFramePerformanceMonitor = UiFramePerformanceMonitor(
@@ -70,5 +76,10 @@ class EpicHubActivity : ComponentActivity() {
         )
         epicHubApplication.diagnostics.destroyLifecycleOwner(diagnosticsOwnerId)
         super.onDestroy()
+    }
+
+    companion object {
+        const val EXTRA_BENCHMARK_PLACEHOLDER_CONTENT =
+            "com.epicefi.epichub.extra.BENCHMARK_PLACEHOLDER_CONTENT"
     }
 }
