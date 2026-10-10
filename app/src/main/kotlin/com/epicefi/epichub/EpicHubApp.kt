@@ -2,6 +2,7 @@ package com.epicefi.epichub
 
 import android.os.Debug
 import android.os.SystemClock
+import android.os.Trace
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.MaterialTheme
@@ -83,6 +84,7 @@ private val performanceDiagnosticMetrics = listOf(
 fun EpicHubApp(
     diagnostics: DiagnosticHub,
     nativeEngineGeneration: Long,
+    benchmarkPlaceholderContent: Boolean = false,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -200,22 +202,27 @@ fun EpicHubApp(
     }
 
     fun selectDestination(destination: AppDestination) {
-        val changed = destinationId != destination.id
-        destinationId = destination.id
-        diagnostics.setCurrentDestination(destination.id)
-        when (destination.workspace) {
-            PrimaryWorkspace.TUNER -> lastTunerDestinationId = destination.id
-            PrimaryWorkspace.LOGGER -> lastLoggerDestinationId = destination.id
-            else -> Unit
-        }
-        settingsOpen = false
-        if (changed) {
-            diagnostics.record(
-                severity = DiagnosticSeverity.TRACE,
-                domain = DiagnosticDomain.APP_UI,
-                code = DiagnosticEventCode.APP_DESTINATION_CHANGED,
-                payload = destinationPayloads.getValue(destination),
-            )
+        Trace.beginSection("EpicHub.selectDestination:${destination.id}")
+        try {
+            val changed = destinationId != destination.id
+            destinationId = destination.id
+            diagnostics.setCurrentDestination(destination.id)
+            when (destination.workspace) {
+                PrimaryWorkspace.TUNER -> lastTunerDestinationId = destination.id
+                PrimaryWorkspace.LOGGER -> lastLoggerDestinationId = destination.id
+                else -> Unit
+            }
+            settingsOpen = false
+            if (changed) {
+                diagnostics.record(
+                    severity = DiagnosticSeverity.TRACE,
+                    domain = DiagnosticDomain.APP_UI,
+                    code = DiagnosticEventCode.APP_DESTINATION_CHANGED,
+                    payload = destinationPayloads.getValue(destination),
+                )
+            }
+        } finally {
+            Trace.endSection()
         }
     }
 
@@ -357,6 +364,7 @@ fun EpicHubApp(
             activeCapture = activeCapture,
             engineAlive = engine.isAlive,
             activeEngineCount = NativeEngine.activeCount(),
+            benchmarkPlaceholderContent = benchmarkPlaceholderContent,
             onDiagnosticsTabSelected = { tab ->
                 if (diagnosticsTabName != tab.name) {
                     diagnosticsTabName = tab.name
