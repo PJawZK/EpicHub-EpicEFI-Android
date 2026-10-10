@@ -22,7 +22,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.ReusableContentHost
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -149,9 +148,7 @@ private fun SystemStatusHeader(
     onAddCaptureMarker: () -> Unit,
     onStopCapture: () -> Unit,
 ) {
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceContainer,
-    ) {
+    Surface(color = MaterialTheme.colorScheme.surfaceContainer) {
         if (compact) {
             Column(
                 modifier = Modifier
@@ -164,10 +161,7 @@ private fun SystemStatusHeader(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    Text(
-                        text = "EpicHub",
-                        style = MaterialTheme.typography.titleMedium,
-                    )
+                    Text(text = "EpicHub", style = MaterialTheme.typography.titleMedium)
                     Spacer(modifier = Modifier.weight(1f))
                     HeaderCaptureControls(
                         activeCapture = activeCapture,
@@ -177,9 +171,7 @@ private fun SystemStatusHeader(
                         onAddCaptureMarker = onAddCaptureMarker,
                         onStopCapture = onStopCapture,
                     )
-                    TextButton(onClick = onOpenSettings) {
-                        Text("Settings")
-                    }
+                    TextButton(onClick = onOpenSettings) { Text("Settings") }
                 }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -187,11 +179,7 @@ private fun SystemStatusHeader(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     Text(
-                        text = if (engineAlive) {
-                            "Engine active ($activeEngineCount)"
-                        } else {
-                            "Engine unavailable"
-                        },
+                        text = if (engineAlive) "Engine active ($activeEngineCount)" else "Engine unavailable",
                         style = MaterialTheme.typography.bodySmall,
                     )
                     RuntimeSourceStatus(snapshot)
@@ -205,10 +193,7 @@ private fun SystemStatusHeader(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Text(
-                    text = "EpicHub",
-                    style = MaterialTheme.typography.titleLarge,
-                )
+                Text(text = "EpicHub", style = MaterialTheme.typography.titleLarge)
                 Text(
                     text = if (engineAlive) "Engine active ($activeEngineCount)" else "Engine unavailable",
                     style = MaterialTheme.typography.bodySmall,
@@ -223,9 +208,7 @@ private fun SystemStatusHeader(
                     onAddCaptureMarker = onAddCaptureMarker,
                     onStopCapture = onStopCapture,
                 )
-                TextButton(onClick = onOpenSettings) {
-                    Text("Settings")
-                }
+                TextButton(onClick = onOpenSettings) { Text("Settings") }
             }
         }
     }
@@ -233,9 +216,7 @@ private fun SystemStatusHeader(
 
 @Composable
 private fun RuntimeSourceStatus(snapshot: State<RuntimeSnapshot?>) {
-    val sourceKind by remember(snapshot) {
-        derivedStateOf { snapshot.value?.sourceKind }
-    }
+    val sourceKind by remember(snapshot) { derivedStateOf { snapshot.value?.sourceKind } }
     Text(
         text = sourceKind?.let { "Source $it" } ?: "Source waiting",
         style = MaterialTheme.typography.bodySmall,
@@ -280,19 +261,11 @@ private fun HeaderCaptureControls(
         }
     } else {
         Text(
-            text = if (compact) {
-                "Problem #${activeCapture.captureId}"
-            } else {
-                "Problem capture #${activeCapture.captureId}"
-            },
+            text = if (compact) "Problem #${activeCapture.captureId}" else "Problem capture #${activeCapture.captureId}",
             style = MaterialTheme.typography.labelMedium,
         )
-        TextButton(onClick = onAddCaptureMarker) {
-            Text("Mark")
-        }
-        Button(onClick = onStopCapture) {
-            Text("Stop")
-        }
+        TextButton(onClick = onAddCaptureMarker) { Text("Mark") }
+        Button(onClick = onStopCapture) { Text("Stop") }
     }
 }
 
@@ -335,9 +308,7 @@ private fun PrimaryNavigationBar(
         modifier = Modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surfaceContainer,
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-        ) {
+        Row(modifier = Modifier.fillMaxWidth()) {
             PrimaryWorkspace.entries.forEach { item ->
                 StaticSelectionChoice(
                     label = item.compactLabel,
@@ -391,58 +362,38 @@ private fun ShellContent(
     onSaveCapture: (DiagnosticCapture) -> Unit,
     onShareCapture: (DiagnosticCapture) -> Unit,
 ) {
-    Box(modifier = Modifier.fillMaxSize()) {
-        ReusableContentHost(
-            active = !settingsOpen && destination.workspace == PrimaryWorkspace.DASHBOARD,
-        ) {
-            DashboardScreen(runtimeSnapshot)
-        }
+    if (settingsOpen) {
+        SettingsScreen(onClose = onCloseSettings)
+        return
+    }
 
-        ReusableContentHost(
-            active = !settingsOpen && destination.workspace == PrimaryWorkspace.DIAGNOSTICS,
-        ) {
-            DiagnosticsScreen(
-                diagnostics = diagnostics,
-                onTabSelected = onDiagnosticsTabSelected,
-                onSaveCapture = onSaveCapture,
-                onShareCapture = onShareCapture,
-            )
-        }
-
-        ReusableContentHost(
-            active = !settingsOpen && destination.workspace == PrimaryWorkspace.TUNER,
-        ) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                WorkspaceRouteTabs(destination, onDestinationSelected)
-                Box(modifier = Modifier.weight(1f)) {
-                    ReusableContentHost(active = destination == AppDestination.TUNER) {
-                        TunerScreen()
-                    }
-                    ReusableContentHost(active = destination == AppDestination.TUNING_TOOLS) {
-                        TuningToolsScreen()
-                    }
+    when (destination.workspace) {
+        PrimaryWorkspace.DASHBOARD -> DashboardScreen(runtimeSnapshot)
+        PrimaryWorkspace.DIAGNOSTICS -> DiagnosticsScreen(
+            diagnostics = diagnostics,
+            onTabSelected = onDiagnosticsTabSelected,
+            onSaveCapture = onSaveCapture,
+            onShareCapture = onShareCapture,
+        )
+        PrimaryWorkspace.TUNER -> Column(modifier = Modifier.fillMaxSize()) {
+            WorkspaceRouteTabs(destination, onDestinationSelected)
+            Box(modifier = Modifier.weight(1f)) {
+                when (destination) {
+                    AppDestination.TUNER -> TunerScreen()
+                    AppDestination.TUNING_TOOLS -> TuningToolsScreen()
+                    else -> Unit
                 }
             }
         }
-
-        ReusableContentHost(
-            active = !settingsOpen && destination.workspace == PrimaryWorkspace.LOGGER,
-        ) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                WorkspaceRouteTabs(destination, onDestinationSelected)
-                Box(modifier = Modifier.weight(1f)) {
-                    ReusableContentHost(active = destination == AppDestination.LOGGER) {
-                        LoggerScreen(runtimeSnapshot)
-                    }
-                    ReusableContentHost(active = destination == AppDestination.ANALYZER) {
-                        AnalyzerScreen()
-                    }
+        PrimaryWorkspace.LOGGER -> Column(modifier = Modifier.fillMaxSize()) {
+            WorkspaceRouteTabs(destination, onDestinationSelected)
+            Box(modifier = Modifier.weight(1f)) {
+                when (destination) {
+                    AppDestination.LOGGER -> LoggerScreen(runtimeSnapshot)
+                    AppDestination.ANALYZER -> AnalyzerScreen()
+                    else -> Unit
                 }
             }
-        }
-
-        ReusableContentHost(active = settingsOpen) {
-            SettingsScreen(onClose = onCloseSettings)
         }
     }
 }
