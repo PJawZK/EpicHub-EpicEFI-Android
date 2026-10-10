@@ -154,7 +154,13 @@ jobs:
             "$KIT/run-performance-benchmark.ps1"
           cp scripts/run-performance-benchmark.sh \
             "$KIT/run-performance-benchmark.sh"
-          chmod +x "$KIT/run-performance-benchmark.sh"
+          cp scripts/uninstall-performance-benchmark.ps1 \
+            "$KIT/uninstall-performance-benchmark.ps1"
+          cp scripts/uninstall-performance-benchmark.sh \
+            "$KIT/uninstall-performance-benchmark.sh"
+          chmod +x \
+            "$KIT/run-performance-benchmark.sh" \
+            "$KIT/uninstall-performance-benchmark.sh"
           cp docs/PERFORMANCE_BENCHMARKING.md \
             "$KIT/PERFORMANCE_BENCHMARKING.md"
 
