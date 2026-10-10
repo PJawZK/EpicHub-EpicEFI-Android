@@ -109,10 +109,6 @@
   color: #fff;
 }
 
-.route-nav__label--compact {
-  display: none;
-}
-
 .source-status {
   min-width: 0;
   gap: 8px;
@@ -224,30 +220,16 @@
 
 @media (max-width: 760px) {
   .app-header {
-    grid-template-columns: minmax(0, 1fr) auto auto;
-    gap: 6px;
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 
-  .header-left {
-    gap: 5px;
+  .header-context {
+    display: none;
   }
 
   .brand-context {
-    display: none;
-  }
-
-  .source-status__sequence {
-    display: none;
-  }
-
-  .source-status {
-    gap: 0;
-  }
-
-  .source-status__authority {
-    min-height: 24px;
-    padding: 0 6px;
-    font-size: 9px;
+    max-width: 92px;
+    font-size: 12px;
   }
 
   .route-nav__item {
@@ -264,70 +246,24 @@
   }
 }
 
-@media (max-width: 560px) {
-  .app-header {
-    gap: 4px;
-    padding: 0 5px;
-  }
-
-  .brand-button {
-    gap: 6px;
-    padding: 0 6px;
-  }
-
+@media (max-width: 520px) {
   .brand-product {
     font-size: 14px;
   }
 
-  .route-nav {
-    gap: 1px;
+  .brand-context {
+    max-width: 72px;
+    font-size: 11px;
+  }
+
+  .header-left {
+    gap: 4px;
   }
 
   .route-nav__item {
-    max-width: 64px;
-    padding: 0 5px;
-  }
-
-  .route-nav__label--full {
-    display: none;
-  }
-
-  .route-nav__label--compact {
-    display: inline;
-  }
-
-  .header-actions {
-    gap: 3px;
-  }
-
-  .problem-capture {
-    display: none;
-  }
-}
-
-@media (max-width: 420px) {
-  .brand-button {
-    padding-right: 4px;
-  }
-
-  .brand-product {
-    font-size: 13px;
-  }
-
-  .source-status__authority {
-    padding: 0 5px;
-    font-size: 8px;
-  }
-
-  .route-nav__item {
-    max-width: 54px;
-    padding: 0 4px;
-    font-size: 9px;
-  }
-
-  .header-action,
-  .header-icon-button {
-    min-width: 32px;
-    width: 32px;
+    max-width: 86px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 }
