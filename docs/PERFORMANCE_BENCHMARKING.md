@@ -52,6 +52,15 @@ This isolates primary shell/content replacement from Tuner and Logger leaf-route
 
 These two leaf benchmarks identify whether route replacement inside a primary workspace is independently expensive.
 
+`EpicHubNavigationBenchmark.warmTunerLeafNavigationPlaceholder` and `warmLoggerLeafNavigationPlaceholder`
+
+- run the same destination state, shell, route tabs and navigation-control path as their corresponding real leaf benchmarks;
+- launch EpicHub with a benchmark-only intent extra that substitutes only the leaf content body with a trivial placeholder;
+- keep Tuner/Tuning Tools and Logger/Analyzer route identity unchanged;
+- record the same fully compiled `FrameTimingMetric` workload.
+
+These are diagnostic A/B probes, not candidate product behavior. Compare each placeholder method only with its matching real-content method on the same device/build. If the placeholder remains similarly expensive, investigate shared navigation/state/shell work. If frame cost collapses, investigate destination content composition/layout. Do not accept placeholder rendering itself as a performance optimization.
+
 `EpicHubNavigationBenchmark.warmDiagnosticsTabs`
 
 - warms the application and all Diagnostics tabs outside the measured block;
@@ -68,6 +77,15 @@ This isolates Diagnostics presentation cost from shell navigation.
 - records both `StartupTimingMetric` and `FrameTimingMetric`.
 
 This intentionally represents a pessimistic fresh-install / first-use path and must not be compared directly with the fully compiled warm-navigation scenarios.
+
+## Trace attribution
+
+The performance build currently adds narrow Android trace sections around:
+
+- `EpicHub.selectDestination:<destination>` for synchronous destination-state/diagnostics mutation;
+- `EpicHub.ShellContent:<destination>` for the route-content composable invocation.
+
+These markers exist to correlate app-owned work with Perfetto during the current navigation investigation. They are intentionally narrow; broad permanent per-frame tracing is still avoided.
 
 ## Running on the physical qualification device
 
@@ -106,7 +124,9 @@ Run one benchmark method only:
 ```bash
 ./run-performance-benchmark.sh --method warmPrimaryWorkspaceNavigation
 ./run-performance-benchmark.sh --method warmTunerLeafNavigation
+./run-performance-benchmark.sh --method warmTunerLeafNavigationPlaceholder
 ./run-performance-benchmark.sh --method warmLoggerLeafNavigation
+./run-performance-benchmark.sh --method warmLoggerLeafNavigationPlaceholder
 ./run-performance-benchmark.sh --method warmWorkspaceNavigation
 ./run-performance-benchmark.sh --method warmDiagnosticsTabs
 ./run-performance-benchmark.sh --method coldFirstVisitJourney
@@ -125,7 +145,9 @@ Run one benchmark method only:
 ```powershell
 ./run-performance-benchmark.ps1 -Method warmPrimaryWorkspaceNavigation
 ./run-performance-benchmark.ps1 -Method warmTunerLeafNavigation
+./run-performance-benchmark.ps1 -Method warmTunerLeafNavigationPlaceholder
 ./run-performance-benchmark.ps1 -Method warmLoggerLeafNavigation
+./run-performance-benchmark.ps1 -Method warmLoggerLeafNavigationPlaceholder
 ./run-performance-benchmark.ps1 -Method warmWorkspaceNavigation
 ./run-performance-benchmark.ps1 -Method warmDiagnosticsTabs
 ./run-performance-benchmark.ps1 -Method coldFirstVisitJourney
@@ -149,9 +171,10 @@ When comparing implementations:
 2. Prefer median/P95/P99 frame timing/overrun over one worst outlier.
 3. Keep warm and cold scenarios separate.
 4. Use the isolated primary-workspace and leaf-route benchmarks to choose the subsystem to optimize; keep the combined workspace journey as an end-to-end regression check.
-5. If only one scenario regresses, optimize that subsystem rather than changing unrelated UI/runtime code.
-6. A performance improvement is not accepted merely because an intended UI feature was removed. Feature-removal builds may be used as diagnostic probes to estimate feature cost.
-7. Physical phone/compact qualification does not replace tablet-landscape qualification when the production layout takes a different responsive branch.
+5. Compare placeholder A/B methods only against their corresponding real-content leaf method; use them for attribution, never as an accepted feature-removal optimization.
+6. If only one scenario regresses, optimize that subsystem rather than changing unrelated UI/runtime code.
+7. A performance improvement is not accepted merely because an intended UI feature was removed. Feature-removal builds may be used as diagnostic probes to estimate feature cost.
+8. Physical phone/compact qualification does not replace tablet-landscape qualification when the production layout takes a different responsive branch.
 
 ## Measurement overhead
 
