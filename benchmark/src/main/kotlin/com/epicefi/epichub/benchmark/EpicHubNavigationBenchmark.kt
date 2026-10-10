@@ -49,6 +49,70 @@ class EpicHubNavigationBenchmark {
     }
 
     @Test
+    fun warmPrimaryWorkspaceNavigation() = benchmarkRule.measureRepeated(
+        packageName = TARGET_PACKAGE,
+        metrics = listOf(FrameTimingMetric()),
+        compilationMode = CompilationMode.Full(),
+        iterations = WARM_ITERATIONS,
+        startupMode = StartupMode.WARM,
+        setupBlock = {
+            pressHome()
+            launchWarmTargetAndWaitForUi()
+            warmAllDestinations()
+            clickTarget(DASHBOARD_WORKSPACE, DASHBOARD_WORKSPACE_TEXT)
+            settle(LONG_SETTLE_MS)
+        },
+    ) {
+        repeat(PRIMARY_WORKSPACE_CYCLES_PER_ITERATION) {
+            primaryWorkspaceCycle()
+        }
+    }
+
+    @Test
+    fun warmTunerLeafNavigation() = benchmarkRule.measureRepeated(
+        packageName = TARGET_PACKAGE,
+        metrics = listOf(FrameTimingMetric()),
+        compilationMode = CompilationMode.Full(),
+        iterations = WARM_ITERATIONS,
+        startupMode = StartupMode.WARM,
+        setupBlock = {
+            pressHome()
+            launchWarmTargetAndWaitForUi()
+            warmAllDestinations()
+            clickTarget(TUNER_WORKSPACE, TUNER_WORKSPACE_TEXT)
+            clickTarget(TUNER_ROUTE, TUNER_ROUTE_TEXT)
+            settle(LONG_SETTLE_MS)
+        },
+    ) {
+        repeat(LEAF_CYCLES_PER_ITERATION) {
+            clickTarget(TUNING_TOOLS_ROUTE, TUNING_TOOLS_ROUTE_TEXT)
+            clickTarget(TUNER_ROUTE, TUNER_ROUTE_TEXT)
+        }
+    }
+
+    @Test
+    fun warmLoggerLeafNavigation() = benchmarkRule.measureRepeated(
+        packageName = TARGET_PACKAGE,
+        metrics = listOf(FrameTimingMetric()),
+        compilationMode = CompilationMode.Full(),
+        iterations = WARM_ITERATIONS,
+        startupMode = StartupMode.WARM,
+        setupBlock = {
+            pressHome()
+            launchWarmTargetAndWaitForUi()
+            warmAllDestinations()
+            clickTarget(LOGGER_WORKSPACE, LOGGER_WORKSPACE_TEXT)
+            clickTarget(LOGGER_ROUTE, LOGGER_ROUTE_TEXT)
+            settle(LONG_SETTLE_MS)
+        },
+    ) {
+        repeat(LEAF_CYCLES_PER_ITERATION) {
+            clickTarget(ANALYZER_ROUTE, ANALYZER_ROUTE_TEXT)
+            clickTarget(LOGGER_ROUTE, LOGGER_ROUTE_TEXT)
+        }
+    }
+
+    @Test
     fun warmDiagnosticsTabs() = benchmarkRule.measureRepeated(
         packageName = TARGET_PACKAGE,
         metrics = listOf(FrameTimingMetric()),
@@ -135,6 +199,13 @@ class EpicHubNavigationBenchmark {
         clickTarget(ANALYZER_ROUTE, ANALYZER_ROUTE_TEXT)
         clickTarget(LOGGER_ROUTE, LOGGER_ROUTE_TEXT)
 
+        clickTarget(DIAGNOSTICS_WORKSPACE, DIAGNOSTICS_WORKSPACE_TEXT)
+        clickTarget(DASHBOARD_WORKSPACE, DASHBOARD_WORKSPACE_TEXT)
+    }
+
+    private fun primaryWorkspaceCycle() {
+        clickTarget(TUNER_WORKSPACE, TUNER_WORKSPACE_TEXT)
+        clickTarget(LOGGER_WORKSPACE, LOGGER_WORKSPACE_TEXT)
         clickTarget(DIAGNOSTICS_WORKSPACE, DIAGNOSTICS_WORKSPACE_TEXT)
         clickTarget(DASHBOARD_WORKSPACE, DASHBOARD_WORKSPACE_TEXT)
     }
@@ -309,6 +380,8 @@ class EpicHubNavigationBenchmark {
         const val WARM_ITERATIONS = 5
         const val COLD_ITERATIONS = 5
         const val WORKSPACE_CYCLES_PER_ITERATION = 4
+        const val PRIMARY_WORKSPACE_CYCLES_PER_ITERATION = 6
+        const val LEAF_CYCLES_PER_ITERATION = 8
         const val DIAGNOSTICS_CYCLES_PER_ITERATION = 4
 
         const val FIND_TIMEOUT_MS = 10_000L
