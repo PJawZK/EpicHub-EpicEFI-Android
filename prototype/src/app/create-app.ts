@@ -11,8 +11,7 @@ export async function createApp(
 ): Promise<() => void> {
   const initialRoute = routeFromHash(window.location.hash);
   const navigation = new NavigationState(initialRoute);
-  const initialStatus = dependencies.runtimeSource.status();
-  const shell = createShell(initialStatus);
+  const shell = createShell(dependencies.runtimeSource.status());
   let latestSnapshot: RuntimeSnapshot | null = null;
 
   root.replaceChildren(shell.element);
@@ -37,12 +36,11 @@ export async function createApp(
   };
 
   window.addEventListener("hashchange", onHashChange);
-  shell.updateRuntime(null, initialStatus);
   render();
 
   const unsubscribe = await dependencies.runtimeSource.start((snapshot) => {
     latestSnapshot = snapshot;
-    shell.updateRuntime(snapshot, snapshot.source);
+    shell.status.update(snapshot, snapshot.source);
 
     if (navigation.currentRoute() === "dashboard") {
       shell.content.replaceChildren(renderFeature("dashboard" as RouteId, latestSnapshot));
