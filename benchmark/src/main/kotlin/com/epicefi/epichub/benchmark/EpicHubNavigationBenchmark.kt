@@ -4,6 +4,7 @@ import android.graphics.Rect
 import android.os.SystemClock
 import androidx.benchmark.macro.CompilationMode
 import androidx.benchmark.macro.FrameTimingMetric
+import androidx.benchmark.macro.MacrobenchmarkScope
 import androidx.benchmark.macro.StartupMode
 import androidx.benchmark.macro.StartupTimingMetric
 import androidx.benchmark.macro.junit4.MacrobenchmarkRule
@@ -168,7 +169,7 @@ class EpicHubNavigationBenchmark {
         workspaceText: String,
         initialRouteDescription: String,
         initialRouteText: String,
-        cycle: MacrobenchmarkRule.Scope.() -> Unit,
+        cycle: MacrobenchmarkScope.() -> Unit,
     ) = benchmarkRule.measureRepeated(
         packageName = TARGET_PACKAGE,
         metrics = listOf(FrameTimingMetric()),
