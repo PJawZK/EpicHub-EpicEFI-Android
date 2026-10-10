@@ -19,10 +19,17 @@ export function createShell(initialStatus: SourceStatus): ShellHandle {
   const element = document.createElement("div");
   element.className = "epichub-shell";
   element.dataset.screenLocked = "false";
+  element.dataset.dashboardEditing = "false";
 
-  const topBar: TopBarHandle = createTopBar(initialStatus, (locked) => {
-    element.dataset.screenLocked = String(locked);
-  });
+  const topBar: TopBarHandle = createTopBar(
+    initialStatus,
+    (locked) => {
+      element.dataset.screenLocked = String(locked);
+    },
+    (editing) => {
+      element.dataset.dashboardEditing = String(editing);
+    },
+  );
   const statusBar: StatusBarHandle = createStatusBar(initialStatus);
 
   const content = document.createElement("main");

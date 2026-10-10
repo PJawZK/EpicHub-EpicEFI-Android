@@ -19,6 +19,7 @@ export interface TopBarHandle {
 export function createTopBar(
   initialStatus: SourceStatus,
   onScreenLockChange: (locked: boolean) => void,
+  onDashboardEditChange: (editing: boolean) => void,
 ): TopBarHandle {
   const element = document.createElement("header");
   element.className = "app-header";
@@ -60,6 +61,7 @@ export function createTopBar(
     const label = editButton.querySelector<HTMLElement>(".header-action__label");
     if (label) label.textContent = dashboardEditing ? "Done" : "Edit";
     element.dataset.dashboardEditing = String(dashboardEditing);
+    onDashboardEditChange(dashboardEditing);
   });
 
   const lockButton = document.createElement("button");
