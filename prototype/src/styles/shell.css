@@ -1,0 +1,122 @@
+.epichub-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+}
+
+.status-strip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.status-strip__authority {
+  padding: 2px 7px;
+  border: 1px solid var(--warn);
+  border-radius: 999px;
+  color: var(--warn);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.status-strip__detail,
+.status-strip__sequence {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.status-strip__sequence {
+  margin-left: auto;
+}
+
+.epichub-shell__navigation {
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.workspace-nav,
+.route-nav {
+  display: flex;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+}
+
+.route-nav {
+  padding-top: 0;
+}
+
+.workspace-nav__item,
+.route-nav__item {
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  padding: 7px 10px;
+  cursor: pointer;
+}
+
+.workspace-nav__item[data-active="true"],
+.route-nav__item[data-active="true"] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.epichub-shell__content {
+  min-width: 0;
+  padding: var(--space-4);
+}
+
+.feature-page,
+.feature-intro {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.feature-page__note,
+.feature-intro p,
+.feature-intro li {
+  color: var(--muted);
+}
+
+.channel-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--space-3);
+}
+
+.channel-card {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.channel-card__label {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.channel-card__value {
+  font-size: 1.6rem;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 640px) {
+  .status-strip {
+    flex-wrap: wrap;
+  }
+
+  .status-strip__sequence {
+    margin-left: 0;
+  }
+
+  .workspace-nav,
+  .route-nav {
+    overflow-x: auto;
+  }
+}
