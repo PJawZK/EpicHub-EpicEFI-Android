@@ -34,10 +34,6 @@ class EpicHubNavigationBenchmark {
     private val device: UiDevice
         get() = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
 
-    /**
-     * Measures already-warmed workspace and leaf-route switching without Diagnostics tab churn.
-     * This is the primary signal for destination composition/reuse work.
-     */
     @Test
     fun warmWorkspaceNavigation() = benchmarkRule.measureRepeated(
         packageName = TARGET_PACKAGE,
@@ -58,10 +54,6 @@ class EpicHubNavigationBenchmark {
         }
     }
 
-    /**
-     * Measures Diagnostics presentation switching independently of primary workspace navigation.
-     * All six tabs are warmed before the measured block.
-     */
     @Test
     fun warmDiagnosticsTabs() = benchmarkRule.measureRepeated(
         packageName = TARGET_PACKAGE,
@@ -83,11 +75,6 @@ class EpicHubNavigationBenchmark {
         }
     }
 
-    /**
-     * Separates first-use/JIT/startup cost from warmed navigation. This intentionally uses no AOT
-     * compilation so it represents a pessimistic fresh-install style path rather than the stable
-     * full-compilation lab comparison above.
-     */
     @Test
     fun coldFirstVisitJourney() = benchmarkRule.measureRepeated(
         packageName = TARGET_PACKAGE,
@@ -113,12 +100,6 @@ class EpicHubNavigationBenchmark {
         clickTarget(DASHBOARD_WORKSPACE, DASHBOARD_WORKSPACE_TEXT)
     }
 
-    /**
-     * The two warm navigation benchmarks do not measure app startup. On the physical SM-A137F,
-     * AndroidX startActivityAndWait() can fail its gfxinfo/framestats completion check when a fully
-     * retained warm activity is resumed without producing a fresh frame. Launch with am start -W
-     * instead, then establish readiness from the actual visible UI before setup continues.
-     */
     private fun launchWarmTargetAndWaitForUi() {
         val output = device.executeShellCommand("am start -W -n $TARGET_COMPONENT")
         if (output.contains("Error", ignoreCase = true) || output.contains("Exception", ignoreCase = true)) {
@@ -131,6 +112,7 @@ class EpicHubNavigationBenchmark {
         waitForVisible(
             selectors = arrayOf(By.text(APP_TITLE), By.desc(DASHBOARD_WORKSPACE)),
             timeoutMs = APP_READY_TIMEOUT_MS,
+            waitingFor = "initial EpicHub UI",
         ) ?: error("EpicHub benchmark launched the target but could not observe its UI")
     }
 
@@ -168,25 +150,30 @@ class EpicHubNavigationBenchmark {
     }
 
     /**
-     * Prefer the stable accessibility description, but fall back to the visible label. The latter
-     * keeps the external harness robust across Compose semantics merging differences on OEM builds
-     * without adding benchmark-only state or code paths to EpicHub itself.
+     * Prefer the stable accessibility description, but fall back to the visible label. If the
+     * application disappears after a click, report that directly rather than spending the full
+     * selector timeout and masking a crash as a missing target.
      */
     private fun clickTarget(description: String, fallbackText: String) {
         val target = waitForVisible(
             selectors = arrayOf(By.desc(description), By.text(fallbackText)),
             timeoutMs = FIND_TIMEOUT_MS,
+            waitingFor = "$description / $fallbackText",
         ) ?: error("EpicHub benchmark could not find UI target: $description / $fallbackText")
 
         target.click()
         settle(CLICK_SETTLE_MS)
+        ensureTargetProcessAlive("after clicking $description / $fallbackText")
     }
 
     private fun clickDiagnosticsTab(label: String) {
         repeat(MAX_DIAGNOSTICS_REVEAL_ATTEMPTS) { attempt ->
+            ensureTargetProcessAlive("while looking for Diagnostics tab $label")
+
             findVisible(By.text(label))?.let { target ->
                 target.click()
                 settle(CLICK_SETTLE_MS)
+                ensureTargetProcessAlive("after clicking Diagnostics tab $label")
                 return
             }
 
@@ -214,11 +201,17 @@ class EpicHubNavigationBenchmark {
 
         device.swipe(startX, y, endX, y, SWIPE_STEPS)
         settle(CLICK_SETTLE_MS)
+        ensureTargetProcessAlive("after revealing Diagnostics tab $label")
     }
 
-    private fun waitForVisible(selectors: Array<BySelector>, timeoutMs: Long): UiObject2? {
+    private fun waitForVisible(
+        selectors: Array<BySelector>,
+        timeoutMs: Long,
+        waitingFor: String,
+    ): UiObject2? {
         val deadline = SystemClock.uptimeMillis() + timeoutMs
         do {
+            ensureTargetProcessAlive("while waiting for $waitingFor")
             selectors.forEach { selector ->
                 findVisible(selector)?.let { return it }
             }
@@ -237,6 +230,13 @@ class EpicHubNavigationBenchmark {
             bounds.bottom > 0 &&
             bounds.left < device.displayWidth &&
             bounds.top < device.displayHeight
+
+    private fun ensureTargetProcessAlive(context: String) {
+        val pid = device.executeShellCommand("pidof $TARGET_PACKAGE").trim()
+        if (pid.isEmpty()) {
+            error("EpicHub process disappeared $context")
+        }
+    }
 
     private fun settle(durationMs: Long) {
         SystemClock.sleep(durationMs)
@@ -257,7 +257,6 @@ class EpicHubNavigationBenchmark {
         const val LOGGER_ROUTE = "Logger route"
         const val ANALYZER_ROUTE = "Analyzer route"
 
-        // Compact labels are identical on phone and tablet navigation presentations.
         const val DASHBOARD_WORKSPACE_TEXT = "Dash"
         const val TUNER_WORKSPACE_TEXT = "Tuner"
         const val LOGGER_WORKSPACE_TEXT = "Log"
