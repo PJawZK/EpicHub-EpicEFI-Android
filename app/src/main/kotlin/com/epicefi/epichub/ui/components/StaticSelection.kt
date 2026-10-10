@@ -16,6 +16,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -34,8 +37,10 @@ import androidx.compose.ui.unit.dp
  * animation. Selected-item taps are ignored before dispatching navigation work.
  *
  * [automationDescription] is a stable accessibility description used by the external
- * Macrobenchmark/UI Automator harness. It is merged onto the same selectable semantics node so
- * OEM accessibility trees expose the target as clickable rather than as a separate wrapper node.
+ * Macrobenchmark/UI Automator harness. Samsung physical qualification showed that a description
+ * merged after selectable can still surface as a non-clickable accessibility node. The explicit
+ * semantics click action below therefore mirrors the real selectable action so the description-
+ * bearing node remains a valid automation target without changing the touch implementation.
  */
 @Composable
 fun StaticSelectionChoice(
@@ -59,15 +64,17 @@ fun StaticSelectionChoice(
         MaterialTheme.colorScheme.onSurfaceVariant
     }
 
+    fun dispatchSelection() {
+        if (!selected) {
+            onClick()
+        }
+    }
+
     var selectionModifier = modifier
         .background(containerColor)
         .selectable(
             selected = selected,
-            onClick = {
-                if (!selected) {
-                    onClick()
-                }
-            },
+            onClick = ::dispatchSelection,
             role = Role.Tab,
             interactionSource = interactionSource,
             indication = null,
@@ -76,6 +83,12 @@ fun StaticSelectionChoice(
     if (automationDescription != null) {
         selectionModifier = selectionModifier.semantics(mergeDescendants = true) {
             contentDescription = automationDescription
+            this.selected = selected
+            role = Role.Tab
+            onClick {
+                dispatchSelection()
+                true
+            }
         }
     }
 
