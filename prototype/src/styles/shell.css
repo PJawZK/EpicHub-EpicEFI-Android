@@ -1,25 +1,124 @@
 .epichub-shell {
-  width: 100%;
-  height: 100%;
+  min-height: 100vh;
   display: grid;
-  grid-template-rows: var(--header-h) minmax(0, 1fr) var(--status-h);
-  background: linear-gradient(#09121a, var(--bg));
+  grid-template-rows: auto auto minmax(0, 1fr);
+  background: var(--bg);
+}
+
+.status-strip {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.status-strip__brand {
+  color: var(--headline);
+  font-size: 16px;
+}
+
+.status-strip__reset {
+  padding: 4px 7px;
+  border: 1px solid var(--danger);
+  border-radius: 4px;
+  color: var(--danger);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.status-strip__authority {
+  padding: 4px 7px;
+  border: 1px solid var(--warn);
+  border-radius: 4px;
+  color: var(--warn);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.status-strip__authority[data-connected="true"]:not([data-kind="fixture"]) {
+  border-color: var(--good);
+  color: var(--good);
+}
+
+.status-strip__detail,
+.status-strip__sequence {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.status-strip__detail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-strip__sequence {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.epichub-shell__navigation {
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.workspace-nav,
+.route-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  overflow-x: auto;
+}
+
+.route-nav {
+  padding-top: 0;
+}
+
+.workspace-nav__item,
+.route-nav__item {
+  min-height: 44px;
+  flex: 0 0 auto;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.workspace-nav__item[data-active="true"],
+.route-nav__item[data-active="true"] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--headline);
 }
 
 .epichub-shell__content {
   min-width: 0;
   min-height: 0;
-  overflow: auto;
-  padding: 7px;
-  background: var(--bg);
+  padding: var(--space-3);
 }
 
-.epichub-shell[data-screen-locked="true"] {
-  --shell-lock-state: 1;
-}
+@media (max-width: 700px) {
+  .status-strip {
+    flex-wrap: wrap;
+  }
 
-@media (max-width: 720px) {
-  .epichub-shell__content {
-    padding: 4px;
+  .status-strip__detail {
+    flex: 1 1 180px;
+  }
+
+  .status-strip__sequence {
+    margin-left: 0;
   }
 }
