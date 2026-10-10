@@ -8,6 +8,11 @@ local.properties
 # Rust
 **/target/
 
+# EpicHub Pages prototype
+prototype/node_modules/
+prototype/dist/
+prototype/.vite/
+
 # OS / editor
 .DS_Store
 Thumbs.db
