@@ -12,19 +12,13 @@ import androidx.test.filters.LargeTest
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.BySelector
+import androidx.test.uiautomator.StaleObjectException
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.UiObject2
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/**
- * External, deterministic EpicHub performance journeys.
- *
- * The benchmark process drives the real performance APK through accessibility/UI Automator.
- * No benchmark loop runs inside EpicHub. The measured app therefore pays only its normal UI,
- * runtime and profiling costs.
- */
 @LargeTest
 @RunWith(AndroidJUnit4::class)
 class EpicHubNavigationBenchmark {
@@ -149,19 +143,11 @@ class EpicHubNavigationBenchmark {
         DIAGNOSTICS_TABS.forEach(::clickDiagnosticsTab)
     }
 
-    /**
-     * Prefer the stable accessibility description, but fall back to the visible label. If the
-     * application disappears after a click, report that directly rather than spending the full
-     * selector timeout and masking a crash as a missing target.
-     */
     private fun clickTarget(description: String, fallbackText: String) {
-        val target = waitForVisible(
-            selectors = arrayOf(By.desc(description), By.text(fallbackText)),
-            timeoutMs = FIND_TIMEOUT_MS,
-            waitingFor = "$description / $fallbackText",
-        ) ?: error("EpicHub benchmark could not find UI target: $description / $fallbackText")
-
-        target.click()
+        val selectors = arrayOf(By.desc(description), By.text(fallbackText))
+        if (!clickVisible(selectors, FIND_TIMEOUT_MS, "$description / $fallbackText")) {
+            error("EpicHub benchmark could not find UI target: $description / $fallbackText")
+        }
         settle(CLICK_SETTLE_MS)
         ensureTargetProcessAlive("after clicking $description / $fallbackText")
     }
@@ -170,8 +156,7 @@ class EpicHubNavigationBenchmark {
         repeat(MAX_DIAGNOSTICS_REVEAL_ATTEMPTS) { attempt ->
             ensureTargetProcessAlive("while looking for Diagnostics tab $label")
 
-            findVisible(By.text(label))?.let { target ->
-                target.click()
+            if (clickVisible(arrayOf(By.text(label)), DIAGNOSTICS_CLICK_TIMEOUT_MS, "Diagnostics tab $label")) {
                 settle(CLICK_SETTLE_MS)
                 ensureTargetProcessAlive("after clicking Diagnostics tab $label")
                 return
@@ -187,13 +172,13 @@ class EpicHubNavigationBenchmark {
     }
 
     private fun revealDiagnosticsTab(label: String) {
-        val visibleAnchor = DIAGNOSTICS_TABS
+        val anchorBounds = DIAGNOSTICS_TABS
             .asSequence()
-            .mapNotNull { findVisible(By.text(it)) }
+            .mapNotNull { findVisibleBounds(By.text(it)) }
             .firstOrNull()
             ?: error("No visible Diagnostics tab was available as a scroll anchor")
 
-        val y = visibleAnchor.visibleBounds.centerY()
+        val y = anchorBounds.centerY()
         val targetIndex = DIAGNOSTICS_TABS.indexOf(label)
         val moveTowardLaterTabs = targetIndex >= DIAGNOSTICS_TABS.size / 2
         val startX = if (moveTowardLaterTabs) device.displayWidth * 3 / 4 else device.displayWidth / 4
@@ -202,6 +187,28 @@ class EpicHubNavigationBenchmark {
         device.swipe(startX, y, endX, y, SWIPE_STEPS)
         settle(CLICK_SETTLE_MS)
         ensureTargetProcessAlive("after revealing Diagnostics tab $label")
+    }
+
+    private fun clickVisible(
+        selectors: Array<BySelector>,
+        timeoutMs: Long,
+        waitingFor: String,
+    ): Boolean {
+        val deadline = SystemClock.uptimeMillis() + timeoutMs
+        do {
+            ensureTargetProcessAlive("while waiting for $waitingFor")
+            selectors.forEach { selector ->
+                val target = findVisible(selector) ?: return@forEach
+                try {
+                    target.click()
+                    return true
+                } catch (_: StaleObjectException) {
+                    // Compose replaced this semantics node between lookup and click. Re-query.
+                }
+            }
+            SystemClock.sleep(FIND_POLL_MS)
+        } while (SystemClock.uptimeMillis() < deadline)
+        return false
     }
 
     private fun waitForVisible(
@@ -220,8 +227,32 @@ class EpicHubNavigationBenchmark {
         return null
     }
 
-    private fun findVisible(selector: BySelector): UiObject2? =
-        device.findObjects(selector).firstOrNull { objectIsVisible(it.visibleBounds) }
+    private fun findVisible(selector: BySelector): UiObject2? {
+        device.findObjects(selector).forEach { candidate ->
+            try {
+                if (objectIsVisible(candidate.visibleBounds)) {
+                    return candidate
+                }
+            } catch (_: StaleObjectException) {
+                // Accessibility trees are transient during Compose recomposition; skip stale nodes.
+            }
+        }
+        return null
+    }
+
+    private fun findVisibleBounds(selector: BySelector): Rect? {
+        device.findObjects(selector).forEach { candidate ->
+            try {
+                val bounds = candidate.visibleBounds
+                if (objectIsVisible(bounds)) {
+                    return bounds
+                }
+            } catch (_: StaleObjectException) {
+                // Re-query on the next candidate/poll rather than failing the benchmark harness.
+            }
+        }
+        return null
+    }
 
     private fun objectIsVisible(bounds: Rect): Boolean =
         bounds.width() > 0 &&
@@ -281,6 +312,7 @@ class EpicHubNavigationBenchmark {
         const val DIAGNOSTICS_CYCLES_PER_ITERATION = 4
 
         const val FIND_TIMEOUT_MS = 10_000L
+        const val DIAGNOSTICS_CLICK_TIMEOUT_MS = 500L
         const val APP_READY_TIMEOUT_MS = 15_000L
         const val FIND_POLL_MS = 50L
         const val CLICK_SETTLE_MS = 90L
