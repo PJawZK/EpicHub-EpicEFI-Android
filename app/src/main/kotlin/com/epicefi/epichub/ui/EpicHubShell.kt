@@ -368,52 +368,50 @@ private fun ShellContent(
     onShareCapture: (DiagnosticCapture) -> Unit,
 ) {
     Trace.beginSection("EpicHub.ShellContent:${destination.id}")
-    try {
-        if (settingsOpen) {
-            SettingsScreen(onClose = onCloseSettings)
-            return
-        }
-
-        when (destination.workspace) {
-            PrimaryWorkspace.DASHBOARD -> DashboardScreen(runtimeSnapshot)
-            PrimaryWorkspace.DIAGNOSTICS -> DiagnosticsScreen(
-                diagnostics = diagnostics,
-                onTabSelected = onDiagnosticsTabSelected,
-                onSaveCapture = onSaveCapture,
-                onShareCapture = onShareCapture,
-            )
-            PrimaryWorkspace.TUNER -> Column(modifier = Modifier.fillMaxSize()) {
-                WorkspaceRouteTabs(destination, onDestinationSelected)
-                Box(modifier = Modifier.weight(1f)) {
-                    if (benchmarkPlaceholderContent) {
-                        BenchmarkRoutePlaceholder(destination)
-                    } else {
-                        when (destination) {
-                            AppDestination.TUNER -> TunerScreen()
-                            AppDestination.TUNING_TOOLS -> TuningToolsScreen()
-                            else -> Unit
-                        }
-                    }
-                }
-            }
-            PrimaryWorkspace.LOGGER -> Column(modifier = Modifier.fillMaxSize()) {
-                WorkspaceRouteTabs(destination, onDestinationSelected)
-                Box(modifier = Modifier.weight(1f)) {
-                    if (benchmarkPlaceholderContent) {
-                        BenchmarkRoutePlaceholder(destination)
-                    } else {
-                        when (destination) {
-                            AppDestination.LOGGER -> LoggerScreen(runtimeSnapshot)
-                            AppDestination.ANALYZER -> AnalyzerScreen()
-                            else -> Unit
-                        }
-                    }
-                }
-            }
-        }
-    } finally {
+    if (settingsOpen) {
+        SettingsScreen(onClose = onCloseSettings)
         Trace.endSection()
+        return
     }
+
+    when (destination.workspace) {
+        PrimaryWorkspace.DASHBOARD -> DashboardScreen(runtimeSnapshot)
+        PrimaryWorkspace.DIAGNOSTICS -> DiagnosticsScreen(
+            diagnostics = diagnostics,
+            onTabSelected = onDiagnosticsTabSelected,
+            onSaveCapture = onSaveCapture,
+            onShareCapture = onShareCapture,
+        )
+        PrimaryWorkspace.TUNER -> Column(modifier = Modifier.fillMaxSize()) {
+            WorkspaceRouteTabs(destination, onDestinationSelected)
+            Box(modifier = Modifier.weight(1f)) {
+                if (benchmarkPlaceholderContent) {
+                    BenchmarkRoutePlaceholder(destination)
+                } else {
+                    when (destination) {
+                        AppDestination.TUNER -> TunerScreen()
+                        AppDestination.TUNING_TOOLS -> TuningToolsScreen()
+                        else -> Unit
+                    }
+                }
+            }
+        }
+        PrimaryWorkspace.LOGGER -> Column(modifier = Modifier.fillMaxSize()) {
+            WorkspaceRouteTabs(destination, onDestinationSelected)
+            Box(modifier = Modifier.weight(1f)) {
+                if (benchmarkPlaceholderContent) {
+                    BenchmarkRoutePlaceholder(destination)
+                } else {
+                    when (destination) {
+                        AppDestination.LOGGER -> LoggerScreen(runtimeSnapshot)
+                        AppDestination.ANALYZER -> AnalyzerScreen()
+                        else -> Unit
+                    }
+                }
+            }
+        }
+    }
+    Trace.endSection()
 }
 
 @Composable
