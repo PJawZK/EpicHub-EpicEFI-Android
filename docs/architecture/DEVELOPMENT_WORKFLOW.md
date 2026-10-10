@@ -2,46 +2,144 @@
 
 ## Purpose
 
-EpicHub is developed as a clean-slate product. Earlier EpicDash, EpicDash-JZ, EpicEFI firmware and related projects are evidence sources, not source-tree templates.
+EpicHub is developed as a clean-slate product with two deliberate implementation surfaces:
 
-The repository preserves a clear distinction between:
+- the **native Android product** — Kotlin/Jetpack Compose + Rust;
+- the **GitHub Pages product/interaction prototype** — modular TypeScript/HTML/CSS used for fast workflow/layout development.
 
-- product requirements and proven behaviour;
-- protocol/file-format authority;
-- implementation choices;
-- experimental alternatives;
-- accepted production structure.
+The browser surface is a development/specification tool under D-026. It does not replace or enter the Android production runtime under D-023.
 
-## Repository workflow
+Earlier EpicDash, EpicDash-JZ, EpicEFI firmware and related projects remain evidence sources, not source-tree templates.
+
+---
+
+# Repository workflow
 
 `main` is the integration branch.
 
-Substantial work uses descriptive feature/task branches and PRs. The first Phase-2 foundation is already merged; current work uses `phase2/ui-diagnostics-foundation` / draft PR #3.
+Substantial work uses descriptive feature/task branches and PRs. Current work uses `phase2/ui-diagnostics-foundation` / draft PR #3.
 
 Generated binaries, signing material, secrets, personal paths, device identifiers and local build state are not committed.
 
-## Historical Phase-1 classification
+The repository is durable project memory. `docs/HANDOFF.md` is the single current handoff; Git history is the archive.
 
-Phase 1 is closed. Its responsibility classifications remain useful vocabulary:
+---
 
-- `PRESERVE`
-- `REDESIGN`
-- `MERGE`
-- `SPLIT`
-- `REFERENCE`
-- `REMOVE`
+# Parallel development lanes
 
-Evidence confidence remains:
+EpicHub work should now be separated intentionally:
 
-- `PROVEN`
-- `SUPPORTED`
-- `PROPOSED`
+```text
+A. Pages product/UX lane
+   layout + interaction + workflow + behavior contracts
 
-Those labels describe responsibility/evidence disposition; they do not replace D-022's finer implementation-entry classification of individual historical behavior.
+B. Android performance/runtime lane
+   Compose + Kotlin + Rust + JNI + lifecycle + physical performance
 
-## Source authority
+C. Production translation lane
+   accepted Pages behavior → native implementation → qualification
+```
 
-When historical/external sources disagree, default authority is:
+These lanes may proceed in parallel.
+
+A difficult native rendering/performance investigation does not freeze product/UI design. Likewise, a polished Pages feature is not production-complete until translated and qualified natively.
+
+## Lane A — Pages prototype
+
+Use `prototype/` to establish:
+
+- information architecture;
+- layouts and responsive presentation recipes;
+- user workflows and terminology;
+- interaction details;
+- feature state transitions;
+- empty/loading/error/stale/disconnected states;
+- fixture-driven functional demonstrations;
+- future TS-Shim interoperability through explicit adapters.
+
+Prototype feature code must remain modular by responsibility according to `PAGES_PROTOTYPE_ARCHITECTURE.md`.
+
+The browser surface may use TypeScript, DOM/CSS, fixture data, browser storage and external-tool serialization where useful. None of those choices become native runtime authority automatically.
+
+## Lane B — native performance/runtime
+
+Continue physical Android qualification independently:
+
+- Macrobenchmark/Perfetto scenarios;
+- Compose composition/recomposition/layout/draw behavior;
+- allocation/GC/CPU/memory;
+- JNI cost and ABI correctness;
+- lifecycle/state restoration;
+- Android platform ownership;
+- Rust hot paths and data ownership.
+
+Browser performance never substitutes for this evidence.
+
+## Lane C — production translation
+
+Once a substantial Pages feature is explicitly accepted, create/maintain a translation contract recording:
+
+```text
+accepted prototype feature/path
+visual + interaction authority
+inputs / outputs
+actions
+important state transitions
+empty/loading/error/stale behavior
+identity/provenance requirements
+production owner(s)
+Compose responsibility
+Kotlin workflow/platform responsibility
+Rust/domain responsibility
+prototype-only shortcuts to discard
+native qualification required
+```
+
+Then implement from scratch against the production owners/contracts rather than copying browser control flow mechanically.
+
+---
+
+# Pages file-growth workflow
+
+Do not recreate the old pattern of one huge HTML file containing the whole application.
+
+Permanent rules:
+
+- `prototype/index.html` is document/mount only;
+- `prototype/src/main.ts` is bootstrap only;
+- shell/routing/composition belongs in `src/app/`;
+- one functional route owns one feature directory under `src/features/`;
+- feature-local state/actions/panels/styles stay feature-local until sharing is justified;
+- common UI is extracted only after a real shared concept exists;
+- fixture generation lives in adapters, not pages;
+- TS-Shim/network/wire parsing lives in `adapters/ts-shim/`, not pages;
+- avoid `utils.ts`, `helpers.ts`, giant global state and catch-all managers;
+- a file around 350–500 lines is a responsibility-review signal, not a target.
+
+Prefer several small permanent owners over a monolith that later requires a risky split.
+
+---
+
+# TS-Shim development workflow
+
+The Pages foundation deliberately prepares for a future TS-Shim connection.
+
+Before implementation:
+
+1. review the actual shim external contract;
+2. define the narrow typed prototype port(s) needed by features;
+3. keep endpoint/reconnect/wire schema/serialization inside `prototype/src/adapters/ts-shim/`;
+4. translate shim data immediately into transport-neutral prototype models;
+5. keep the same feature workflows runnable against fixture adapters;
+6. start read-only unless mutation identity/safety/verification is separately accepted.
+
+If the shim uses JSON/WebSocket/HTTP, that is an explicit tooling/interoperability boundary permitted by D-023. It does not establish JSON/JS communication inside the Android product.
+
+---
+
+# Source authority
+
+When historical/external sources disagree, default production authority remains:
 
 1. firmware/protocol reality;
 2. physically verified EpicDash-JZ behaviour;
@@ -49,13 +147,15 @@ When historical/external sources disagree, default authority is:
 4. original EpicDash protocol/function intent;
 5. other experimental/UI/tool/plugin repositories.
 
-UI/UX references may be authoritative for explicitly accepted interaction/visual behavior, never ECU/tune-memory/firmware truth.
+An **explicitly accepted EpicHub Pages feature** may become authority for its own UI/interaction/workflow behavior, but never for ECU/protocol/tune-memory truth merely because the browser demonstrates it.
 
-Within EpicHub, follow `docs/architecture/README.md` authority ordering. Durable decisions and cross-domain contracts override older/local evidence wording.
+Within EpicHub, follow `docs/architecture/README.md` authority ordering.
 
-## Clean reimplementation rule — D-022
+---
 
-Before implementing inherited behavior, follow `SOURCE_REIMPLEMENTATION_METHOD.md`:
+# Clean reimplementation rule — D-022
+
+Before implementing inherited production behavior, follow `SOURCE_REIMPLEMENTATION_METHOD.md`:
 
 ```text
 semantic behavior slice
@@ -77,23 +177,27 @@ copy old subsystem
 → rename/refactor later
 ```
 
-Substantial replacement PRs should record historical evidence reviewed, required invariants, old bugs/technical debt excluded, new owner/contract, tests/goldens, performance/physical evidence and deliberate differences.
+The Pages prototype does not bypass D-022 for production protocol/domain behavior. It may help define the target workflow after the underlying required behavior is understood.
 
-## Runtime language / serialization rule — D-023
+---
+
+# Runtime language / serialization rule — D-023
 
 Production application logic remains Kotlin/Jetpack Compose + Rust.
 
-Do not introduce JavaScript/WebView/DOM application runtime or serialized-document messaging as a convenience architecture.
+Do not introduce JavaScript/WebView/DOM application runtime or serialized-document messaging as a convenience production architecture.
 
-Before adding JSON, CBOR, XML, protobuf, MessagePack or another generic serializer, identify the explicit persistence/export/external-interoperability boundary that requires it.
+The TypeScript Pages prototype is explicitly outside that runtime boundary under D-026.
 
-Runtime/JNI/domain communication remains typed/packed. Serializer dependencies stay isolated behind their boundary codecs.
+Before adding JSON, CBOR, XML, protobuf, MessagePack or another generic serializer to production, identify the explicit persistence/export/external-interoperability boundary that requires it.
 
-Current canonical diagnostic export is versioned `capture.cbor` + `report.txt`; CBOR is not the live diagnostic transport.
+Prototype-to-TS-Shim serialization is allowed only inside the external adapter boundary.
 
-## Architecture changes
+---
 
-Architecture documents are implementation contracts. A change in responsibility, authority, dependency direction, transport ownership, safety policy, runtime-language policy, serialization boundary or Kotlin/Rust boundary updates the corresponding documents in the same workstream.
+# Architecture changes
+
+Architecture documents are implementation contracts. A change in responsibility, authority, dependency direction, transport ownership, safety policy, runtime-language policy, Pages/native boundary, serialization boundary or Kotlin/Rust boundary updates the corresponding documents in the same workstream.
 
 New code must have an obvious permanent owner/home before implementation.
 
@@ -103,74 +207,103 @@ Before accepting any durable architecture change:
 
 1. identify every document restating the changed concept;
 2. update them together, or explicitly mark old text as historical evidence;
-3. search the active branch/PR for superseded names, ownership statements, old phase status, provisional values, old implementation order and serialization/runtime leakage;
+3. search the active branch/PR for superseded names, ownership statements and stale implementation order;
 4. resolve contradictions rather than relying on chronology;
 5. verify `GAP_ANALYSIS.md`, current handoff and active implementation contracts remain truthful.
 
-Required stale-term checks now include, where relevant:
+Current stale-term checks include inappropriate production uses of `JSON`, `WebView`, `JavaScript`, `TypeScript`, browser runtime/state, old navigation counts, old phase status and obsolete authority wording.
 
-- old Phase-1 pending/acceptance wording;
-- old foundation-as-future wording;
-- old top-level navigation counts/destinations;
-- `JSON`, `NDJSON`, `JSONObject`, `WebView`, `JavaScript`, `React`, `TypeScript` when used as current target instructions rather than historical evidence;
-- JSON/CBOR document payloads over JNI;
-- serializers imported into runtime/domain state packages;
-- file-format-specific wording inside generic logging/analysis contracts;
-- old state-owner/gateway names.
+TypeScript/JavaScript references under `prototype/` or D-026 documentation are legitimate and must not be mistaken for production-runtime leakage.
 
-Historical evidence may legitimately contain those terms, but must not present them as current target architecture.
+---
 
-## Experiments
+# Testing / qualification discipline
 
-Competing implementations may temporarily use explicit experiment names when comparing real alternatives. Accepted code receives permanent descriptive names; rejected variants are removed or retained only as deliberate test/reference material.
+Every accepted slice gets the cheapest strong proof available before adding complexity.
 
-## Testing/qualification discipline
+Native examples:
 
-Every accepted slice gets the cheapest strong proof available before adding more complexity:
-
-- pure unit/golden tests;
+- Rust/JVM unit tests;
 - ABI/schema tests;
 - fault-injection/lifecycle tests;
-- CI build/lint/static checks;
-- device/bench qualification where behavior depends on Android/hardware;
-- performance measurement for hot paths.
+- Android CI builds;
+- device/bench qualification;
+- Macrobenchmark/Perfetto for hot UI paths.
 
-Do not stack multiple unqualified subsystems and attempt to debug the combined result later.
+Pages examples:
 
-The current UI/diagnostics slice must be qualified with the existing synthetic RuntimeSnapshot foundation before live ECU transport is attached.
+- TypeScript strict typecheck;
+- Vitest contract/behavior tests;
+- Vite production build;
+- deterministic fixture states;
+- screenshot/interaction review;
+- later adapter contract tests for TS-Shim.
 
-## Chat handoff workflow
+Pages tests prove prototype behavior, not Android performance/safety. Native tests prove production behavior, not that the product interaction is well designed.
+
+---
+
+# Prototype acceptance and translation
+
+A Pages feature should not be translated merely because it renders.
+
+Accept it when:
+
+- the workflow is intentional;
+- fixture/live authority is unmistakable;
+- feature ownership is clear;
+- visual nesting has not become state/dependency nesting;
+- adapter details are absent from feature code;
+- important failure/stale/empty states exist;
+- the intended production owners are known.
+
+After translation, compare the native feature against the accepted prototype and then qualify it physically.
+
+---
+
+# Chat handoff workflow
 
 There is exactly one current handoff file:
 
 `docs/HANDOFF.md`
 
-Git history is the archive. Do not create numbered/dated handoff files.
-
 When the user requests **"Create the EpicHub handoff"**:
 
-1. inspect actual branch/head/PR/CI/qualification state;
-2. incorporate only durable decisions, completed work, unresolved issues and next action;
-3. replace/update `docs/HANDOFF.md` rather than append stale history;
-4. point to repository authority docs instead of duplicating them;
-5. commit the handoff update;
-6. return a minimal continuation instruction.
+1. inspect actual branch/head/PR/CI/physical qualification state;
+2. inspect current Pages prototype state when relevant;
+3. incorporate only durable decisions, completed work, unresolved issues and next action;
+4. replace/update `docs/HANDOFF.md` rather than append stale history;
+5. point to repository authority docs instead of duplicating them;
+6. commit the handoff update;
+7. return a minimal continuation instruction.
 
 Preferred continuation instruction:
 
 `Read PJawZK/EpicHub-EpicEFI-Android/docs/HANDOFF.md, verify the repository state, and continue from there.`
 
-## Current development gate
+---
 
-Phase 1 is closed and the first Phase-2 foundation is qualified.
+# Current development gate
 
-Current gate:
+Phase 1 is closed and the first Phase-2 native foundation is qualified.
+
+Current work is intentionally split:
 
 ```text
-accept PR #3 UI + diagnostic contracts
-→ implement responsive shell + typed diagnostics/capture on synthetic foundation
-→ CI + SM-A137F + SM-T500 qualification
-→ only then start D-022 review/implementation of read-only live ECU acquisition
+Native lane:
+continue PR #3 performance/physical qualification
+→ accept a stable native foundation
+→ continue D-022 production subsystem work
+
+Pages lane:
+modular prototype shell + fixture boundary
+→ iterate Dashboard/Tuner/Tools/Logger/Analyzer/Diagnostics/Settings
+→ accept feature behavior
+→ translate mature slices into native production
+
+Interop lane:
+review exact TS-Shim contract
+→ implement external adapter behind typed prototype ports
 ```
 
-ECU mutation/Burn/logger formats/BLE migration/analyzer-autotune remain outside the current slice.
+ECU mutation/Burn remains behind the single semantic tuning authority and is not granted to the browser prototype by default.
