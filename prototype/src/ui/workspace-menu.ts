@@ -46,7 +46,7 @@ export function createWorkspaceMenu(): WorkspaceMenuHandle {
     button.setAttribute("aria-expanded", String(open));
   };
 
-  button.addEventListener("click", () => setOpen(menu.hidden));
+  button.addEventListener("click", () => setOpen(Boolean(menu.hidden)));
   button.addEventListener("keydown", (event) => {
     if (event.key === "Escape") setOpen(false);
   });

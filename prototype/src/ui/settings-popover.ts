@@ -61,7 +61,7 @@ export function createSettingsPopover(): SettingsPopoverHandle {
     button.setAttribute("aria-expanded", String(open));
   };
 
-  button.addEventListener("click", () => setOpen(popover.hidden));
+  button.addEventListener("click", () => setOpen(Boolean(popover.hidden)));
   button.addEventListener("keydown", (event) => {
     if (event.key === "Escape") setOpen(false);
   });
