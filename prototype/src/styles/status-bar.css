@@ -1,0 +1,38 @@
+.status-bar {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 8px;
+  border-top: 1px solid var(--border);
+  background: #09131c;
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.status-bar__state {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.status-bar__route {
+  color: var(--detail);
+}
+
+.status-bar__grow {
+  flex: 1;
+}
+
+.status-bar__source {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 560px) {
+  .status-bar > span:nth-child(2),
+  .status-bar__route {
+    display: none;
+  }
+}

@@ -1,0 +1,36 @@
+.feature-page,
+.feature-intro {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.feature-page__note,
+.feature-intro p,
+.feature-intro li {
+  color: var(--muted);
+}
+
+.channel-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--space-3);
+}
+
+.channel-card {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.channel-card__label {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.channel-card__value {
+  font-size: 1.6rem;
+  font-variant-numeric: tabular-nums;
+}

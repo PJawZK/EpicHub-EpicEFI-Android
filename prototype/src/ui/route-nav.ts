@@ -20,10 +20,12 @@ export function renderRouteNav(
 
   for (const route of routes) {
     const button = document.createElement("button");
+    const active = route.id === activeRoute;
     button.type = "button";
     button.className = "route-nav__item";
     button.textContent = route.label;
-    button.dataset.active = String(route.id === activeRoute);
+    button.dataset.active = String(active);
+    button.setAttribute("aria-current", active ? "page" : "false");
     button.addEventListener("click", () => onSelect(route.id));
     nav.append(button);
   }
