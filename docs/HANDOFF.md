@@ -2,73 +2,55 @@
 
 ## Continuation instruction
 
-Read this file first, verify the actual `main` and PR #3 heads, then continue from the current physical-qualification / accepted-prototype gate.
+Read this file first, then verify the actual `phase2/performance-foundation` head, PR #4, and latest Foundation quality run before continuing.
 
 Repository: `PJawZK/EpicHub-EpicEFI-Android`
 
-Do not reconstruct current architecture from EpicDash-JZ or historical plugin repositories when EpicHub documentation defines a newer deliberate contract.
+The current direction is **native EpicHub product development**, not Pages/prototype-shell work and not continued optimization of provisional placeholder UI.
 
 ---
 
 # Repository state
 
 - integration branch: `main`
-- Phase 1: accepted/closed; PR #1 merged
-- first Phase-2 Kotlin/Rust foundation: PR #2 merged
-- active branch: `phase2/ui-diagnostics-foundation`
-- active draft PR: **#3 — Phase 2: establish UI and diagnostics foundations**
-- exact software-qualified application-changing head: `37dab2133fd01dd59fdd8a487756577aca1d6528`
-- qualification: **Foundation quality #169 / run 35970595763 — PASS**
-- qualified artifact: `epichub-foundation-debug`, artifact ID `10795463807`
-- qualified APK SHA-256: `bb7ed1b5ec96982f627fcea2105f31997f5e260366908434928d6bb38e28f9b1`
-- later handoff/documentation-only PR head at the time of this handoff: `63b6396ae37d41c9a4ecb570b827e0e476bab62b`
-- Foundation quality #170 / run 35971964845 for that documentation-only head was still in progress when this handoff was written.
+- active branch: `phase2/performance-foundation`
+- active draft PR: **#4 — Phase 2: continue EpicHub native performance qualification**
+- PR #4 base: `main` at `768b51ce9468406d860b214c134d1d524be4940a`
+- PR #4 is open, draft and mergeable as of 2026-10-10
+- the old PR #3 / Pages-prototype history is superseded for active development
+- the active branch was rebuilt from the last native pre-Pages state and contains no accepted Pages runtime architecture
 
-Always verify the current PR head when resuming. A documentation-only handoff commit may be newer than the qualified application tree.
+The PR #4 body is stale in one important respect: it still describes `ReusableContentHost` as retained for A/B testing and says successful physical qualification is pending. Both are obsolete. `ReusableContentHost` was removed after deterministic physical crashes and the native performance foundation has now completed multiple successful physical qualification rounds.
 
 ---
 
-# Locked methodology and runtime rules
+# Locked architecture
 
-D-022 / `SOURCE_REIMPLEMENTATION_METHOD.md` is mandatory for inherited functionality:
+## D-022 — source reimplementation method
 
-```text
-understand one historical behavior slice deeply
-→ classify required/safety/compatibility/useful/accidental/buggy/obsolete/unknown behavior
-→ define clean owner/contract
-→ implement from scratch
-→ qualify against protocol truth/proven behavior/tests/bench evidence
-```
+Inherited behavior is reviewed slice-by-slice and cleanly reimplemented. Do not bulk-port EpicDash-JZ or historical plugin subsystems.
 
-Never bulk-port an EpicDash-JZ subsystem or historical TunerStudio plugin and clean it later.
+## D-023 — runtime language and serialization
 
-D-023 / `RUNTIME_LANGUAGE_AND_SERIALIZATION.md`:
+- production runtime: Kotlin / Jetpack Compose + Rust;
+- no WebView/JavaScript/DOM production runtime architecture;
+- Kotlin↔Rust uses semantic JNI operations and bounded/versioned packed results;
+- JSON/CBOR are not universal runtime buses;
+- serialization exists only at explicit persistence/export/interoperability boundaries.
 
-- production runtime is Kotlin/Jetpack Compose + Rust;
-- no JavaScript/WebView/DOM production runtime architecture;
-- no JSON/CBOR runtime message bus;
-- Kotlin↔Rust uses semantic JNI operations and bounded/versioned packed buffers/results;
-- serialization exists only at explicit persistence/export/interoperability boundaries;
-- diagnostic capture export uses versioned `capture.cbor` + `report.txt`; CBOR is not a universal EpicHub format;
-- HTML/CSS/light JavaScript are allowed for design prototypes only and are translated into Compose when accepted.
+## D-024 — native Tuning Tools
 
-D-024 / `TUNING_TOOLS_FOUNDATION.md`:
+AE / PID / TCharge / Injection Angle become native Tuning Tools using shared Rust analysis infrastructure and the single semantic tuning authority. They are not runtime plugins.
 
-- AE/PID/TCharge/Injection Angle/Phasing become native **Tuning Tools**;
-- no dynamic plugin/JAR/JavaScript runtime is recreated;
-- Compose owns guided workflow/presentation;
-- Rust owns shared analysis/provenance/statistics/domain models;
-- all ECU mutation remains behind the single semantic tuning authority.
+## D-025 — navigation/domain structure
 
-D-025 / `UI_FOUNDATION_LAYOUT.md`:
-
-- EpicHub exposes **four primary user workspaces**:
+Primary workspaces:
 
 ```text
 Dashboard | Tuner | Logger | Diagnostics
 ```
 
-- six distinct functional/domain leaf routes remain:
+Leaf/domain routes:
 
 ```text
 Dashboard
@@ -79,316 +61,230 @@ Analyzer
 Diagnostics
 ```
 
-- mapping:
+Grouping is presentation-only:
 
 ```text
 Tuner workspace  → Tuner | Tuning Tools
 Logger workspace → Logger | Analyzer
 ```
 
-- visual nesting is presentation-only;
-- Analyzer must not depend on Logger UI/ViewModel/state;
-- Tuning Tools must not depend on Tuner UI/ViewModel/state;
-- sibling routes call their proper lower-level owners/contracts directly;
-- the last meaningful Tuner/Logger leaf route is preserved when switching workspaces;
-- diagnostics record the actual leaf route, not just the containing workspace.
-
-The navigation grouping must never become dependency nesting. Specifically, do not introduce:
-
-```text
-Analyzer → Logger UI/ViewModel/state → analysis/runtime
-Tuning Tools → Tuner UI/ViewModel/state → analysis/runtime
-```
-
-Instead retain parallel ownership:
-
-```text
-Logger UI       → logging / measurement contracts
-Analyzer UI     → analysis / measurement contracts
-Tuner UI        → semantic tuning authority
-Tuning Tools UI → shared analysis/tool contracts
-                   └─ ExperimentProposal → semantic tuning authority
-```
+Do not make Analyzer depend on Logger UI/ViewModel/state and do not make Tuning Tools depend on Tuner UI/ViewModel/state.
 
 ---
 
-# PR #3 implementation state
+# Native UI/runtime state
 
-PR #3 contains the first production UI/diagnostics foundation.
+The production shell is Kotlin/Compose and conditionally composes only the active route.
 
-## Four-workspace UI shell
+Important rule: **do not reintroduce `ReusableContentHost` or retained inactive route compositions as a performance shortcut.** Physical testing showed deterministic `IllegalArgumentException: measure is called on a deactivated node` crashes when switching Dashboard → Tuner. Removing retained-route composition eliminated the crash.
 
-Implemented:
+Current shell behavior:
+
+- compact phone: content + bottom primary navigation;
+- wide layout threshold: `maxWidth >= 840.dp`;
+- wide/tablet: left navigation rail + content;
+- Tuner workspace contains Tuner/Tuning Tools route tabs;
+- Logger workspace contains Logger/Analyzer route tabs;
+- last meaningful Tuner/Logger leaf route is remembered;
+- Diagnostics and capture foundation remain active;
+- RuntimeSnapshot loop and Rust/native-engine foundation remain active.
+
+Current Tuner/Tools/Logger/Analyzer visuals are deliberately provisional structural UI. Do not spend more time micro-optimizing these placeholder screens before replacing them with real product UI.
+
+---
+
+# Physical performance qualification — CLOSED FOUNDATION PHASE
+
+The performance investigation is now sufficiently mature to stop blocking UI/function development.
+
+Authoritative final baseline:
+
+`docs/PERFORMANCE_BASELINE_2026-10-10.md`
+
+Benchmark methodology:
+
+`docs/PERFORMANCE_BENCHMARKING.md`
+
+## Physical device
+
+Samsung SM-A137F, API 34:
+
+- 1080×2408
+- 450 dpi
+- approximately 384×856 dp
+- portrait
+- 60 Hz
+- Android app ABI list: `armeabi-v7a,armeabi`
+- EpicHub selected ABI: `armeabi-v7a`
+- CPU clocks not locked
+- sustained-performance mode off
+
+This qualifies the **compact phone branch only**. It does not qualify the wide/tablet shell. SM-T500 landscape should be tested later when real tablet UI exists.
+
+## Key physical-history conclusions
+
+1. First physical benchmark exposed deterministic Compose crash:
+   `IllegalArgumentException: measure is called on a deactivated node`.
+2. Root cause was retained/deactivated route composition via `ReusableContentHost`.
+3. Removing it eliminated the crash.
+4. A later stale `UiObject2` harness failure was fixed by re-querying stale nodes.
+5. Subsequent full physical suite passed without app crash or stale failure.
+6. Selector-driven leaf benchmarks showed real-content route transitions substantially more expensive than trivial placeholder content.
+7. A deeper audit found selector-tree traversal itself depended on screen complexity, so coordinate-driven leaf benchmarks were added.
+8. Final coordinate-driven runs removed `findObjects()` and per-click `pidof` from the measured loop and preserved the same real-vs-placeholder gap, proving the important penalty is genuinely in the app/rendering path rather than mainly the benchmark driver.
+9. No final coordinate run showed an EpicHub crash, stale-node failure, deactivated-node error, process death or app GC event aligned with the measured transition.
+
+## Final coordinate baseline — 2026-10-10
+
+Qualified source build used for the final physical round:
+
+`a20fd4b52a33a2646381c9fd15d881f1e91d1ea8`
+
+CI for that build:
+
+Foundation quality #330 — PASS
+
+APK hashes:
 
 ```text
-Dashboard
-Tuner
-├─ Tuner
-└─ Tuning Tools
-
-Logger
-├─ Logger
-└─ Analyzer
-
-Diagnostics
+app       7e8d660b83ea8ed8be1fa50a2fba87064ee8912e9aa4ffd9d8c247d44b29c89d
+benchmark aadfbdde3fea65efe602ece75925a788ebd14a153cec121543e82a64b63303a1
 ```
 
-- four primary workspace buttons;
-- six distinct leaf/domain routes underneath;
-- nested route tabs inside the Tuner and Logger workspaces;
-- last-leaf restoration per grouped workspace;
-- actual leaf route retained for diagnostics;
-- navigation contract tests that assert grouping without ownership collapse;
-- global Settings;
-- synthetic RuntimeSnapshot remains active through the shell;
-- Dashboard and Logger remain intentionally visually provisional.
+### Tuner ↔ Tuning Tools
 
-The current simple responsive scaffold is temporary. Long-term accepted presentation authority may be supplied as four explicit prototype families:
+Real content:
 
 ```text
-Tablet Landscape
-Tablet Portrait
-Phone Landscape
-Phone Portrait
+frame count median 30
+CPU P50 22.58 ms
+CPU P95 43.31 ms
+CPU P99 46.25 ms
 ```
 
-These are four presentation recipes over one semantic/runtime architecture, not four applications or duplicated domain logic.
+Placeholder:
 
-## Diagnostics
+```text
+frame count 14 every iteration
+CPU P50 21.94 ms
+CPU P95 24.88 ms
+CPU P99 26.30 ms
+```
 
-Implemented:
+### Logger ↔ Analyzer
 
-- process-scoped bounded `DiagnosticHub`;
-- bounded Kotlin event ring with explicit dropped-event accounting;
-- bounded Rust engine diagnostic ring;
-- versioned fixed 656-byte Rust→Kotlin diagnostic batch ABI v1;
-- one coarse JNI diagnostic drain; no per-event callback bridge;
-- typed event codes/payloads;
-- bounded metric summaries including percentiles;
-- Activity and NativeEngine generation/lifecycle tracing;
-- bounded retained destroyed-owner history;
-- invariant/late-owner evidence;
-- recent-problem capture with pre-trigger history and post-trigger completion;
-- reproduction capture with markers;
-- capture completion survives Activity recreation because the recorder is process-scoped;
+Real content:
+
+```text
+frame count median 29
+CPU P50 23.40 ms
+CPU P95 44.80 ms
+CPU P99 46.59 ms
+```
+
+Placeholder:
+
+```text
+frame count 14 every iteration
+CPU P50 22.92 ms
+CPU P95 26.20 ms
+CPU P99 27.47 ms
+```
+
+Interpretation:
+
+- real provisional screen trees clearly add substantial rendering work and a high-cost frame population;
+- trivial placeholders still sit around ~22–23 ms median on this low-end unlocked-clock device, so some shared shell/navigation/rendering cost also exists;
+- this is now a **baseline**, not a reason to optimize temporary cards/screens;
+- re-profile once real Tuner tables, Logger live data, Analyzer plots and Dashboard gauges exist.
+
+---
+
+# Benchmark authority
+
+Leaf-route performance authority:
+
+```text
+warmTunerLeafNavigationCoordinates
+warmTunerLeafNavigationPlaceholderCoordinates
+warmLoggerLeafNavigationCoordinates
+warmLoggerLeafNavigationPlaceholderCoordinates
+```
+
+These resolve route-tab coordinates during setup and use direct coordinate clicks in the measured block.
+
+Older selector-driven leaf methods remain useful for accessibility/harness regression but are not leaf-performance authority because repeated semantics-tree lookup perturbs the workload.
+
+The combined workspace, primary-workspace, Diagnostics-tab and cold-first-visit methods remain available as regression/diagnostic tools.
+
+Narrow Perfetto markers currently exist around:
+
+```text
+EpicHub.selectDestination:<destination>
+EpicHub.ShellContent:<destination>
+```
+
+`ShellContent` marks composable invocation only; it does not by itself measure all later layout/draw/GPU work.
+
+---
+
+# Accessibility benchmark state
+
+`StaticSelectionChoice` now uses one authoritative semantics node for automation targets. The measured non-selected Tuning Tools/Analyzer targets no longer exhibit the previous Samsung non-clickable warning flood.
+
+Remaining non-clickable warnings are mostly selected/no-op route/workspace targets and Diagnostics text during warm-up. This is not currently blocking product development.
+
+---
+
+# Diagnostics / capture foundation
+
+Retained capabilities include:
+
+- bounded process-scoped DiagnosticHub;
+- bounded Kotlin and Rust diagnostic rings;
+- coarse Rust→Kotlin diagnostic drain;
+- typed events/payloads;
+- metrics/percentiles;
+- lifecycle tracing;
+- recent-problem and reproduction captures;
+- markers;
 - immutable captures;
-- `capture.cbor` + `report.txt` default ZIP archive;
-- secure FileProvider share path;
-- Diagnostics UI: Overview / Events / Metrics / Sessions / Captures;
-- full diagnostics Compose projection updates continuously only while Diagnostics is visible; recording/native drain continue independently.
+- ZIP export with `capture.cbor` + `report.txt`;
+- Diagnostics UI tabs;
+- global Problem capture controls.
 
-Global diagnostic capture is labelled **Problem capture** so it is not confused with Logger recording.
-
-Meaning of Problem capture:
-
-```text
-something strange happens anywhere in EpicHub
-→ user taps Problem capture without leaving that workspace
-→ bounded diagnostic flight recorder preserves recent pre-trigger evidence
-→ a short post-trigger window is retained
-→ immutable diagnostic capture is finalized
-→ capture can later be reviewed/exported
-```
-
-Reproduction mode is:
-
-```text
-Start reproduction
-→ perform the failing steps
-→ add marker(s) if useful
-→ stop
-→ review/export
-```
-
-This is diagnostic evidence capture, not ECU/logger data recording.
-
-Diagnostics is evidence/observation, not connection or warning-policy authority:
-
-```text
-Diagnostics            → evidence, incidents, history, captures
-Connection panel        → live connect/disconnect/reconnect actions routed to transport/session owner
-Settings → Connections  → persistent connection/auto-reconnect policy
-Diagnostics → Warnings  → active/history/acknowledgement
-Settings → Warnings     → warning rule/threshold/debounce/cooldown configuration
-```
-
-Manual connection controls may be visible near Diagnostics or global connection state, but they must remain semantic actions routed to the real transport/session owner. Diagnostics itself must not become the connection owner.
-
-Not yet claimed complete:
-
-- previous-process/crash-context recovery;
-- optional attachment selection/provenance/hashes;
-- richer archive integrity policy;
-- physical overhead/usability qualification.
+Diagnostics is evidence/observation, not connection ownership or warning-rule ownership.
 
 ---
 
-# Tablet Landscape HTML prototype review
+# Next development priority
 
-The current reviewed external prototype is:
+**Stop the placeholder-performance investigation and return to product development.**
 
-`EpicHub-1.12.1_TabletLandscape.html`
+Recommended order:
 
-It was supplied in chat as a design prototype, not added to the repository. If a future chat needs to inspect the exact file contents again, the user may need to re-upload it unless it has since been committed separately.
+1. establish/translate the proper EpicHub navigation/shell presentation authority;
+2. build the real Tuner UI;
+3. implement functional tuning/table editing on the native semantic tuning authority;
+4. build real Logger behavior/UI;
+5. build Analyzer plotting/query behavior/UI;
+6. build/refine Dashboard gauges and interaction;
+7. refine Diagnostics presentation around actual product behavior;
+8. measure the SM-T500 landscape/wide branch when real tablet UI is present;
+9. re-run targeted performance benchmarks against real production scenarios instead of structural placeholders.
 
-The prototype is explicitly allowed to use HTML/CSS/light JavaScript and prototype JSON because those are design/prototyping mechanisms only. None of that selects the production runtime, JNI, persistence or state architecture.
-
-## Overall assessment
-
-The prototype is a credible **Tablet Landscape visual/layout authority candidate**. Its Dashboard, Tuner, Tuning Tools internals, Logger/Analyzer workspace and Trigger Logger are substantially aligned with EpicHub's architectural contracts.
-
-The important conclusion is that the HTML's simpler navigation hierarchy is now deliberately reflected in D-025 and production navigation: four primary workspaces, six distinct functional owners/routes underneath.
-
-## Tuner and Tuning Tools
-
-Strong alignment:
-
-- Tuner remains manual/profile-driven semantic calibration editing;
-- Tuning Tools remain guided domain workflows;
-- AE/PID/TCharge/Injection Phasing workflows are modeled as evidence/analysis tools rather than independent plugin runtimes;
-- temporary experiment proposals hand off to the semantic Tuning authority;
-- tool logic does not own Burn;
-- baseline/requested/effective/restore/keep-in-RAM concepts fit the tuning safety model.
-
-Do not convert visual nesting into a Tuning-Tools-through-Tuner-UI dependency.
-
-## Logger and Analyzer
-
-Strong alignment:
-
-- Trigger Logger has distinct timing-lane responsibility;
-- regular Logger workspace contains graph/timeline/recording functions;
-- Analyzer-style graph/scatter/histogram/table/math-channel tools fit naturally inside the Logger primary workspace from the user's perspective;
-- the underlying Logger and Analyzer owners must remain parallel and share lower-level measurement/channel contracts rather than pass through each other.
-
-Do not create a giant Logger workspace owner/ViewModel that absorbs Analyzer domain ownership merely because the UI groups them.
-
-## Dashboard
-
-Strong alignment:
-
-- Drive/Edit distinction;
-- screen lock;
-- gauge selection/configuration/duplicate/lock/fullscreen;
-- right-side detail rail;
-- user pages;
-- ESP32 bridge I/O widgets as contextual Dashboard widgets rather than a separate application domain.
-
-Production ESP32 actions must still route through semantic bridge/action authority rather than embedding BLE UUID/GPIO details in widget UI code.
-
-## Diagnostics prototype corrections before it becomes authority
-
-The HTML currently mixes some evidence UI with operational/configuration controls. Keep the visual ideas, but separate the responsibilities meaningfully:
-
-```text
-Diagnostics
-→ evidence, metrics, events, lifecycle/session history, captures, active warning incidents
-
-Connection panel
-→ scan/connect/disconnect/reconnect semantic actions
-
-Settings → Connections
-→ persistent connection and auto-reconnect policy
-
-Diagnostics → Warnings
-→ current/history/acknowledgement
-
-Settings → Warnings & Alerts
-→ threshold/rule/debounce/cooldown/enable policy
-```
-
-Also add or represent the global **Problem capture** concept in the HTML authority so the accepted reference does not omit a capability already present in the production shell.
-
-## Fixture/demo truth
-
-Any prototype/demo display that says things such as:
-
-- exact match;
-- verified;
-- authorized;
-- current;
-- live;
-- connected;
-
-must make it unmistakable when the value is fixture/demo/synthetic truth rather than real ECU evidence.
-
-Do not let a polished prototype teach future implementation that simulated authority states may be presented as real authority states.
-
-## Presentation authority model
-
-Once accepted, prefer four explicit reference files or equivalent reference artifacts:
-
-```text
-Tablet Landscape
-Tablet Portrait
-Phone Landscape
-Phone Portrait
-```
-
-Do not treat one HTML file as a universal responsive production specification. Each accepted prototype is a presentation recipe. Production Compose still uses one shared semantic/runtime model and shared component responsibilities underneath.
-
-Cross-orientation media-query fallbacks inside a prototype are acceptable during iteration, but should be ignored or removed when a file is frozen as one specific presentation authority.
-
-## Touch ergonomics
-
-The visual density of the tablet prototype is desirable. Do not mechanically inflate it into generic Material-sized UI. Preserve compact visual controls where appropriate, but separate visual geometry from touch hit-target geometry when necessary for in-car use.
+Performance infrastructure should remain in place as a regression/profiling tool, not become the main project.
 
 ---
 
-# Current gate
+# Deferred / later work
 
-The exact application-changing head `37dab2133fd01dd59fdd8a487756577aca1d6528` passed Foundation quality #169.
-
-For physical testing, use the exact #169 qualified APK with SHA-256:
-
-`bb7ed1b5ec96982f627fcea2105f31997f5e260366908434928d6bb38e28f9b1`
-
-Check at minimum on SM-A137F and SM-T500:
-
-1. only four primary workspace choices are shown;
-2. Tuner ↔ Tuning Tools local navigation works;
-3. leaving and returning to Tuner restores the prior Tuner/Tuning Tools leaf;
-4. Logger ↔ Analyzer local navigation works;
-5. leaving and returning to Logger restores the prior Logger/Analyzer leaf;
-6. actual leaf route remains visible in diagnostics evidence;
-7. phone/tablet shell has no clipping or unusable targets;
-8. synthetic RuntimeSnapshot continues advancing;
-9. Diagnostics Overview / Events / Metrics / Sessions / Captures populate;
-10. Problem capture / reproduction / marker / stop work;
-11. recent-problem capture auto-finishes after its post-trigger window;
-12. export/share produces a diagnostic ZIP;
-13. rotate/recreate Activity during capture and verify evidence/capture survives while NativeEngine is recreated cleanly;
-14. no crash, duplicate active native engine, or obvious responsiveness regression.
-
-If physical issues appear, use the diagnostics system itself to capture them and correct PR #3 before acceptance.
-
-After both devices pass, decide PR #3 acceptance/merge. Accepted HTML presentation authorities may intentionally be integrated before real ECU/USB work if they are mature enough.
-
----
-
-# Immediate next design work
-
-The current HTML review produced these accepted directions:
-
-1. **Four-workspace navigation is the intended route.** It is safe because grouping remains presentation-only and does not create extra runtime/JNI barriers.
-2. **Problem capture** is the global diagnostic flight-recorder action described above; it should be represented in the prototype without being confused with Logger recording.
-3. **Diagnostics, live connection actions, persistent connection settings and warning-rule settings must be visibly separated by responsibility.**
-4. Demo/fixture authority states must be unmistakably labeled as demo/synthetic.
-5. Prototype JSON/JavaScript remains prototype machinery only.
-6. Tablet Landscape / Tablet Portrait / Phone Landscape / Phone Portrait should become explicit presentation authorities rather than one universal responsive reference.
-
-When the user supplies newer Dashboard/Logger HTML revisions, compare them against these contracts before translating to Compose.
-
----
-
-# Deferred work
-
-Not part of the current PR #3 acceptance gate unless deliberately brought forward after prototype acceptance:
-
-- real ECU USB transport/session;
-- ECU writes/Burn;
-- production logging formats;
+- real ECU USB transport/session work where not already implemented;
+- ECU writes/Burn behind the semantic tuning authority;
+- production logger file formats;
 - deep Analyzer implementation;
-- AE/PID/TCharge/Injection-Angle algorithms;
+- native AE/PID/TCharge/Injection-Angle algorithms;
 - BLE/accessory migration;
-- final Dashboard/Logger Compose visuals before the user's prototypes are accepted.
+- Baseline Profile generation/qualification once representative journeys exist;
+- hard numerical performance thresholds only after device variance is understood;
+- physical wide/tablet qualification on SM-T500 after real UI exists.
