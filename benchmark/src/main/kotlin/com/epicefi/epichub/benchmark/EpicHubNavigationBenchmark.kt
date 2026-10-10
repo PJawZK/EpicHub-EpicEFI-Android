@@ -69,47 +69,51 @@ class EpicHubNavigationBenchmark {
     }
 
     @Test
-    fun warmTunerLeafNavigation() = benchmarkRule.measureRepeated(
-        packageName = TARGET_PACKAGE,
-        metrics = listOf(FrameTimingMetric()),
-        compilationMode = CompilationMode.Full(),
-        iterations = WARM_ITERATIONS,
-        startupMode = StartupMode.WARM,
-        setupBlock = {
-            pressHome()
-            launchWarmTargetAndWaitForUi()
-            warmAllDestinations()
-            clickTarget(TUNER_WORKSPACE, TUNER_WORKSPACE_TEXT)
-            clickTarget(TUNER_ROUTE, TUNER_ROUTE_TEXT)
-            settle(LONG_SETTLE_MS)
-        },
+    fun warmTunerLeafNavigation() = measureWarmLeafNavigation(
+        placeholderContent = false,
+        workspaceDescription = TUNER_WORKSPACE,
+        workspaceText = TUNER_WORKSPACE_TEXT,
+        initialRouteDescription = TUNER_ROUTE,
+        initialRouteText = TUNER_ROUTE_TEXT,
     ) {
-        repeat(LEAF_CYCLES_PER_ITERATION) {
-            clickTarget(TUNING_TOOLS_ROUTE, TUNING_TOOLS_ROUTE_TEXT)
-            clickTarget(TUNER_ROUTE, TUNER_ROUTE_TEXT)
-        }
+        clickTarget(TUNING_TOOLS_ROUTE, TUNING_TOOLS_ROUTE_TEXT)
+        clickTarget(TUNER_ROUTE, TUNER_ROUTE_TEXT)
     }
 
     @Test
-    fun warmLoggerLeafNavigation() = benchmarkRule.measureRepeated(
-        packageName = TARGET_PACKAGE,
-        metrics = listOf(FrameTimingMetric()),
-        compilationMode = CompilationMode.Full(),
-        iterations = WARM_ITERATIONS,
-        startupMode = StartupMode.WARM,
-        setupBlock = {
-            pressHome()
-            launchWarmTargetAndWaitForUi()
-            warmAllDestinations()
-            clickTarget(LOGGER_WORKSPACE, LOGGER_WORKSPACE_TEXT)
-            clickTarget(LOGGER_ROUTE, LOGGER_ROUTE_TEXT)
-            settle(LONG_SETTLE_MS)
-        },
+    fun warmTunerLeafNavigationPlaceholder() = measureWarmLeafNavigation(
+        placeholderContent = true,
+        workspaceDescription = TUNER_WORKSPACE,
+        workspaceText = TUNER_WORKSPACE_TEXT,
+        initialRouteDescription = TUNER_ROUTE,
+        initialRouteText = TUNER_ROUTE_TEXT,
     ) {
-        repeat(LEAF_CYCLES_PER_ITERATION) {
-            clickTarget(ANALYZER_ROUTE, ANALYZER_ROUTE_TEXT)
-            clickTarget(LOGGER_ROUTE, LOGGER_ROUTE_TEXT)
-        }
+        clickTarget(TUNING_TOOLS_ROUTE, TUNING_TOOLS_ROUTE_TEXT)
+        clickTarget(TUNER_ROUTE, TUNER_ROUTE_TEXT)
+    }
+
+    @Test
+    fun warmLoggerLeafNavigation() = measureWarmLeafNavigation(
+        placeholderContent = false,
+        workspaceDescription = LOGGER_WORKSPACE,
+        workspaceText = LOGGER_WORKSPACE_TEXT,
+        initialRouteDescription = LOGGER_ROUTE,
+        initialRouteText = LOGGER_ROUTE_TEXT,
+    ) {
+        clickTarget(ANALYZER_ROUTE, ANALYZER_ROUTE_TEXT)
+        clickTarget(LOGGER_ROUTE, LOGGER_ROUTE_TEXT)
+    }
+
+    @Test
+    fun warmLoggerLeafNavigationPlaceholder() = measureWarmLeafNavigation(
+        placeholderContent = true,
+        workspaceDescription = LOGGER_WORKSPACE,
+        workspaceText = LOGGER_WORKSPACE_TEXT,
+        initialRouteDescription = LOGGER_ROUTE,
+        initialRouteText = LOGGER_ROUTE_TEXT,
+    ) {
+        clickTarget(ANALYZER_ROUTE, ANALYZER_ROUTE_TEXT)
+        clickTarget(LOGGER_ROUTE, LOGGER_ROUTE_TEXT)
     }
 
     @Test
@@ -158,8 +162,40 @@ class EpicHubNavigationBenchmark {
         clickTarget(DASHBOARD_WORKSPACE, DASHBOARD_WORKSPACE_TEXT)
     }
 
-    private fun launchWarmTargetAndWaitForUi() {
-        val output = device.executeShellCommand("am start -W -n $TARGET_COMPONENT")
+    private fun measureWarmLeafNavigation(
+        placeholderContent: Boolean,
+        workspaceDescription: String,
+        workspaceText: String,
+        initialRouteDescription: String,
+        initialRouteText: String,
+        cycle: MacrobenchmarkRule.Scope.() -> Unit,
+    ) = benchmarkRule.measureRepeated(
+        packageName = TARGET_PACKAGE,
+        metrics = listOf(FrameTimingMetric()),
+        compilationMode = CompilationMode.Full(),
+        iterations = WARM_ITERATIONS,
+        startupMode = StartupMode.WARM,
+        setupBlock = {
+            pressHome()
+            launchWarmTargetAndWaitForUi(placeholderContent)
+            warmAllDestinations()
+            clickTarget(workspaceDescription, workspaceText)
+            clickTarget(initialRouteDescription, initialRouteText)
+            settle(LONG_SETTLE_MS)
+        },
+    ) {
+        repeat(LEAF_CYCLES_PER_ITERATION) {
+            cycle()
+        }
+    }
+
+    private fun launchWarmTargetAndWaitForUi(placeholderContent: Boolean = false) {
+        val placeholderArg = if (placeholderContent) {
+            " --ez $PLACEHOLDER_EXTRA true"
+        } else {
+            ""
+        }
+        val output = device.executeShellCommand("am start -W -n $TARGET_COMPONENT$placeholderArg")
         if (output.contains("Error", ignoreCase = true) || output.contains("Exception", ignoreCase = true)) {
             error("EpicHub warm launch failed: $output")
         }
@@ -348,6 +384,7 @@ class EpicHubNavigationBenchmark {
         const val TARGET_PACKAGE = "com.epicefi.epichub"
         const val TARGET_COMPONENT = "$TARGET_PACKAGE/.EpicHubActivity"
         const val APP_TITLE = "EpicHub"
+        const val PLACEHOLDER_EXTRA = "com.epicefi.epichub.extra.BENCHMARK_PLACEHOLDER_CONTENT"
 
         const val DASHBOARD_WORKSPACE = "Dashboard workspace"
         const val TUNER_WORKSPACE = "Tuner workspace"
