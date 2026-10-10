@@ -5,7 +5,8 @@
 EpicHub performance work must distinguish between:
 
 - steady-state app cost;
-- workspace/leaf-route transition cost;
+- primary-workspace transition cost;
+- Tuner and Logger leaf-route transition cost;
 - Diagnostics-tab transition cost;
 - cold first-use/startup cost;
 - benchmark/profiler overhead.
@@ -24,7 +25,32 @@ The performance target remains the existing R8/resource-shrunk `performance` bui
 - repeatedly switches Dashboard/Tuner/Tuning Tools/Logger/Analyzer/Diagnostics;
 - records `FrameTimingMetric` with full compilation to minimize JIT noise.
 
-This is the primary signal for destination composition/reuse and shell-navigation work.
+This remains the combined end-to-end navigation regression signal. It deliberately mixes primary-workspace and leaf-route changes and must not be used alone to choose an optimization target.
+
+`EpicHubNavigationBenchmark.warmPrimaryWorkspaceNavigation`
+
+- warms all destinations outside the measured block;
+- starts from Dashboard;
+- repeatedly switches only Dashboard/Tuner/Logger/Diagnostics;
+- records `FrameTimingMetric` with full compilation.
+
+This isolates primary shell/content replacement from Tuner and Logger leaf-route changes.
+
+`EpicHubNavigationBenchmark.warmTunerLeafNavigation`
+
+- warms all destinations outside the measured block;
+- enters the Tuner workspace on the Tuner route;
+- repeatedly switches only Tuner/Tuning Tools;
+- records `FrameTimingMetric` with full compilation.
+
+`EpicHubNavigationBenchmark.warmLoggerLeafNavigation`
+
+- warms all destinations outside the measured block;
+- enters the Logger workspace on the Logger route;
+- repeatedly switches only Logger/Analyzer;
+- records `FrameTimingMetric` with full compilation.
+
+These two leaf benchmarks identify whether route replacement inside a primary workspace is independently expensive.
 
 `EpicHubNavigationBenchmark.warmDiagnosticsTabs`
 
@@ -49,6 +75,17 @@ The qualified physical benchmark kit contains the exact CI-built EpicHub perform
 
 Connect exactly one physical Android device through ADB, keep it awake and unlocked, and do not interact with it while the benchmark runs.
 
+The physical runner records the APK hashes plus comparison-critical device context in `benchmark-run-manifest.txt`, including:
+
+- device model, API level and build fingerprint;
+- device ABI list and the ABI Android selected for EpicHub;
+- display size, density, approximate dp dimensions and orientation;
+- refresh rate when Android exposes it through `dumpsys display`;
+- whether the runner requested CPU locking or sustained-performance mode;
+- the Macrobenchmark-reported CPU-lock and sustained-performance state when available in benchmark JSON.
+
+This metadata is required because phone/compact and tablet/wide layouts are different code paths. In particular, results from a compact portrait device must not be treated as qualification of the wide tablet shell.
+
 ### Linux / Zorin OS
 
 Install the small host-side requirements:
@@ -67,6 +104,9 @@ chmod +x run-performance-benchmark.sh
 Run one benchmark method only:
 
 ```bash
+./run-performance-benchmark.sh --method warmPrimaryWorkspaceNavigation
+./run-performance-benchmark.sh --method warmTunerLeafNavigation
+./run-performance-benchmark.sh --method warmLoggerLeafNavigation
 ./run-performance-benchmark.sh --method warmWorkspaceNavigation
 ./run-performance-benchmark.sh --method warmDiagnosticsTabs
 ./run-performance-benchmark.sh --method coldFirstVisitJourney
@@ -83,12 +123,15 @@ From the extracted benchmark kit:
 Run one benchmark method only:
 
 ```powershell
+./run-performance-benchmark.ps1 -Method warmPrimaryWorkspaceNavigation
+./run-performance-benchmark.ps1 -Method warmTunerLeafNavigation
+./run-performance-benchmark.ps1 -Method warmLoggerLeafNavigation
 ./run-performance-benchmark.ps1 -Method warmWorkspaceNavigation
 ./run-performance-benchmark.ps1 -Method warmDiagnosticsTabs
 ./run-performance-benchmark.ps1 -Method coldFirstVisitJourney
 ```
 
-Both prebuilt runners install/reinstall the exact qualified APK pair, invoke instrumentation directly, pull benchmark JSON and Perfetto trace evidence, record device/build/APK hashes, and create one `EpicHub-Benchmark-<timestamp>.zip` for analysis.
+Both prebuilt runners install/reinstall the exact qualified APK pair, invoke instrumentation directly, pull benchmark JSON and Perfetto trace evidence, record device/build/APK hashes, preserve post-run diagnostic state and create one `EpicHub-Benchmark-<timestamp>.zip` for analysis.
 
 The runners refuse emulator execution by default. Emulator numbers are useful only for harness debugging, not performance qualification evidence.
 
@@ -102,11 +145,13 @@ Physical-device performance results are initially **report-only**. Do not fail C
 
 When comparing implementations:
 
-1. Compare the same benchmark method, device, orientation and build type.
+1. Compare the same benchmark method, device, orientation, effective layout width/branch, selected app ABI and build type.
 2. Prefer median/P95/P99 frame timing/overrun over one worst outlier.
 3. Keep warm and cold scenarios separate.
-4. If only one scenario regresses, optimize that subsystem rather than changing unrelated UI/runtime code.
-5. A performance improvement is not accepted merely because an intended UI feature was removed. Feature-removal builds may be used as diagnostic probes to estimate feature cost.
+4. Use the isolated primary-workspace and leaf-route benchmarks to choose the subsystem to optimize; keep the combined workspace journey as an end-to-end regression check.
+5. If only one scenario regresses, optimize that subsystem rather than changing unrelated UI/runtime code.
+6. A performance improvement is not accepted merely because an intended UI feature was removed. Feature-removal builds may be used as diagnostic probes to estimate feature cost.
+7. Physical phone/compact qualification does not replace tablet-landscape qualification when the production layout takes a different responsive branch.
 
 ## Measurement overhead
 
