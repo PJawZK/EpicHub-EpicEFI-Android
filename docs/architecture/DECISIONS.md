@@ -232,3 +232,21 @@ Visual nesting must never become dependency nesting or authority nesting. In par
 Settings remains global rather than a fifth primary workspace.
 
 This model intentionally lets the UI follow the accepted tablet/phone visual references without paying for that simplicity with extra runtime barriers or merged domain owners.
+
+## D-026 — GitHub Pages is a first-class product/interaction lab, not production runtime
+
+EpicHub uses a modular TypeScript/HTML/CSS GitHub Pages surface under `prototype/` to develop product layout, interaction behavior, workflows, responsive presentation recipes and feature-level state transitions rapidly while native Android performance/runtime work continues independently.
+
+The Pages surface is development/specification code. It does **not** alter D-002/D-003/D-023: the production product remains Android and the production runtime remains Kotlin/Jetpack Compose + Rust. Accepted browser behavior is translated into native owners/contracts rather than embedded through WebView, retained as a JavaScript state engine or used as the Android runtime message bus.
+
+The prototype must be modular by responsibility. `index.html` is a mount/document shell, `main.ts` is bootstrap only, each functional route owns a feature directory, shared UI is extracted only for genuinely shared concepts, fixture generation lives in adapters and external transport/wire logic stays out of feature code. Large all-in-one HTML/script/style files and global catch-all state/managers are explicitly rejected.
+
+Feature ownership mirrors the production architecture where useful: Analyzer remains independent from Logger presentation state, and Tuning Tools remains independent from Tuner presentation state. The prototype may use its own transport-neutral semantic models and ports to express these boundaries, but those browser types do not become production Kotlin/Rust authority automatically.
+
+A future TS-Shim connection belongs behind `prototype/src/adapters/ts-shim/` (or an equivalent explicit adapter) and typed prototype ports. Endpoint/reconnect/wire-schema/serialization mechanics remain inside that external interoperability boundary. If the shim uses JSON, WebSocket or HTTP, that is an explicit tooling boundary permitted by D-023; it does not establish browser/JSON communication inside the Android product.
+
+TS-Shim integration begins read-only unless command/mutation identity, safety and verification are separately accepted. The browser prototype never gains raw ECU page/offset/byte authority merely because an external shim can expose it.
+
+Substantial accepted Pages features should have an explicit translation contract describing visual/interaction authority, inputs/outputs/actions/states, error/stale/loading behavior, production owners, browser-only shortcuts to discard and native qualification required. Browser performance is not accepted as evidence of Compose/Android performance.
+
+The detailed structure and workflow are defined in `PAGES_PROTOTYPE_ARCHITECTURE.md`.
