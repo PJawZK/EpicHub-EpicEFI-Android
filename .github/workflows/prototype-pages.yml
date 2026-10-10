@@ -1,6 +1,13 @@
 name: Publish EpicHub prototype to Pages
 
 on:
+  push:
+    branches:
+      - main
+      - phase2/ui-diagnostics-foundation
+    paths:
+      - "prototype/**"
+      - ".github/workflows/prototype-pages.yml"
   workflow_dispatch:
 
 permissions:
