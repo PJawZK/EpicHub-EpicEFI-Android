@@ -56,7 +56,7 @@ Likewise, historical TunerStudio plugin/JAR packaging is evidence only. D-024 ma
 ## Target architecture contracts
 
 - `CODEBASE_TOPOLOGY.md` — current physical topology plus deliberate expansion rules, including native product and Pages prototype homes.
-- `DEPENDENCY_RULES.md` — allowed dependency direction and prohibited ownership/serialization leaks across native and prototype surfaces.
+- `DEPENDENCY_RULES.md` — native/production dependency direction and prohibited ownership/serialization leaks; Pages-specific dependency direction is defined in `PAGES_PROTOTYPE_ARCHITECTURE.md`.
 - `STATE_OWNERSHIP.md` — sole mutable authority for important production state.
 - `DATA_FLOW.md` — major live/tuning/accessory/logging/analyzer data paths.
 - `THREADING_MODEL.md` — UI/acquisition/logging/analysis concurrency model.
