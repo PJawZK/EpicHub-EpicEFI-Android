@@ -14,8 +14,10 @@ Usage: ./run-performance-benchmark.sh [options]
 
 Options:
   --method NAME          Run one benchmark method only.
-                         Examples: warmWorkspaceNavigation,
-                         warmDiagnosticsTabs, coldFirstVisitJourney
+                         Examples: warmPrimaryWorkspaceNavigation,
+                         warmTunerLeafNavigation, warmLoggerLeafNavigation,
+                         warmWorkspaceNavigation, warmDiagnosticsTabs,
+                         coldFirstVisitJourney
   --test-class CLASS     Override the instrumentation test class.
   --app APK              Path to EpicHub performance APK.
   --benchmark APK        Path to Macrobenchmark APK.
@@ -73,6 +75,10 @@ require_command() {
   fi
 }
 
+adb_shell_line() {
+  adb -s "$SERIAL" shell "$@" 2>/dev/null | tr -d '\r' | head -n 1
+}
+
 require_command adb
 require_command sha256sum
 require_command zip
@@ -105,10 +111,11 @@ if [[ ${#DEVICES[@]} -ne 1 ]]; then
 fi
 
 SERIAL="${DEVICES[0]}"
-MODEL="$(adb -s "$SERIAL" shell getprop ro.product.model | tr -d '\r')"
-API_LEVEL="$(adb -s "$SERIAL" shell getprop ro.build.version.sdk | tr -d '\r')"
-FINGERPRINT="$(adb -s "$SERIAL" shell getprop ro.build.fingerprint | tr -d '\r')"
-QEMU="$(adb -s "$SERIAL" shell getprop ro.boot.qemu | tr -d '\r')"
+MODEL="$(adb_shell_line getprop ro.product.model)"
+API_LEVEL="$(adb_shell_line getprop ro.build.version.sdk)"
+FINGERPRINT="$(adb_shell_line getprop ro.build.fingerprint)"
+QEMU="$(adb_shell_line getprop ro.boot.qemu)"
+DEVICE_ABIS="$(adb_shell_line getprop ro.product.cpu.abilist)"
 
 if [[ "$QEMU" == "1" && "$ALLOW_EMULATOR" -ne 1 ]]; then
   echo "Refusing to run performance qualification on emulator '$MODEL'." >&2
@@ -137,6 +144,39 @@ printf 'Bench SHA-256 : %s\n\n' "$BENCHMARK_HASH"
 adb -s "$SERIAL" install -r -t "$APP_APK"
 adb -s "$SERIAL" install -r -t "$BENCHMARK_APK"
 
+APP_ABI="$(adb -s "$SERIAL" shell dumpsys package com.epicefi.epichub 2>/dev/null \
+  | sed -n 's/^[[:space:]]*primaryCpuAbi=//p' | head -n 1 | tr -d '\r')"
+[[ -n "$APP_ABI" ]] || APP_ABI="unknown"
+
+WM_SIZE="$(adb -s "$SERIAL" shell wm size 2>/dev/null | tr -d '\r' | paste -sd ';' -)"
+WM_DENSITY="$(adb -s "$SERIAL" shell wm density 2>/dev/null | tr -d '\r' | paste -sd ';' -)"
+PHYSICAL_SIZE="$(printf '%s\n' "$WM_SIZE" | sed -n 's/.*Physical size: \([0-9]*x[0-9]*\).*/\1/p' | head -n 1)"
+OVERRIDE_SIZE="$(printf '%s\n' "$WM_SIZE" | sed -n 's/.*Override size: \([0-9]*x[0-9]*\).*/\1/p' | head -n 1)"
+DISPLAY_SIZE="${OVERRIDE_SIZE:-$PHYSICAL_SIZE}"
+PHYSICAL_DENSITY="$(printf '%s\n' "$WM_DENSITY" | sed -n 's/.*Physical density: \([0-9]*\).*/\1/p' | head -n 1)"
+OVERRIDE_DENSITY="$(printf '%s\n' "$WM_DENSITY" | sed -n 's/.*Override density: \([0-9]*\).*/\1/p' | head -n 1)"
+DISPLAY_DENSITY="${OVERRIDE_DENSITY:-$PHYSICAL_DENSITY}"
+DISPLAY_WIDTH_DP="unknown"
+DISPLAY_HEIGHT_DP="unknown"
+ORIENTATION="unknown"
+if [[ "$DISPLAY_SIZE" =~ ^([0-9]+)x([0-9]+)$ ]]; then
+  WIDTH_PX="${BASH_REMATCH[1]}"
+  HEIGHT_PX="${BASH_REMATCH[2]}"
+  if [[ "$WIDTH_PX" -gt "$HEIGHT_PX" ]]; then
+    ORIENTATION="landscape"
+  else
+    ORIENTATION="portrait"
+  fi
+  if [[ "$DISPLAY_DENSITY" =~ ^[0-9]+$ && "$DISPLAY_DENSITY" -gt 0 ]]; then
+    DISPLAY_WIDTH_DP=$((WIDTH_PX * 160 / DISPLAY_DENSITY))
+    DISPLAY_HEIGHT_DP=$((HEIGHT_PX * 160 / DISPLAY_DENSITY))
+  fi
+fi
+
+REFRESH_RATE="$(adb -s "$SERIAL" shell dumpsys display 2>/dev/null \
+  | sed -n 's/.*refreshRate=\([0-9.]*\).*/\1/p' | head -n 1 | tr -d '\r')"
+[[ -n "$REFRESH_RATE" ]] || REFRESH_RATE="unknown"
+
 TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
 if [[ -z "$OUTPUT_DIRECTORY" ]]; then
   OUTPUT_DIRECTORY="$SCRIPT_DIR/benchmark-results/$TIMESTAMP"
@@ -154,6 +194,16 @@ timestamp=$TIMESTAMP
 deviceModel=$MODEL
 apiLevel=$API_LEVEL
 buildFingerprint=$FINGERPRINT
+deviceAbis=$DEVICE_ABIS
+selectedAppAbi=$APP_ABI
+displaySizePx=$DISPLAY_SIZE
+displayDensityDpi=$DISPLAY_DENSITY
+displayWidthDpApprox=$DISPLAY_WIDTH_DP
+displayHeightDpApprox=$DISPLAY_HEIGHT_DP
+orientation=$ORIENTATION
+refreshRateHz=$REFRESH_RATE
+cpuLockRequestedByRunner=false
+sustainedPerformanceRequestedByRunner=false
 selector=$SELECTOR
 appApkSha256=$APP_HASH
 benchmarkApkSha256=$BENCHMARK_HASH
@@ -207,6 +257,17 @@ mapfile -t RESULT_FILES < <(
     \( -name '*benchmarkData.json' -o -name '*.trace' -o -name '*.perfetto-trace' \) \
     -print
 )
+
+CPU_LOCKED="$(grep -rhoE '"cpuLocked"[[:space:]]*:[[:space:]]*(true|false)' "$OUTPUT_DIRECTORY" 2>/dev/null \
+  | head -n 1 | sed -E 's/.*:[[:space:]]*//' || true)"
+SUSTAINED_MODE="$(grep -rhoE '"sustainedPerformanceModeEnabled"[[:space:]]*:[[:space:]]*(true|false)' "$OUTPUT_DIRECTORY" 2>/dev/null \
+  | head -n 1 | sed -E 's/.*:[[:space:]]*//' || true)"
+[[ -n "$CPU_LOCKED" ]] || CPU_LOCKED="unknown"
+[[ -n "$SUSTAINED_MODE" ]] || SUSTAINED_MODE="unknown"
+{
+  echo "macrobenchmarkCpuLocked=$CPU_LOCKED"
+  echo "macrobenchmarkSustainedPerformanceModeEnabled=$SUSTAINED_MODE"
+} >> "$OUTPUT_DIRECTORY/benchmark-run-manifest.txt"
 
 if [[ ${#RESULT_FILES[@]} -eq 0 ]]; then
   echo "No benchmark JSON/Perfetto result files were produced." >&2
