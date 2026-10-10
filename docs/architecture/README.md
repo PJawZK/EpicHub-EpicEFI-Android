@@ -9,6 +9,7 @@ Current Phase-2 work now runs two deliberate implementation surfaces in parallel
 - `DECISIONS.md` — durable architectural decisions through D-026.
 - `DEVELOPMENT_WORKFLOW.md` — repository, Pages/native translation and chat/handoff workflow.
 - `PAGES_PROTOTYPE_ARCHITECTURE.md` — modular GitHub Pages product/interaction lab, anti-monolith rules, translation contracts and future TS-Shim adapter boundary.
+- `DASHBOARD_MODEL_AND_TS_IMPORT.md` — declarative EpicHub Dashboard model, source-space layout authority, editor direction and TunerStudio `.dash` conversion rules.
 - `SOURCE_REIMPLEMENTATION_METHOD.md` — mandatory piece-by-piece historical-source review and clean rewrite method used throughout implementation.
 - `RUNTIME_LANGUAGE_AND_SERIALIZATION.md` — locked Kotlin/Compose + Rust production runtime and boundary-only serialization contract; also defines why the Pages TypeScript/browser surface remains development/tooling only.
 - `ANDROID_BUILD_BASELINE.md` — locked package/API/ABI/device support contract and foundation qualification baseline.
@@ -67,6 +68,7 @@ Likewise, historical TunerStudio plugin/JAR packaging is evidence only. D-024 ma
 - `TEST_STRATEGY.md` — qualification layers, MLG/MDF interop, subsystem testing and D-022/D-023 regression methodology.
 - `UI_FOUNDATION_LAYOUT.md` — concrete workspace/route/presentation contract.
 - `PAGES_PROTOTYPE_ARCHITECTURE.md` — browser-prototype structure, feature boundaries, translation contract and TS-Shim interop seam.
+- `DASHBOARD_MODEL_AND_TS_IMPORT.md` — dashboard document/widget model, editor semantics and foreign-layout conversion boundary.
 - `TUNING_TOOLS_FOUNDATION.md` — native guided tuning-tool surface and shared Rust-analysis integration.
 - `DIAGNOSTICS_CAPTURE_FOUNDATION.md` — concrete diagnostic flight-recorder/capture/export foundation before real subsystem complexity.
 
@@ -77,12 +79,13 @@ When documents differ in level of detail:
 1. `DECISIONS.md` states durable architecture decisions.
 2. `RUNTIME_LANGUAGE_AND_SERIALIZATION.md` defines the D-023 production language/runtime/serialization boundary.
 3. `PAGES_PROTOTYPE_ARCHITECTURE.md` defines the D-026 development/specification browser surface and may not override production runtime authority.
-4. protocol/source truth is resolved by `PROTOCOL_AUTHORITIES.md` plus direct evidence documents.
-5. `STATE_OWNERSHIP.md`, `DEPENDENCY_RULES.md`, `DATA_FLOW.md`, `KOTLIN_RUST_BOUNDARY.md`, `ACTION_MODEL.md` and `SAFETY_BOUNDARIES.md` define cross-domain production contracts.
-6. Phase-2 implementation contracts such as `UI_FOUNDATION_LAYOUT.md`, `TUNING_TOOLS_FOUNDATION.md` and `DIAGNOSTICS_CAPTURE_FOUNDATION.md` refine the accepted architecture for implementation but may not override durable decisions.
-7. `CODEBASE_TOPOLOGY.md` maps those contracts into current/planned homes; it must not override them.
-8. evidence documents explain why a decision exists but do not silently supersede a later durable decision.
-9. `GAP_ANALYSIS.md` identifies work still open; an open implementation/benchmark gap does not negate an already-locked ownership boundary.
+4. `DASHBOARD_MODEL_AND_TS_IMPORT.md` defines Dashboard layout/edit/import behavior but may not override runtime, channel, command or tuning authority.
+5. protocol/source truth is resolved by `PROTOCOL_AUTHORITIES.md` plus direct evidence documents.
+6. `STATE_OWNERSHIP.md`, `DEPENDENCY_RULES.md`, `DATA_FLOW.md`, `KOTLIN_RUST_BOUNDARY.md`, `ACTION_MODEL.md` and `SAFETY_BOUNDARIES.md` define cross-domain production contracts.
+7. Phase-2 implementation contracts such as `UI_FOUNDATION_LAYOUT.md`, `TUNING_TOOLS_FOUNDATION.md` and `DIAGNOSTICS_CAPTURE_FOUNDATION.md` refine the accepted architecture for implementation but may not override durable decisions.
+8. `CODEBASE_TOPOLOGY.md` maps those contracts into current/planned homes; it must not override them.
+9. evidence documents explain why a decision exists but do not silently supersede a later durable decision.
+10. `GAP_ANALYSIS.md` identifies work still open; an open implementation/benchmark gap does not negate an already-locked ownership boundary.
 
 Historical evidence never overrides D-022's clean reimplementation rule, D-023's typed Kotlin/Rust production runtime rule, D-024's native Tuning Tools rule, D-025's workspace/domain separation or D-026's explicit separation between Pages development code and Android production runtime.
 
