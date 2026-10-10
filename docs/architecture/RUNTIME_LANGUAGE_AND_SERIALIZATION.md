@@ -2,14 +2,14 @@
 
 ## Purpose
 
-EpicHub deliberately uses a small production-language surface:
+EpicHub deliberately uses a small **production** language surface:
 
 - **Kotlin + Jetpack Compose** for Android-facing application/UI/platform work;
 - **Rust** for the native engine, runtime channels, ECU/data/logging/analysis work and qualified semantic tuning.
 
-This document prevents serialization formats or historical WebView/browser techniques from quietly becoming a third application architecture.
+This document prevents serialization formats or browser techniques from quietly becoming a third production application architecture.
 
-Authority: D-023 in `DECISIONS.md`.
+Authority: D-023, refined for the first-class development prototype by D-026.
 
 ---
 
@@ -17,49 +17,55 @@ Authority: D-023 in `DECISIONS.md`.
 
 Normal EpicHub product logic is implemented in Kotlin or Rust according to the established ownership boundaries.
 
-Repository/build tooling may necessarily use declarative/build formats such as Gradle Kotlin DSL, Cargo TOML, GitHub Actions YAML, Android XML resources/manifests and external protocol/profile/file formats. Those are tooling/interoperability formats, not additional application runtimes.
+Repository/build/tooling may use Gradle Kotlin DSL, Cargo TOML, GitHub Actions YAML, Android XML and external protocol/profile/file formats. Those are tooling/interoperability formats, not additional production application runtimes.
 
-EpicHub does **not** introduce a JavaScript runtime, browser application layer, WebView state engine or DOM-based application architecture.
+EpicHub does **not** introduce a JavaScript runtime, browser application layer, WebView state engine or DOM-based architecture into the Android production runtime.
 
 Historical React/TypeScript/JavaScript/WebView implementations remain evidence only.
 
 ---
 
-# 2. Design/prototyping languages are not production runtime
+# 2. GitHub Pages development surface
 
-HTML/CSS, and lightweight JavaScript where useful for mock interaction, may be used **outside the production application** to prototype layouts, visual systems and interaction ideas quickly.
+Under D-026, EpicHub deliberately maintains a modular TypeScript/HTML/CSS GitHub Pages product/interaction prototype under `prototype/`.
 
-This is explicitly allowed because a prototype can be cheaper to iterate than repeatedly rebuilding the Android application while visual direction is still being decided.
+This is **development/specification code outside the Android production runtime**.
 
-An accepted prototype may become visual/layout authority for a screen, but production implementation is translated into Compose and the relevant typed Kotlin/Rust contracts.
+The Pages surface may be used to:
 
-Prototype code must not quietly become runtime code by:
+- prototype layouts and responsive presentation recipes;
+- implement realistic interaction/workflow behavior;
+- run fixture-backed feature demonstrations;
+- test browser-side feature contracts;
+- connect to explicit external tooling adapters such as a future TS-Shim.
 
-- embedding the prototype in a WebView;
-- keeping a JavaScript state engine behind the Compose shell;
-- serializing normal runtime state into browser messages;
-- treating DOM/CSS layout structure as domain ownership;
+An accepted Pages feature may become visual/interaction/workflow authority, but production implementation is translated into Compose/Kotlin/Rust.
+
+Prototype code must not quietly become Android runtime code by:
+
+- embedding it in a WebView;
+- keeping its TypeScript/JavaScript state engine behind a Compose shell;
+- routing normal Android runtime state through browser messages;
+- treating DOM/CSS structure as production domain ownership;
 - copying prototype-only shortcuts into production safety/state paths.
 
 The correct relationship is:
 
 ```text
-HTML/CSS prototype / screenshot / interaction mock
-            │
-            ▼
-accepted visual + interaction intent
-            │
-            ▼
-Compose implementation over typed Kotlin/Rust state
+modular Pages feature
+→ accepted visual + interaction + workflow contract
+→ explicit native translation contract
+→ Compose/Kotlin/Rust implementation
+→ native/device qualification
 ```
 
-This prototype allowance does not weaken any D-023 runtime rule.
+This allowance does not weaken any D-023 production rule.
 
 ---
 
 # 3. Runtime state is typed
 
-In-memory application/domain state uses explicit Kotlin or Rust types.
+In-memory production application/domain state uses explicit Kotlin or Rust types.
 
 Examples:
 
@@ -74,13 +80,15 @@ AppAction
 BridgeRequestState
 ```
 
-Do not replace typed domain state with generic dictionaries/maps whose meaning is recovered from string keys at runtime unless the external protocol itself is inherently key/value based and the adapter immediately converts it into typed domain state.
+Do not replace typed production domain state with generic dictionaries/maps whose meaning is recovered from string keys at runtime unless an external protocol is inherently key/value based and its adapter immediately converts it into typed domain state.
+
+The Pages prototype may define its own TypeScript semantic models/ports to keep feature code typed and modular. Those browser types are specification/development models; they do not become production authority automatically.
 
 ---
 
-# 4. No serialization message bus inside the application
+# 4. No serialization message bus inside the Android application
 
-The following are prohibited as ordinary internal runtime communication:
+The following remain prohibited as ordinary production internal communication:
 
 ```text
 Kotlin → JSON → Rust
@@ -100,13 +108,13 @@ The Kotlin↔Rust boundary uses:
 - typed bounded batches for external-source ingestion;
 - bounded typed event/result drains.
 
-Serialization codecs do not sit in the RuntimeSnapshot hot path merely because they are convenient.
+Serialization codecs do not sit in RuntimeSnapshot or other hot paths merely because they are convenient.
 
 ---
 
 # 5. Serialization exists only at explicit boundaries
 
-A serialized format is justified when bytes must outlive or leave the in-memory runtime model, or when an external ecosystem mandates a format.
+A production serialized format is justified when bytes must outlive/leave the in-memory model or an external ecosystem mandates a format.
 
 Examples:
 
@@ -123,15 +131,15 @@ external-tool interoperability
 
 Each boundary owns a deliberate codec/schema and converts immediately to/from typed domain structures.
 
-A file format never becomes the internal runtime state model.
+A file format never becomes the internal runtime model.
 
 ---
 
 # 6. JSON policy
 
-JSON is **not** an EpicHub default application format.
+JSON is **not** an EpicHub production default application format.
 
-Prohibited uses include:
+Prohibited production uses include:
 
 - runtime state authority;
 - Kotlin↔Rust communication;
@@ -141,13 +149,13 @@ Prohibited uses include:
 - diagnostic event transport between domains;
 - hidden internal message buses.
 
-JSON may be used only when an explicit external/tooling interoperability requirement justifies it. Such use must be isolated to the relevant adapter/export tool and must not leak JSON-shaped state into core domains.
+JSON may be used when an explicit external/tooling interoperability requirement justifies it. Such use must be isolated to the relevant adapter/export surface.
 
-Historical files such as EpicDash-JZ `values.json`, WebView workspace JSON, Diagnostics-Core reference JSON and Tune Viewer JSON reports are **evidence of those systems**, not EpicHub target-format decisions.
+This applies directly to the Pages prototype's future TS-Shim adapter: if the external shim contract uses JSON/WebSocket/HTTP, those messages live inside `prototype/src/adapters/ts-shim/` (or equivalent), are translated into typed prototype models immediately, and do not leak shim-shaped state into feature code.
 
-Optional developer tooling may convert an authoritative EpicHub format to JSON for inspection. The converted JSON is a projection, never the canonical source.
+Historical EpicDash-JZ/workspace JSON, Diagnostics-Core JSON and Tune Viewer JSON remain evidence of those systems rather than EpicHub production-format decisions.
 
-A design-only HTML prototype may naturally contain JavaScript objects or JSON-like mock data. That does not grant those representations any production authority; they are discarded when the design is translated to Compose/typed runtime state.
+Prototype fixtures may naturally use JavaScript/TypeScript objects or JSON-like data. They are development machinery only.
 
 ---
 
@@ -161,27 +169,14 @@ The canonical diagnostic capture export is a versioned binary CBOR document plus
 EpicHub-Diagnostics-<captureId>.zip
 ├─ capture.cbor
 ├─ report.txt
-└─ attachments/          # only explicitly selected artifacts
+└─ attachments/
 ```
 
-`capture.cbor` contains the complete canonical diagnostic capture schema, including as applicable:
-
-- schema/version;
-- capture/build/device identity;
-- source/session/profile summaries;
-- subsystem health snapshots;
-- events;
-- metrics;
-- lifecycle owners/transitions;
-- markers;
-- user note/expected/actual behavior;
-- attachment metadata and hashes.
+`capture.cbor` contains the complete canonical diagnostic capture schema as applicable, including schema/version, capture/build/device identity, source/session/profile summaries, health snapshots, events, metrics, lifecycle owners/transitions, markers, notes and attachment metadata/hashes.
 
 `report.txt` is generated from the same immutable typed capture and is not a competing source of truth.
 
-CBOR is used **only at the capture persistence/export boundary**. It is not the Kotlin↔Rust event transport and is not the live diagnostic ring representation.
-
-If a developer or external tool later needs JSON/NDJSON, conversion happens explicitly from `capture.cbor` outside the runtime authority path.
+CBOR is used only at the capture persistence/export boundary. It is not Kotlin↔Rust transport and is not the live diagnostic ring representation.
 
 ---
 
@@ -189,15 +184,15 @@ If a developer or external tool later needs JSON/NDJSON, conversion happens expl
 
 D-023 does not replace all storage formats with CBOR.
 
-Each domain selects its explicit boundary format for its real requirements:
+Each domain selects the explicit boundary format for its requirements:
 
 - MLG remains an interoperability format;
 - MDF4 remains the long-term native measurement-format candidate;
 - generated INI remains external profile authority where applicable;
-- future project backup/journal formats are selected and versioned deliberately;
+- future project backup/journal formats are selected/versioned deliberately;
 - CSV/MSL remain isolated interoperability formats where retained.
 
-The rule is **typed runtime first, explicit serializer only at a justified boundary**.
+The rule is **typed production runtime first, explicit serializer only at a justified boundary**.
 
 ---
 
@@ -208,20 +203,22 @@ Every persisted/exported internal EpicHub schema must define as applicable:
 - schema/version;
 - byte order/encoding;
 - size/count bounds;
-- required and optional fields;
+- required/optional fields;
 - forward/backward compatibility policy;
 - corruption/integrity behavior;
 - source/profile/session identity where semantically required.
 
-Unsupported versions fail explicitly. A decoder must never silently reinterpret a different schema generation.
+Unsupported versions fail explicitly.
+
+External tooling adapters such as TS-Shim also require an explicit version/capability contract before the browser prototype relies on them.
 
 ---
 
 # 10. Performance rule
 
-A serialization format must not be inserted into a hot path without measurement proving it is necessary and acceptable.
+A serializer must not be inserted into a production hot path without measurement proving it is necessary and acceptable.
 
-For high-rate paths prefer:
+For high-rate production paths prefer:
 
 ```text
 typed native structures
@@ -229,35 +226,29 @@ typed native structures
 → minimal copies
 ```
 
-rather than:
-
-```text
-object graph
-→ text/binary serialization
-→ allocation/copy
-→ parse
-→ object graph
-```
-
-Diagnostics, logging and analysis measure their own serialization/export cost outside acquisition/UI-critical paths.
+Browser prototype performance is evaluated separately. It can guide prototype engineering but does not qualify the equivalent Android/Compose implementation.
 
 ---
 
 # 11. Review rule
 
-Any proposal that introduces JSON, CBOR, protobuf, MessagePack, XML or another generic serializer into production code must answer:
+Any proposal introducing JSON, CBOR, protobuf, MessagePack, XML or another generic serializer into **production** code must answer:
 
 1. What explicit file/interoperability boundary requires serialization?
 2. Why cannot typed Kotlin/Rust state or the existing packed ABI satisfy the runtime need?
 3. Which component owns the codec?
-4. Is the serialized representation authoritative, derived or interoperability-only?
+4. Is the representation authoritative, derived or interoperability-only?
 5. What versioning/bounds/integrity rules apply?
-6. Can the format accidentally leak upward and become domain state?
+6. Can it leak upward and become domain state?
 
-If there is no explicit boundary, the serializer does not belong in the production runtime architecture.
+Pages prototype adapters are reviewed differently:
 
-Design prototypes are reviewed separately: the question is whether the visual/interaction intent should be accepted and translated into Compose, not whether the prototype's browser implementation should be retained.
+1. Is this an explicit external/tooling boundary?
+2. Does transport/wire parsing stay inside the adapter?
+3. Are features consuming typed semantic ports rather than shim-shaped messages?
+4. Is fixture/live/stale/disconnected authority clear?
+5. Could the adapter accidentally grant browser UI unsafe mutation authority?
 
 ## Summary
 
-> EpicHub application logic is Kotlin/Compose + Rust. Runtime state and cross-language communication remain typed/packed. Serialization is isolated to explicit persistence/export/interoperability boundaries. JSON is never the default internal representation, and the canonical diagnostic capture is versioned CBOR + human-readable text. HTML/CSS/JavaScript may be used for rapid design prototypes, but accepted prototypes are translated into Compose rather than embedded as a third runtime architecture.
+> EpicHub production logic is Kotlin/Compose + Rust. The modular TypeScript/Vite GitHub Pages prototype is a first-class development/specification surface, not a third production runtime. Production state and JNI remain typed/packed; serializers stay at explicit persistence/export/interoperability boundaries, including any future TS-Shim adapter.
