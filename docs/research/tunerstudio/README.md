@@ -155,7 +155,7 @@ Important conclusions include:
 
 This is a review backlog rather than an implementation queue. Findings remain proposals until explicitly accepted into EpicHub architecture/runtime work.
 
-The main backlog currently runs through **EH-TS-051**; the logging slice's detailed requirements and regression set are captured in `LIVE_LOGGING_RECORDED_LOGS.md` and should be promoted into numbered backlog items when the logging architecture enters acceptance/implementation planning.
+The backlog currently runs through **EH-TS-064**.
 
 ## Next research slice
 
