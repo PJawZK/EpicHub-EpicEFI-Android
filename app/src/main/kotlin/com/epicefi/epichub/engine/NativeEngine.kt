@@ -2,7 +2,6 @@ package com.epicefi.epichub.engine
 
 import java.io.Closeable
 import java.nio.ByteBuffer
-import java.nio.ByteOrder
 import java.util.concurrent.atomic.AtomicLong
 
 class NativeEngine private constructor(initialHandle: Long) : Closeable {
@@ -16,31 +15,17 @@ class NativeEngine private constructor(initialHandle: Long) : Closeable {
             return current != 0L && NativeEngineBridge.isAlive(current)
         }
 
-    @Synchronized
-    fun readRuntimeSnapshot(): RuntimeSnapshot {
+    internal fun requireNativeHandle(): Long {
         val current = handle.get()
         check(current != 0L) { "Native engine is closed." }
-        return snapshotBuffer.read(current)
+        return current
     }
 
     @Synchronized
-    fun drainDiagnosticEvents(): NativeDiagnosticBatch {
-        val current = handle.get()
-        check(current != 0L) { "Native engine is closed." }
-        return diagnosticBuffer.read(current)
-    }
+    fun readRuntimeSnapshot(): RuntimeSnapshot = snapshotBuffer.read(requireNativeHandle())
 
     @Synchronized
-    fun readOfflineTableProjection(): TunerTableProjection {
-        val current = handle.get()
-        check(current != 0L) { "Native engine is closed." }
-        val size = NativeEngineBridge.offlineTableProjectionSize(current)
-        check(size > 0) { "Offline table projection is unavailable." }
-        val buffer = ByteBuffer.allocateDirect(size).order(ByteOrder.LITTLE_ENDIAN)
-        val status = NativeEngineBridge.fillOfflineTableProjection(current, buffer)
-        check(status == NATIVE_BUFFER_STATUS_OK) { "Offline table projection failed with status $status." }
-        return TunerTableProjectionDecoder.decode(buffer)
-    }
+    fun drainDiagnosticEvents(): NativeDiagnosticBatch = diagnosticBuffer.read(requireNativeHandle())
 
     @Synchronized
     override fun close() {
@@ -72,6 +57,152 @@ object NativeEngineBridge {
     external fun activeCount(): Int
     external fun fillRuntimeSnapshot(handle: Long, buffer: ByteBuffer): Int
     external fun fillDiagnosticEvents(handle: Long, buffer: ByteBuffer): Int
-    external fun offlineTableProjectionSize(handle: Long): Int
-    external fun fillOfflineTableProjection(handle: Long, buffer: ByteBuffer): Int
+
+    external fun tuneProjectionSize(handle: Long, tableId: Int): Int
+    external fun fillTuneProjection(handle: Long, tableId: Int, buffer: ByteBuffer): Int
+
+    external fun fillTuneRectangleStepPreview(
+        handle: Long,
+        tableId: Int,
+        anchorRow: Int,
+        anchorCol: Int,
+        focusRow: Int,
+        focusCol: Int,
+        direction: Int,
+        buffer: ByteBuffer,
+    ): Int
+
+    external fun applyTuneRectangleStep(
+        handle: Long,
+        tableId: Int,
+        anchorRow: Int,
+        anchorCol: Int,
+        focusRow: Int,
+        focusCol: Int,
+        direction: Int,
+        expectedRevision: Long,
+    ): Long
+
+    external fun fillTuneRectangleNumericPreview(
+        handle: Long,
+        tableId: Int,
+        anchorRow: Int,
+        anchorCol: Int,
+        focusRow: Int,
+        focusCol: Int,
+        operationCode: Int,
+        operand: String,
+        buffer: ByteBuffer,
+    ): Int
+
+    external fun applyTuneRectangleNumeric(
+        handle: Long,
+        tableId: Int,
+        anchorRow: Int,
+        anchorCol: Int,
+        focusRow: Int,
+        focusCol: Int,
+        operationCode: Int,
+        operand: String,
+        expectedRevision: Long,
+    ): Long
+
+    external fun fillTuneInterpolationPreview(
+        handle: Long,
+        tableId: Int,
+        anchorRow: Int,
+        anchorCol: Int,
+        focusRow: Int,
+        focusCol: Int,
+        modeCode: Int,
+        buffer: ByteBuffer,
+    ): Int
+
+    external fun applyTuneInterpolation(
+        handle: Long,
+        tableId: Int,
+        anchorRow: Int,
+        anchorCol: Int,
+        focusRow: Int,
+        focusCol: Int,
+        modeCode: Int,
+        expectedRevision: Long,
+    ): Long
+
+    external fun fillTuneSmoothingPreview(
+        handle: Long,
+        tableId: Int,
+        anchorRow: Int,
+        anchorCol: Int,
+        focusRow: Int,
+        focusCol: Int,
+        strengthPercent: String,
+        buffer: ByteBuffer,
+    ): Int
+
+    external fun applyTuneSmoothing(
+        handle: Long,
+        tableId: Int,
+        anchorRow: Int,
+        anchorCol: Int,
+        focusRow: Int,
+        focusCol: Int,
+        strengthPercent: String,
+        expectedRevision: Long,
+    ): Long
+
+    external fun fillTuneBrushPullPreview(
+        handle: Long,
+        tableId: Int,
+        anchorRow: Int,
+        anchorCol: Int,
+        focusRow: Int,
+        focusCol: Int,
+        modeCode: Int,
+        delta: String,
+        radiusCells: String,
+        strengthPercent: String,
+        falloffExponent: String,
+        buffer: ByteBuffer,
+    ): Int
+
+    external fun applyTuneBrushPull(
+        handle: Long,
+        tableId: Int,
+        anchorRow: Int,
+        anchorCol: Int,
+        focusRow: Int,
+        focusCol: Int,
+        modeCode: Int,
+        delta: String,
+        radiusCells: String,
+        strengthPercent: String,
+        falloffExponent: String,
+        expectedRevision: Long,
+    ): Long
+
+    external fun fillTuneBrushPathPreview(
+        handle: Long,
+        tableId: Int,
+        path: IntArray,
+        delta: String,
+        radiusCells: String,
+        strengthPercent: String,
+        falloffExponent: String,
+        buffer: ByteBuffer,
+    ): Int
+
+    external fun applyTuneBrushPath(
+        handle: Long,
+        tableId: Int,
+        path: IntArray,
+        delta: String,
+        radiusCells: String,
+        strengthPercent: String,
+        falloffExponent: String,
+        expectedRevision: Long,
+    ): Long
+
+    external fun undoTune(handle: Long): Long
+    external fun redoTune(handle: Long): Long
 }
