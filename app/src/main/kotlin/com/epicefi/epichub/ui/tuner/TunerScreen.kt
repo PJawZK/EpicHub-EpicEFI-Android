@@ -272,10 +272,9 @@ private fun Table2d(
                 TableCell(formatAxis(projection.yAxis[displayRow]), AXIS_WIDTH_DP, header = true)
                 for (col in 0 until projection.cols) {
                     val index = displayRow * projection.cols + col
-                    val selected = selection?.row == displayRow && selection.col == col
-                    val previewValue = preview
-                        ?.takeIf { it.selection.row == displayRow && it.selection.col == col }
-                        ?.value
+                    val cell = CellSelection(displayRow, col)
+                    val selected = selection == cell
+                    val previewValue = preview?.takeIf { it.selection == cell }?.value
                     TableCell(
                         text = formatValue(
                             previewValue ?: projection.values[index],
@@ -386,8 +385,9 @@ private fun Table3d(
             for (row in 0 until projection.rows) {
                 for (col in 0 until projection.cols) {
                     val index = row * projection.cols + col
-                    val isSelected = selection?.row == row && selection.col == col
-                    val isPreviewed = preview?.selection?.row == row && preview.selection.col == col
+                    val cell = CellSelection(row, col)
+                    val isSelected = selection == cell
+                    val isPreviewed = preview?.selection == cell
                     val pointColor = when {
                         isPreviewed -> previewColor
                         isSelected -> selectedColor
