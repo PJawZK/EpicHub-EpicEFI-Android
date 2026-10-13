@@ -85,6 +85,7 @@ fun TunerScreen(modifier: Modifier = Modifier) {
     var projection by remember { mutableStateOf(initialProjection.getOrNull()) }
     var errorMessage by remember { mutableStateOf(initialProjection.exceptionOrNull()?.message) }
     var show3d by remember { mutableStateOf(false) }
+    var threeDInteractionMode by remember { mutableStateOf(Tuner3dInteractionMode.INSPECT) }
     var interactionState by remember { mutableStateOf(TunerInteractionState()) }
     var pendingPreview by remember { mutableStateOf<PendingPreview?>(null) }
     var numericOperation by remember { mutableStateOf(TunerNumericOperation.SET) }
@@ -435,6 +436,35 @@ fun TunerScreen(modifier: Modifier = Modifier) {
                 )
             }
 
+            if (show3d) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AssistChip(
+                        onClick = { threeDInteractionMode = Tuner3dInteractionMode.INSPECT },
+                        label = {
+                            Text(
+                                if (threeDInteractionMode == Tuner3dInteractionMode.INSPECT) {
+                                    "3D Inspect · active"
+                                } else {
+                                    "3D Inspect"
+                                },
+                            )
+                        },
+                    )
+                    AssistChip(
+                        onClick = { threeDInteractionMode = Tuner3dInteractionMode.SELECT_EDIT },
+                        label = {
+                            Text(
+                                if (threeDInteractionMode == Tuner3dInteractionMode.SELECT_EDIT) {
+                                    "3D Select/Edit · active"
+                                } else {
+                                    "3D Select/Edit"
+                                },
+                            )
+                        },
+                    )
+                }
+            }
+
             StructuralCard(
                 title = current.name,
                 modifier = Modifier
@@ -447,10 +477,15 @@ fun TunerScreen(modifier: Modifier = Modifier) {
                 subtitle = "Table ${current.tableId} · ${current.rows}×${current.cols} · offline draft",
             ) {
                 if (show3d) {
-                    Table3d(
+                    Tuner3dSurface(
                         projection = current,
                         selection = selection,
-                        preview = pendingPreview,
+                        previewProjection = pendingPreview?.projection,
+                        interactionMode = threeDInteractionMode,
+                        onCellSelected = { row, col ->
+                            tableFocusRequester.requestFocus()
+                            dispatch(TunerCommand.SelectCell(row, col))
+                        },
                     )
                 } else {
                     Table2d(
@@ -468,10 +503,18 @@ fun TunerScreen(modifier: Modifier = Modifier) {
                     )
                 }
                 Text(
-                    if (brushGestureEnabled && !show3d) {
-                        "Brush draw: drag across the 2D cells to build one previewed stroke. Release keeps the preview; Apply commits it as one history transaction."
-                    } else {
-                        "Keyboard: arrows move · Shift+arrows extend · +/− preview step · Enter apply · Esc cancel · Ctrl+Z undo · Ctrl+Y or Ctrl+Shift+Z redo"
+                    when {
+                        show3d && threeDInteractionMode == Tuner3dInteractionMode.SELECT_EDIT ->
+                            "3D Select/Edit: tap a visible mesh vertex to route the same cell-selection command used by 2D. Keyboard edit commands then use the shared selection."
+
+                        show3d ->
+                            "3D Inspect: pointer/touch selection is disabled. Switch to Select/Edit to route mesh hits into the shared command router."
+
+                        brushGestureEnabled ->
+                            "Brush draw: drag across the 2D cells to build one previewed stroke. Release keeps the preview; Apply commits it as one history transaction."
+
+                        else ->
+                            "Keyboard: arrows move · Shift+arrows extend · +/− preview step · Enter apply · Esc cancel · Ctrl+Z undo · Ctrl+Y or Ctrl+Shift+Z redo"
                     },
                     style = MaterialTheme.typography.bodySmall,
                 )
@@ -868,6 +911,7 @@ private fun TableCell(
     }
 }
 
+@Suppress("unused")
 @Composable
 private fun Table3d(
     projection: TunerTableProjection,
@@ -936,7 +980,7 @@ private fun Table3d(
             }
         }
         Text(
-            "Same table ${projection.tableId} · draft revision ${projection.draftRevision} · shared selection/preview · 3D inspection only",
+            "Legacy read-only 3D renderer retained temporarily for parity comparison.",
             color = labelColor,
             style = MaterialTheme.typography.bodySmall,
         )
