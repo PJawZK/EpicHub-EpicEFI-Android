@@ -302,26 +302,18 @@ impl TuneDraft {
     }
 
     pub fn undo(&mut self) -> Result<u64, TuneError> {
-        let entry = self
-            .undo
-            .last()
-            .cloned()
-            .ok_or(TuneError::NothingToUndo)?;
+        let entry = self.undo.last().cloned().ok_or(TuneError::NothingToUndo)?;
         self.apply_history(&entry, false)?;
-        self.undo.pop();
+        let _ = self.undo.pop();
         self.redo.push(entry);
         self.advance_revision();
         Ok(self.revision)
     }
 
     pub fn redo(&mut self) -> Result<u64, TuneError> {
-        let entry = self
-            .redo
-            .last()
-            .cloned()
-            .ok_or(TuneError::NothingToRedo)?;
+        let entry = self.redo.last().cloned().ok_or(TuneError::NothingToRedo)?;
         self.apply_history(&entry, true)?;
-        self.redo.pop();
+        let _ = self.redo.pop();
         self.undo.push(entry);
         self.advance_revision();
         Ok(self.revision)
@@ -588,7 +580,14 @@ mod tests {
             })
             .unwrap();
         assert_eq!(draft.table_projection(7).unwrap().values[0], 50.0);
-        assert_eq!(draft.table_projection(7).unwrap().descriptor.display_decimals, 2);
+        assert_eq!(
+            draft
+                .table_projection(7)
+                .unwrap()
+                .descriptor
+                .display_decimals,
+            2
+        );
     }
 
     #[test]
