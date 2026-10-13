@@ -11,8 +11,9 @@ use crate::engine::{
 };
 use crate::runtime_snapshot::RUNTIME_SNAPSHOT_SIZE;
 use crate::tuning_fixture::{
-    apply_offline_fixture_rectangle_numeric, apply_offline_fixture_rectangle_step,
-    offline_fixture_projection_bytes, preview_offline_fixture_rectangle_numeric_bytes,
+    apply_offline_fixture_interpolation, apply_offline_fixture_rectangle_numeric,
+    apply_offline_fixture_rectangle_step, offline_fixture_projection_bytes,
+    preview_offline_fixture_interpolation_bytes, preview_offline_fixture_rectangle_numeric_bytes,
     preview_offline_fixture_rectangle_step_bytes, redo_offline_fixture, undo_offline_fixture,
 };
 
@@ -323,6 +324,64 @@ pub extern "system" fn Java_com_epicefi_epichub_engine_OfflineTunerFixture_apply
             focus_col,
             operation_code,
             &operand,
+            expected_revision,
+        ))
+    })
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_epicefi_epichub_engine_OfflineTunerFixture_fillInterpolationPreviewNative(
+    env: JNIEnv,
+    _object: JObject,
+    anchor_row: jint,
+    anchor_col: jint,
+    focus_row: jint,
+    focus_col: jint,
+    mode_code: jint,
+    buffer: JByteBuffer,
+) -> jint {
+    ffi_guard(BUFFER_STATUS_PANIC, || {
+        let Some((anchor_row, anchor_col, focus_row, focus_col)) =
+            rectangle_args(anchor_row, anchor_col, focus_row, focus_col)
+        else {
+            return BUFFER_STATUS_EDIT_REJECTED;
+        };
+        let bytes = match preview_offline_fixture_interpolation_bytes(
+            anchor_row, anchor_col, focus_row, focus_col, mode_code,
+        ) {
+            Ok(bytes) => bytes,
+            Err(_) => return BUFFER_STATUS_EDIT_REJECTED,
+        };
+        copy_to_direct_buffer(&env, &buffer, &bytes)
+    })
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_epicefi_epichub_engine_OfflineTunerFixture_applyInterpolationNative(
+    _env: JNIEnv,
+    _object: JObject,
+    anchor_row: jint,
+    anchor_col: jint,
+    focus_row: jint,
+    focus_col: jint,
+    mode_code: jint,
+    expected_revision: jlong,
+) -> jlong {
+    ffi_guard(EDIT_STATUS_REJECTED, || {
+        let Some((anchor_row, anchor_col, focus_row, focus_col)) =
+            rectangle_args(anchor_row, anchor_col, focus_row, focus_col)
+        else {
+            return EDIT_STATUS_REJECTED;
+        };
+        let Ok(expected_revision) = u64::try_from(expected_revision) else {
+            return EDIT_STATUS_REJECTED;
+        };
+        edit_revision_or_rejected(apply_offline_fixture_interpolation(
+            anchor_row,
+            anchor_col,
+            focus_row,
+            focus_col,
+            mode_code,
             expected_revision,
         ))
     })
