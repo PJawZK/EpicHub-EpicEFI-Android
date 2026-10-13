@@ -1,11 +1,14 @@
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use jni::JNIEnv;
-use jni::objects::{JByteBuffer, JObject, JString};
+use jni::objects::{JByteBuffer, JIntArray, JObject, JString};
 use jni::sys::{jint, jlong};
 
+use crate::tuning::CellCoord;
+use crate::tuning_brush_pull::MAX_BRUSH_PATH_POINTS;
 use crate::tuning_brush_pull_fixture::{
-    apply_offline_fixture_brush_pull, preview_offline_fixture_brush_pull_bytes,
+    apply_offline_fixture_brush_path, apply_offline_fixture_brush_pull,
+    preview_offline_fixture_brush_path_bytes, preview_offline_fixture_brush_pull_bytes,
 };
 
 const BUFFER_STATUS_OK: jint = 0;
@@ -55,6 +58,23 @@ fn rectangle_args(
 
 fn string_arg(env: &mut JNIEnv, value: &JString) -> Option<String> {
     env.get_string(value).ok().map(Into::into)
+}
+
+fn path_arg(env: &JNIEnv, path: &JIntArray) -> Option<Vec<CellCoord>> {
+    let length = usize::try_from(env.get_array_length(path).ok()?).ok()?;
+    if length == 0 || length % 2 != 0 || length / 2 > MAX_BRUSH_PATH_POINTS {
+        return None;
+    }
+    let mut raw = vec![0; length];
+    env.get_int_array_region(path, 0, &mut raw).ok()?;
+    raw.chunks_exact(2)
+        .map(|pair| {
+            Some(CellCoord {
+                row: usize::try_from(pair[0]).ok()?,
+                col: usize::try_from(pair[1]).ok()?,
+            })
+        })
+        .collect()
 }
 
 #[unsafe(no_mangle)]
@@ -154,6 +174,93 @@ pub extern "system" fn Java_com_epicefi_epichub_engine_OfflineTunerFixture_apply
             focus_row,
             focus_col,
             mode_code,
+            &delta_text,
+            &radius_text,
+            &strength_text,
+            &falloff_text,
+            expected_revision,
+        )
+        .ok()
+        .and_then(|revision| jlong::try_from(revision).ok())
+        .unwrap_or(EDIT_STATUS_REJECTED)
+    })
+}
+
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "system" fn Java_com_epicefi_epichub_engine_OfflineTunerFixture_fillBrushPathPreviewNative(
+    mut env: JNIEnv,
+    _object: JObject,
+    path: JIntArray,
+    delta_text: JString,
+    radius_text: JString,
+    strength_text: JString,
+    falloff_text: JString,
+    buffer: JByteBuffer,
+) -> jint {
+    ffi_guard(BUFFER_STATUS_PANIC, || {
+        let Some(path) = path_arg(&env, &path) else {
+            return BUFFER_STATUS_EDIT_REJECTED;
+        };
+        let Some(delta_text) = string_arg(&mut env, &delta_text) else {
+            return BUFFER_STATUS_EDIT_REJECTED;
+        };
+        let Some(radius_text) = string_arg(&mut env, &radius_text) else {
+            return BUFFER_STATUS_EDIT_REJECTED;
+        };
+        let Some(strength_text) = string_arg(&mut env, &strength_text) else {
+            return BUFFER_STATUS_EDIT_REJECTED;
+        };
+        let Some(falloff_text) = string_arg(&mut env, &falloff_text) else {
+            return BUFFER_STATUS_EDIT_REJECTED;
+        };
+        let bytes = match preview_offline_fixture_brush_path_bytes(
+            &path,
+            &delta_text,
+            &radius_text,
+            &strength_text,
+            &falloff_text,
+        ) {
+            Ok(bytes) => bytes,
+            Err(_) => return BUFFER_STATUS_EDIT_REJECTED,
+        };
+        copy_to_direct_buffer(&env, &buffer, &bytes)
+    })
+}
+
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "system" fn Java_com_epicefi_epichub_engine_OfflineTunerFixture_applyBrushPathNative(
+    mut env: JNIEnv,
+    _object: JObject,
+    path: JIntArray,
+    delta_text: JString,
+    radius_text: JString,
+    strength_text: JString,
+    falloff_text: JString,
+    expected_revision: jlong,
+) -> jlong {
+    ffi_guard(EDIT_STATUS_REJECTED, || {
+        let Some(path) = path_arg(&env, &path) else {
+            return EDIT_STATUS_REJECTED;
+        };
+        let Some(delta_text) = string_arg(&mut env, &delta_text) else {
+            return EDIT_STATUS_REJECTED;
+        };
+        let Some(radius_text) = string_arg(&mut env, &radius_text) else {
+            return EDIT_STATUS_REJECTED;
+        };
+        let Some(strength_text) = string_arg(&mut env, &strength_text) else {
+            return EDIT_STATUS_REJECTED;
+        };
+        let Some(falloff_text) = string_arg(&mut env, &falloff_text) else {
+            return EDIT_STATUS_REJECTED;
+        };
+        let Ok(expected_revision) = u64::try_from(expected_revision) else {
+            return EDIT_STATUS_REJECTED;
+        };
+        apply_offline_fixture_brush_path(
+            &path,
             &delta_text,
             &radius_text,
             &strength_text,
