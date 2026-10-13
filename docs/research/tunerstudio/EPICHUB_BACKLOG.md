@@ -247,16 +247,106 @@ Runtime marker/weight/trail updates must not rebuild, serialize, or cross JNI wi
 
 Generate shortcut help, menus, accessibility labels, and key bindings from one semantic command registry so documentation cannot drift from actual behavior.
 
+## Dashboards / runtime channels / calculated channels
+
+### EH-TS-038 — Semantic ChannelDescriptor model with source provenance
+
+**Marker:** △ ★
+
+Expose one consumer-facing channel namespace while retaining typed source provenance: ECU field, bit extraction, derived expression, application/system, accessory, or persisted accumulator. Widgets bind semantic ChannelIds, never raw offsets.
+
+### EH-TS-039 — Compiled calculated-channel dependency graph
+
+**Marker:** ✗ ★
+
+Resolve derived-channel dependencies at profile/project load, reject/quarantine cycles and missing references, establish deterministic evaluation order, and record provenance for diagnostics. Do not evaluate arbitrary expression strings independently in each gauge.
+
+### EH-TS-040 — Demand-driven runtime dependency activation
+
+**Marker:** △ ★
+
+Model UI/channel demand separately from ECU acquisition. Hidden dashboards should release presentation-only demand, while logger, diagnostics, warnings, analyzers, or shared derived channels may keep dependencies active.
+
+### EH-TS-041 — First-class ChannelSample validity and session generation
+
+**Marker:** △ ★
+
+Runtime samples should carry value plus sequence/timestamp, session generation, and validity such as valid, stale, unavailable, invalid-calculation, or source-error. Derived channels propagate validity deliberately; missing data must not become a plausible fresh zero.
+
+### EH-TS-042 — Separate acquisition, derived-publication, and visual refresh rates
+
+**Marker:** △ ★
+
+Keep ECU sampling, calculated-channel evaluation/publication, and Compose rendering independently rate-limited/coalesced. High-rate acquisition must not imply one recomposition per sample per gauge.
+
+### EH-TS-043 — Evaluate shared derived channels once, fan out to consumers
+
+**Marker:** ✗ ★
+
+A derived channel referenced by multiple gauges/tools should be computed once per relevant update cycle and distributed through ChannelStore rather than re-evaluated for every widget.
+
+### EH-TS-044 — Stateful channel taxonomy
+
+**Marker:** ✗ ★
+
+Distinguish stateless derived channels, stateful filters/estimators, session accumulators, and durable/project accumulators. Each category needs explicit initialization/reset/reconnect behavior.
+
+### EH-TS-045 — Durable accumulators with time-gap guards and versioned identity
+
+**Marker:** ✗ ★
+
+Persist trip/integrated values atomically using stable semantic IDs and definition versions. Do not integrate offline/restart time gaps and do not use raw expression text as the only persisted identity.
+
+### EH-TS-046 — Dashboard persistence independent from tune calibration
+
+**Marker:** ✗ ★
+
+Save user layouts, widget properties, and dashboard slots as project/UI state without dirtying the ECU tune. Loading/saving calibration must not silently overwrite dashboard customization.
+
+### EH-TS-047 — Dashboard compatibility/schema provenance and migration
+
+**Marker:** ✗ ★
+
+Persist layout schema version, source profile identity/version, required semantic channels, optional fallbacks, and migration provenance. Missing/renamed channels should degrade per widget rather than crashing or silently rebinding to unrelated data.
+
+### EH-TS-048 — Responsive semantic dashboard layout persistence
+
+**Marker:** ✗ ★
+
+Persist normalized/responsive placement constraints rather than raw device pixels so layouts can survive phone/tablet/orientation changes and future Compose layout-schema revisions.
+
+### EH-TS-049 — Separate gauge presentation thresholds from WarningEngine authority
+
+**Marker:** △ ★
+
+Gauge-local warning/critical bands are presentation state. Authoritative warning incidents remain owned by the warning domain. They may share configured thresholds only through an explicit linkage, never by accidental UI authority.
+
+### EH-TS-050 — Bounded short-term gauge history distinct from logger history
+
+**Marker:** △ ★
+
+Support peak-hold/trailing short history as bounded runtime/UI state without requiring logger-database queries. Logged history remains a separate long-retention domain.
+
+### EH-TS-051 — Atomic dashboard and stateful-channel persistence
+
+**Marker:** ★
+
+Dashboard layouts and persisted accumulators must survive process death/interrupted writes using transactional storage. An interrupted UI-state save must never corrupt tune/profile authority.
+
 ## Next research dependencies
 
-The next TunerStudio slice should focus on **runtime dashboards, channel subscription, calculated channels, and layout persistence**, particularly:
+The next TunerStudio slice should focus on **live logging and recorded logs**, particularly:
 
-- hidden-dashboard subscription/unsubscription behavior;
-- stale/invalid data across connection changes;
-- calculated-channel dependency evaluation and failure propagation;
-- dashboard/gauge persistence and project portability;
-- runtime update throttling/caching;
-- user-defined warnings/limits;
-- compatibility when profile/channel definitions change.
+- start/stop behavior and auto-start/stop expressions;
+- log-field/channel selection and metadata;
+- what happens during connection loss and reconnect;
+- buffering/backpressure and disk-write behavior;
+- marker/event handling;
+- file rotation/naming and project persistence;
+- interaction between dashboard subscriptions and logging demand;
+- whether calculated channels are evaluated once and shared with logging;
+- large-log performance and failure recovery.
 
-Still-open table/runtime questions that require execution or deeper targeted tracing include exact live-write timing during rapid edits, key-repeat/debounce/coalescing, exact undo retention scope, and behavior of large paste/re-bin operations against a real/simulated controller.
+Still-open dashboard/runtime questions that require execution or deeper targeted tracing include exact gauge invalid/stale rendering and timeout timing, exact visible-gauge repaint throttling, exact expression memoization behavior, history memory limits, dashboard migration when channels disappear/change type, and exact `GoingDead` / `InvalidState` lifecycle semantics.
+
+Still-open table/runtime questions include exact live-write timing during rapid edits, key-repeat/debounce/coalescing, exact undo retention scope, and behavior of large paste/re-bin operations against a real/simulated controller.
