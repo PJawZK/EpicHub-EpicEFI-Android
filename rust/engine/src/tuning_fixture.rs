@@ -2,8 +2,8 @@ use std::sync::{LazyLock, Mutex};
 
 use crate::table_projection_abi;
 use crate::tuning::{
-    CellCoord, TableDescriptor, TableEditCommand, TableEditOperation, TableSnapshot, TuneDraft,
-    TuneError, TuneSnapshot, TuneSnapshotOrigin,
+    CellCoord, TableDescriptor, TableEditCommand, TableEditOperation, TableProjection, TableSnapshot,
+    TuneDraft, TuneError, TuneSnapshot, TuneSnapshotOrigin,
 };
 
 pub const OFFLINE_FIXTURE_PROFILE_GENERATION: u64 = 42;
@@ -54,32 +54,34 @@ fn with_offline_fixture<T>(operation: impl FnOnce(&mut TuneDraft) -> T) -> T {
 }
 
 pub fn offline_fixture_projection_bytes() -> Vec<u8> {
-    with_offline_fixture(|draft| {
-        let projection = draft
-            .table_projection(OFFLINE_FIXTURE_PRIMARY_TABLE_ID)
-            .expect("built-in offline fixture table must exist");
-        table_projection_abi::encode(draft.profile_generation(), draft.origin(), &projection)
-    })
+    with_offline_fixture(|draft| encode_primary_projection(draft, None))
 }
 
-pub fn preview_offline_fixture_cell_step(
-    row: usize,
-    col: usize,
+pub fn preview_offline_fixture_rectangle_step_bytes(
+    anchor_row: usize,
+    anchor_col: usize,
+    focus_row: usize,
+    focus_col: usize,
     direction: i32,
-) -> Result<f64, TuneError> {
+) -> Result<Vec<u8>, TuneError> {
     with_offline_fixture(|draft| {
-        let preview = draft.preview(&cell_step_command(row, col, direction)?)?;
-        preview
-            .changes
-            .first()
-            .map(|change| change.after)
-            .ok_or(TuneError::EmptySelection)
+        let command = rectangle_step_command(
+            anchor_row,
+            anchor_col,
+            focus_row,
+            focus_col,
+            direction,
+        )?;
+        let preview = draft.preview(&command)?;
+        Ok(encode_primary_projection(draft, Some(&preview.changes)))
     })
 }
 
-pub fn apply_offline_fixture_cell_step(
-    row: usize,
-    col: usize,
+pub fn apply_offline_fixture_rectangle_step(
+    anchor_row: usize,
+    anchor_col: usize,
+    focus_row: usize,
+    focus_col: usize,
     direction: i32,
     expected_revision: u64,
 ) -> Result<u64, TuneError> {
@@ -87,7 +89,13 @@ pub fn apply_offline_fixture_cell_step(
         if draft.revision() != expected_revision {
             return Err(TuneError::StalePreview);
         }
-        draft.apply(&cell_step_command(row, col, direction)?)
+        draft.apply(&rectangle_step_command(
+            anchor_row,
+            anchor_col,
+            focus_row,
+            focus_col,
+            direction,
+        )?)
     })
 }
 
@@ -99,9 +107,31 @@ pub fn redo_offline_fixture() -> Result<u64, TuneError> {
     with_offline_fixture(TuneDraft::redo)
 }
 
-fn cell_step_command(
-    row: usize,
-    col: usize,
+fn encode_primary_projection(
+    draft: &TuneDraft,
+    preview_changes: Option<&[crate::tuning::CellChange]>,
+) -> Vec<u8> {
+    let mut projection = draft
+        .table_projection(OFFLINE_FIXTURE_PRIMARY_TABLE_ID)
+        .expect("built-in offline fixture table must exist");
+    if let Some(changes) = preview_changes {
+        apply_preview_changes(&mut projection, changes);
+    }
+    table_projection_abi::encode(draft.profile_generation(), draft.origin(), &projection)
+}
+
+fn apply_preview_changes(projection: &mut TableProjection, changes: &[crate::tuning::CellChange]) {
+    for change in changes {
+        let index = change.coord.row * projection.descriptor.cols + change.coord.col;
+        projection.values[index] = change.after;
+    }
+}
+
+fn rectangle_step_command(
+    anchor_row: usize,
+    anchor_col: usize,
+    focus_row: usize,
+    focus_col: usize,
     direction: i32,
 ) -> Result<TableEditCommand, TuneError> {
     let operation = match direction {
@@ -109,9 +139,21 @@ fn cell_step_command(
         -1 => TableEditOperation::Decrement,
         _ => return Err(TuneError::EmptySelection),
     };
+
+    let first_row = anchor_row.min(focus_row);
+    let last_row = anchor_row.max(focus_row);
+    let first_col = anchor_col.min(focus_col);
+    let last_col = anchor_col.max(focus_col);
+    let mut cells = Vec::new();
+    for row in first_row..=last_row {
+        for col in first_col..=last_col {
+            cells.push(CellCoord { row, col });
+        }
+    }
+
     Ok(TableEditCommand {
         table_id: OFFLINE_FIXTURE_PRIMARY_TABLE_ID,
-        cells: vec![CellCoord { row, col }],
+        cells,
         operation,
     })
 }
@@ -146,42 +188,69 @@ mod tests {
     #[test]
     fn fixture_projection_adapter_uses_the_same_versioned_abi() {
         let draft = offline_fixture_draft();
-        let projection = draft
-            .table_projection(OFFLINE_FIXTURE_PRIMARY_TABLE_ID)
-            .unwrap();
-        let bytes =
-            table_projection_abi::encode(draft.profile_generation(), draft.origin(), &projection);
+        let bytes = encode_primary_projection(&draft, None);
         assert_eq!(read_u32(&bytes, 0), TABLE_PROJECTION_ABI_VERSION);
         assert_eq!(read_u32(&bytes, 28), OFFLINE_FIXTURE_PRIMARY_TABLE_ID);
     }
 
     #[test]
-    fn cell_step_preview_and_apply_use_semantic_edit_increment() {
-        let mut draft = offline_fixture_draft();
-        let command = cell_step_command(0, 0, 1).unwrap();
-        let preview = draft.preview(&command).unwrap();
-        assert_eq!(preview.base_revision, 0);
-        assert_eq!(preview.changes[0].before, 42.0);
-        assert_eq!(preview.changes[0].after, 42.5);
-
-        let revision = draft.apply(&command).unwrap();
-        assert_eq!(revision, 1);
+    fn rectangle_command_expands_in_row_major_order() {
+        let command = rectangle_step_command(2, 3, 1, 1, 1).unwrap();
         assert_eq!(
-            draft
-                .table_projection(OFFLINE_FIXTURE_PRIMARY_TABLE_ID)
-                .unwrap()
-                .values[0],
-            42.5
+            command.cells,
+            vec![
+                CellCoord { row: 1, col: 1 },
+                CellCoord { row: 1, col: 2 },
+                CellCoord { row: 1, col: 3 },
+                CellCoord { row: 2, col: 1 },
+                CellCoord { row: 2, col: 2 },
+                CellCoord { row: 2, col: 3 },
+            ]
         );
     }
 
     #[test]
-    fn cell_step_rejects_protected_and_invalid_operations() {
+    fn rectangle_preview_is_non_mutating_and_apply_is_one_history_entry() {
+        let mut draft = offline_fixture_draft();
+        let command = rectangle_step_command(0, 0, 1, 1, 1).unwrap();
+        let preview = draft.preview(&command).unwrap();
+
+        assert_eq!(preview.base_revision, 0);
+        assert_eq!(preview.changes.len(), 4);
+        assert_eq!(preview.changes[0].after, 42.5);
+        assert_eq!(draft.table_projection(OFFLINE_FIXTURE_PRIMARY_TABLE_ID).unwrap().values[0], 42.0);
+
+        let revision = draft.apply(&command).unwrap();
+        assert_eq!(revision, 1);
+        let applied = draft.table_projection(OFFLINE_FIXTURE_PRIMARY_TABLE_ID).unwrap();
+        assert_eq!(applied.values[0], 42.5);
+        assert_eq!(applied.values[1], 46.5);
+        assert_eq!(applied.values[5], 50.5);
+        assert_eq!(applied.values[6], 56.5);
+
+        assert_eq!(draft.undo().unwrap(), 2);
+        assert_eq!(draft.table_projection(OFFLINE_FIXTURE_PRIMARY_TABLE_ID).unwrap().values[0], 42.0);
+        assert_eq!(draft.table_projection(OFFLINE_FIXTURE_PRIMARY_TABLE_ID).unwrap().values[6], 56.0);
+    }
+
+    #[test]
+    fn rectangle_preview_rejects_entire_selection_when_one_cell_is_protected() {
         let draft = offline_fixture_draft();
+        let before = draft.table_projection(OFFLINE_FIXTURE_PRIMARY_TABLE_ID).unwrap();
+        let command = rectangle_step_command(2, 3, 3, 4, 1).unwrap();
+
+        assert_eq!(draft.preview(&command), Err(TuneError::ProtectedCell));
         assert_eq!(
-            draft.preview(&cell_step_command(3, 4, 1).unwrap()),
-            Err(TuneError::ProtectedCell)
+            draft.table_projection(OFFLINE_FIXTURE_PRIMARY_TABLE_ID).unwrap(),
+            before
         );
-        assert_eq!(cell_step_command(0, 0, 0), Err(TuneError::EmptySelection));
+    }
+
+    #[test]
+    fn rectangle_command_rejects_invalid_operation() {
+        assert_eq!(
+            rectangle_step_command(0, 0, 1, 1, 0),
+            Err(TuneError::EmptySelection)
+        );
     }
 }
