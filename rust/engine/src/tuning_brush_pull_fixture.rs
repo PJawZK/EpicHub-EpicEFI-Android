@@ -1,5 +1,7 @@
 use crate::tuning::{CellCoord, TuneError};
-use crate::tuning_brush_pull::{BrushPullMode, BrushPullParameters, preview_brush_pull};
+use crate::tuning_brush_pull::{
+    BrushPullMode, BrushPullParameters, preview_brush_path, preview_brush_pull,
+};
 use crate::tuning_fixture::{
     OFFLINE_FIXTURE_PRIMARY_TABLE_ID, encode_primary_projection, with_offline_fixture,
 };
@@ -68,6 +70,49 @@ pub fn apply_offline_fixture_brush_pull(
                 col: focus_col,
             },
             mode,
+            parameters,
+        )?;
+        draft.commit_preview(preview)
+    })
+}
+
+pub fn preview_offline_fixture_brush_path_bytes(
+    path: &[CellCoord],
+    delta_text: &str,
+    radius_text: &str,
+    strength_text: &str,
+    falloff_text: &str,
+) -> Result<Vec<u8>, TuneError> {
+    let parameters = brush_pull_parameters(delta_text, radius_text, strength_text, falloff_text)?;
+    with_offline_fixture(|draft| {
+        let preview = preview_brush_path(
+            draft,
+            OFFLINE_FIXTURE_PRIMARY_TABLE_ID,
+            path,
+            parameters,
+        )?;
+        Ok(encode_primary_projection(draft, Some(&preview.changes)))
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn apply_offline_fixture_brush_path(
+    path: &[CellCoord],
+    delta_text: &str,
+    radius_text: &str,
+    strength_text: &str,
+    falloff_text: &str,
+    expected_revision: u64,
+) -> Result<u64, TuneError> {
+    let parameters = brush_pull_parameters(delta_text, radius_text, strength_text, falloff_text)?;
+    with_offline_fixture(|draft| {
+        if draft.revision() != expected_revision {
+            return Err(TuneError::StalePreview);
+        }
+        let preview = preview_brush_path(
+            draft,
+            OFFLINE_FIXTURE_PRIMARY_TABLE_ID,
+            path,
             parameters,
         )?;
         draft.commit_preview(preview)
