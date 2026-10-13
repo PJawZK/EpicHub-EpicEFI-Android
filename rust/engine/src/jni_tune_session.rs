@@ -168,12 +168,7 @@ pub extern "system" fn Java_com_epicefi_epichub_engine_NativeEngineBridge_fillTu
             &buffer,
             with_tune_session(handle, |session| {
                 session.preview_rectangle_step_bytes(
-                    table_id,
-                    anchor_row,
-                    anchor_col,
-                    focus_row,
-                    focus_col,
-                    direction,
+                    table_id, anchor_row, anchor_col, focus_row, focus_col, direction,
                 )
             }),
         )
@@ -338,12 +333,7 @@ pub extern "system" fn Java_com_epicefi_epichub_engine_NativeEngineBridge_fillTu
             &buffer,
             with_tune_session(handle, |session| {
                 session.preview_interpolation_bytes(
-                    table_id,
-                    anchor_row,
-                    anchor_col,
-                    focus_row,
-                    focus_col,
-                    mode_code,
+                    table_id, anchor_row, anchor_col, focus_row, focus_col, mode_code,
                 )
             }),
         )
