@@ -2,7 +2,7 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use jni::JNIEnv;
 use jni::objects::{JByteBuffer, JObject};
-use jni::sys::{JNI_FALSE, JNI_TRUE, jboolean, jdouble, jint, jlong};
+use jni::sys::{JNI_FALSE, JNI_TRUE, jboolean, jint, jlong};
 
 use crate::diagnostics::DIAGNOSTIC_BATCH_SIZE;
 use crate::engine::{
@@ -11,14 +11,15 @@ use crate::engine::{
 };
 use crate::runtime_snapshot::RUNTIME_SNAPSHOT_SIZE;
 use crate::tuning_fixture::{
-    apply_offline_fixture_cell_step, offline_fixture_projection_bytes,
-    preview_offline_fixture_cell_step, redo_offline_fixture, undo_offline_fixture,
+    apply_offline_fixture_rectangle_step, offline_fixture_projection_bytes,
+    preview_offline_fixture_rectangle_step_bytes, redo_offline_fixture, undo_offline_fixture,
 };
 
 const BUFFER_STATUS_OK: jint = 0;
 const BUFFER_STATUS_INVALID_HANDLE: jint = 1;
 const BUFFER_STATUS_NOT_DIRECT: jint = 2;
 const BUFFER_STATUS_TOO_SMALL: jint = 3;
+const BUFFER_STATUS_EDIT_REJECTED: jint = 4;
 const BUFFER_STATUS_PANIC: jint = 255;
 const EDIT_STATUS_REJECTED: jlong = -1;
 
@@ -51,6 +52,20 @@ fn edit_revision_or_rejected(result: Result<u64, crate::tuning::TuneError>) -> j
         .ok()
         .and_then(|revision| jlong::try_from(revision).ok())
         .unwrap_or(EDIT_STATUS_REJECTED)
+}
+
+fn rectangle_args(
+    anchor_row: jint,
+    anchor_col: jint,
+    focus_row: jint,
+    focus_col: jint,
+) -> Option<(usize, usize, usize, usize)> {
+    Some((
+        usize::try_from(anchor_row).ok()?,
+        usize::try_from(anchor_col).ok()?,
+        usize::try_from(focus_row).ok()?,
+        usize::try_from(focus_col).ok()?,
+    ))
 }
 
 #[unsafe(no_mangle)]
@@ -179,46 +194,67 @@ pub extern "system" fn Java_com_epicefi_epichub_engine_OfflineTunerFixture_fillP
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_epicefi_epichub_engine_OfflineTunerFixture_previewCellStepNative(
-    _env: JNIEnv,
+pub extern "system" fn Java_com_epicefi_epichub_engine_OfflineTunerFixture_fillRectanglePreviewNative(
+    env: JNIEnv,
     _object: JObject,
-    row: jint,
-    col: jint,
+    anchor_row: jint,
+    anchor_col: jint,
+    focus_row: jint,
+    focus_col: jint,
     direction: jint,
-) -> jdouble {
-    ffi_guard(f64::NAN, || {
-        let Ok(row) = usize::try_from(row) else {
-            return f64::NAN;
+    buffer: JByteBuffer,
+) -> jint {
+    ffi_guard(BUFFER_STATUS_PANIC, || {
+        let Some((anchor_row, anchor_col, focus_row, focus_col)) = rectangle_args(
+            anchor_row,
+            anchor_col,
+            focus_row,
+            focus_col,
+        ) else {
+            return BUFFER_STATUS_EDIT_REJECTED;
         };
-        let Ok(col) = usize::try_from(col) else {
-            return f64::NAN;
+        let bytes = match preview_offline_fixture_rectangle_step_bytes(
+            anchor_row,
+            anchor_col,
+            focus_row,
+            focus_col,
+            direction,
+        ) {
+            Ok(bytes) => bytes,
+            Err(_) => return BUFFER_STATUS_EDIT_REJECTED,
         };
-        preview_offline_fixture_cell_step(row, col, direction).unwrap_or(f64::NAN)
+        copy_to_direct_buffer(&env, &buffer, &bytes)
     })
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_epicefi_epichub_engine_OfflineTunerFixture_applyCellStepNative(
+pub extern "system" fn Java_com_epicefi_epichub_engine_OfflineTunerFixture_applyRectangleStepNative(
     _env: JNIEnv,
     _object: JObject,
-    row: jint,
-    col: jint,
+    anchor_row: jint,
+    anchor_col: jint,
+    focus_row: jint,
+    focus_col: jint,
     direction: jint,
     expected_revision: jlong,
 ) -> jlong {
     ffi_guard(EDIT_STATUS_REJECTED, || {
-        let Ok(row) = usize::try_from(row) else {
-            return EDIT_STATUS_REJECTED;
-        };
-        let Ok(col) = usize::try_from(col) else {
+        let Some((anchor_row, anchor_col, focus_row, focus_col)) = rectangle_args(
+            anchor_row,
+            anchor_col,
+            focus_row,
+            focus_col,
+        ) else {
             return EDIT_STATUS_REJECTED;
         };
         let Ok(expected_revision) = u64::try_from(expected_revision) else {
             return EDIT_STATUS_REJECTED;
         };
-        edit_revision_or_rejected(apply_offline_fixture_cell_step(
-            row,
-            col,
+        edit_revision_or_rejected(apply_offline_fixture_rectangle_step(
+            anchor_row,
+            anchor_col,
+            focus_row,
+            focus_col,
             direction,
             expected_revision,
         ))
