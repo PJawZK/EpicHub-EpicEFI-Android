@@ -1,4 +1,6 @@
-use crate::tuning::{CellCoord, TableEditCommand, TableEditOperation, TablePreview, TuneDraft, TuneError};
+use crate::tuning::{
+    CellCoord, TableEditCommand, TableEditOperation, TablePreview, TuneDraft, TuneError,
+};
 use crate::tuning_interpolation::TableRectangle;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
