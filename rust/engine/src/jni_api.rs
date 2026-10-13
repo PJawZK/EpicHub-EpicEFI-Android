@@ -179,7 +179,7 @@ pub extern "system" fn Java_com_epicefi_epichub_engine_OfflineTunerFixture_fillP
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_epicefi_epichub_engine_OfflineTunerFixture_previewCellStep(
+pub extern "system" fn Java_com_epicefi_epichub_engine_OfflineTunerFixture_previewCellStepNative(
     _env: JNIEnv,
     _object: JObject,
     row: jint,
@@ -198,7 +198,7 @@ pub extern "system" fn Java_com_epicefi_epichub_engine_OfflineTunerFixture_previ
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_epicefi_epichub_engine_OfflineTunerFixture_applyCellStep(
+pub extern "system" fn Java_com_epicefi_epichub_engine_OfflineTunerFixture_applyCellStepNative(
     _env: JNIEnv,
     _object: JObject,
     row: jint,
@@ -226,7 +226,7 @@ pub extern "system" fn Java_com_epicefi_epichub_engine_OfflineTunerFixture_apply
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_epicefi_epichub_engine_OfflineTunerFixture_undo(
+pub extern "system" fn Java_com_epicefi_epichub_engine_OfflineTunerFixture_undoNative(
     _env: JNIEnv,
     _object: JObject,
 ) -> jlong {
@@ -236,7 +236,7 @@ pub extern "system" fn Java_com_epicefi_epichub_engine_OfflineTunerFixture_undo(
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_epicefi_epichub_engine_OfflineTunerFixture_redo(
+pub extern "system" fn Java_com_epicefi_epichub_engine_OfflineTunerFixture_redoNative(
     _env: JNIEnv,
     _object: JObject,
 ) -> jlong {
