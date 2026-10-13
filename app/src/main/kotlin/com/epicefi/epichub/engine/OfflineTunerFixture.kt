@@ -14,6 +14,12 @@ enum class TunerNumericOperation(val nativeCode: Int) {
     SCALE(2),
 }
 
+enum class TunerInterpolationMode(val nativeCode: Int) {
+    HORIZONTAL(0),
+    VERTICAL(1),
+    TWO_DIMENSIONAL(2),
+}
+
 data class TunerRectangle(
     val anchorRow: Int,
     val anchorCol: Int,
@@ -119,6 +125,46 @@ object OfflineTunerFixture {
         }
     }
 
+    fun previewInterpolation(
+        rectangle: TunerRectangle,
+        mode: TunerInterpolationMode,
+    ): TunerTableProjection {
+        val buffer = projectionBuffer()
+        val status = fillInterpolationPreviewNative(
+            rectangle.anchorRow,
+            rectangle.anchorCol,
+            rectangle.focusRow,
+            rectangle.focusCol,
+            mode.nativeCode,
+            buffer,
+        )
+        check(status == NATIVE_BUFFER_STATUS_OK) {
+            "Offline Tuner interpolation preview was rejected with status $status."
+        }
+        return TunerTableProjectionDecoder.decode(buffer)
+    }
+
+    fun applyInterpolation(
+        rectangle: TunerRectangle,
+        mode: TunerInterpolationMode,
+        expectedRevision: Long,
+    ): TunerTableProjection {
+        val revision = applyInterpolationNative(
+            rectangle.anchorRow,
+            rectangle.anchorCol,
+            rectangle.focusRow,
+            rectangle.focusCol,
+            mode.nativeCode,
+            expectedRevision,
+        )
+        check(revision >= 0L) { "Offline Tuner interpolation was rejected or stale." }
+        return readProjection().also { projection ->
+            check(projection.draftRevision == revision) {
+                "Offline Tuner projection revision did not match the applied interpolation."
+            }
+        }
+    }
+
     fun undoProjection(): TunerTableProjection {
         val revision = undoNative()
         check(revision >= 0L) { "Offline Tuner undo is unavailable." }
@@ -175,6 +221,22 @@ object OfflineTunerFixture {
         focusCol: Int,
         operationCode: Int,
         operand: String,
+        expectedRevision: Long,
+    ): Long
+    private external fun fillInterpolationPreviewNative(
+        anchorRow: Int,
+        anchorCol: Int,
+        focusRow: Int,
+        focusCol: Int,
+        modeCode: Int,
+        buffer: ByteBuffer,
+    ): Int
+    private external fun applyInterpolationNative(
+        anchorRow: Int,
+        anchorCol: Int,
+        focusRow: Int,
+        focusCol: Int,
+        modeCode: Int,
         expectedRevision: Long,
     ): Long
     private external fun undoNative(): Long
