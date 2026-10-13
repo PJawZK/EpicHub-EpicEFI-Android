@@ -13,6 +13,7 @@ Current Phase-2 work establishes the application shell, native Tuning Tools, fou
 - `ANDROID_BUILD_BASELINE.md` — locked package/API/ABI/device support contract and foundation qualification baseline.
 - `UI_FOUNDATION_LAYOUT.md` — four primary workspaces, six distinct functional/domain routes, four presentation-authority classes and diagnostics/control separation.
 - `TUNING_TOOLS_FOUNDATION.md` — native replacement for historical AE/PID/TCharge/Injection-Angle plugin packaging and the UI/runtime ownership contract for those tools.
+- `EPICHUB_TUNER_ARCHITECTURE_AND_IMPLEMENTATION_MAP.md` — research-closeout synthesis mapping TunerStudio, MegaLogViewer, EpicScope and the Table Interaction Lab into an EpicHub-native Tuner architecture and implementation sequence. Reference products contribute evidence, not implementation authority.
 - `DIAGNOSTICS_CAPTURE_FOUNDATION.md` — typed diagnostics, bounded flight recorder and problem-capture foundation.
 - `../HANDOFF.md` — single current development continuation index.
 
@@ -31,6 +32,7 @@ These are closure/history records, not current Phase-2 work instructions.
 - `RESPONSIBILITY_INVENTORY.md` — normalized behaviours/responsibilities independent of historical files.
 - `RESPONSIBILITY_DESTINATIONS.md` — where retained/redesigned responsibilities belong in EpicHub.
 - `ANALYSIS_RESPONSIBILITY_MAP.md` — permanent owners/boundaries for historical plugin-derived analysis/autotune responsibilities.
+- `EPICHUB_TUNER_ARCHITECTURE_AND_IMPLEMENTATION_MAP.md` — cross-reference and implementation map for mature tuning/log-analysis evidence versus current EpicHub ownership.
 - `PROTOCOL_AUTHORITIES.md` — source of truth for important wire/profile/file-format contracts.
 - `GAP_ANALYSIS.md` — current unresolved implementation/fixture/benchmark/product work, classified by when it becomes required.
 
@@ -50,6 +52,8 @@ Historical JSON/JavaScript/TypeScript/React/WebView references in evidence docum
 
 Likewise, historical TunerStudio plugin/JAR packaging is evidence only. D-024 maps retained capabilities into native EpicHub Tuning Tools rather than a runtime plugin subsystem.
 
+The broad TunerStudio/MLV/EpicScope closeout follows the same rule: useful mature behavior is converted into EpicHub responsibilities, invariants and improvement opportunities rather than cloned screens/classes/workflows.
+
 ## Target architecture contracts
 
 - `CODEBASE_TOPOLOGY.md` — current physical topology plus deliberate expansion rules, including the four-workspace/leaf-route split.
@@ -64,6 +68,7 @@ Likewise, historical TunerStudio plugin/JAR packaging is evidence only. D-024 ma
 - `TEST_STRATEGY.md` — qualification layers, MLG/MDF interop, subsystem testing and D-022/D-023 regression methodology.
 - `UI_FOUNDATION_LAYOUT.md` — concrete workspace/route/presentation contract before real feature depth.
 - `TUNING_TOOLS_FOUNDATION.md` — native guided tuning-tool surface and shared Rust-analysis integration.
+- `EPICHUB_TUNER_ARCHITECTURE_AND_IMPLEMENTATION_MAP.md` — proposed Tuner convergence and first implementation-ready offline semantic table/curve slice; it identifies, but does not self-authorize, the D-016 follow-up required before production 3D direct editing.
 - `DIAGNOSTICS_CAPTURE_FOUNDATION.md` — concrete diagnostic flight-recorder/capture/export foundation before real subsystem complexity.
 
 ## Authority interpretation
@@ -74,7 +79,7 @@ When documents differ in level of detail:
 2. `RUNTIME_LANGUAGE_AND_SERIALIZATION.md` defines the D-023 language/runtime/serialization boundary.
 3. protocol/source truth is resolved by `PROTOCOL_AUTHORITIES.md` plus direct evidence documents.
 4. `STATE_OWNERSHIP.md`, `DEPENDENCY_RULES.md`, `DATA_FLOW.md`, `KOTLIN_RUST_BOUNDARY.md`, `ACTION_MODEL.md` and `SAFETY_BOUNDARIES.md` define cross-domain contracts.
-5. Phase-2 implementation contracts such as `UI_FOUNDATION_LAYOUT.md`, `TUNING_TOOLS_FOUNDATION.md` and `DIAGNOSTICS_CAPTURE_FOUNDATION.md` refine the accepted architecture for implementation but may not override durable decisions.
+5. Phase-2 implementation contracts such as `UI_FOUNDATION_LAYOUT.md`, `TUNING_TOOLS_FOUNDATION.md`, `EPICHUB_TUNER_ARCHITECTURE_AND_IMPLEMENTATION_MAP.md` and `DIAGNOSTICS_CAPTURE_FOUNDATION.md` refine the accepted architecture for implementation but may not override durable decisions.
 6. `CODEBASE_TOPOLOGY.md` maps those contracts into current/planned homes; it must not override them.
 7. evidence documents explain why a decision exists but do not silently supersede a later durable decision.
 8. `GAP_ANALYSIS.md` identifies work still open; an open implementation/benchmark gap does not negate an already-locked ownership boundary.
