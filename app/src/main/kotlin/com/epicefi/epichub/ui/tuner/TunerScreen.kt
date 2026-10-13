@@ -2,6 +2,7 @@ package com.epicefi.epichub.ui.tuner
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -15,7 +16,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -27,6 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.dp
 import com.epicefi.epichub.engine.OfflineTunerFixture
+import com.epicefi.epichub.engine.TunerCellStep
 import com.epicefi.epichub.engine.TunerTableProjection
 import com.epicefi.epichub.ui.components.StructuralCard
 import java.util.Locale
@@ -35,11 +39,94 @@ import kotlin.math.max
 private const val CELL_WIDTH_DP = 72
 private const val AXIS_WIDTH_DP = 64
 
+private data class CellSelection(
+    val row: Int,
+    val col: Int,
+)
+
+private data class PendingPreview(
+    val selection: CellSelection,
+    val step: TunerCellStep,
+    val value: Double,
+    val baseRevision: Long,
+)
+
 @Composable
 fun TunerScreen(modifier: Modifier = Modifier) {
-    val projectionResult = remember { runCatching { OfflineTunerFixture.readProjection() } }
-    val projection = projectionResult.getOrNull()
+    val initialProjection = remember { runCatching { OfflineTunerFixture.readProjection() } }
+    var projection by remember { mutableStateOf(initialProjection.getOrNull()) }
+    var errorMessage by remember { mutableStateOf(initialProjection.exceptionOrNull()?.message) }
     var show3d by remember { mutableStateOf(false) }
+    var selection by remember { mutableStateOf<CellSelection?>(null) }
+    var pendingPreview by remember { mutableStateOf<PendingPreview?>(null) }
+
+    fun selectCell(row: Int, col: Int) {
+        selection = CellSelection(row, col)
+        pendingPreview = null
+        errorMessage = null
+    }
+
+    fun previewStep(step: TunerCellStep) {
+        val selected = selection ?: return
+        val current = projection ?: return
+        runCatching {
+            OfflineTunerFixture.previewCellStep(selected.row, selected.col, step)
+        }.onSuccess { value ->
+            pendingPreview = PendingPreview(
+                selection = selected,
+                step = step,
+                value = value,
+                baseRevision = current.draftRevision,
+            )
+            errorMessage = null
+        }.onFailure { error ->
+            pendingPreview = null
+            errorMessage = error.message ?: "Preview rejected."
+        }
+    }
+
+    fun applyPreview() {
+        val preview = pendingPreview ?: return
+        runCatching {
+            OfflineTunerFixture.applyCellStep(
+                row = preview.selection.row,
+                col = preview.selection.col,
+                step = preview.step,
+                expectedRevision = preview.baseRevision,
+            )
+        }.onSuccess { next ->
+            projection = next
+            pendingPreview = null
+            errorMessage = null
+        }.onFailure { error ->
+            pendingPreview = null
+            errorMessage = error.message ?: "Apply rejected."
+        }
+    }
+
+    fun undo() {
+        runCatching { OfflineTunerFixture.undoProjection() }
+            .onSuccess { next ->
+                projection = next
+                pendingPreview = null
+                errorMessage = null
+            }
+            .onFailure { error ->
+                errorMessage = error.message ?: "Nothing to undo."
+            }
+    }
+
+    fun redo() {
+        runCatching { OfflineTunerFixture.redoProjection() }
+            .onSuccess { next ->
+                projection = next
+                pendingPreview = null
+                errorMessage = null
+            }
+            .onFailure { error ->
+                errorMessage = error.message ?: "Nothing to redo."
+            }
+    }
 
     Column(
         modifier = modifier
@@ -53,21 +140,21 @@ fun TunerScreen(modifier: Modifier = Modifier) {
         StructuralCard(
             title = "Authority",
             modifier = Modifier.fillMaxWidth(),
-            subtitle = "Offline semantic projection only",
+            subtitle = "Offline semantic draft only",
         ) {
             if (projection == null) {
                 Text("OFFLINE FIXTURE · projection unavailable")
-                projectionResult.exceptionOrNull()?.message?.let { Text(it) }
+                errorMessage?.let { Text(it) }
             } else {
                 Text("OFFLINE FIXTURE · NOT ECU APPLIED")
                 Text(
-                    "Profile generation ${projection.profileGeneration} · Draft revision ${projection.draftRevision}",
+                    "Profile generation ${projection?.profileGeneration} · Draft revision ${projection?.draftRevision}",
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
         }
 
-        if (projection != null) {
+        projection?.let { current ->
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 AssistChip(
                     onClick = { show3d = false },
@@ -80,14 +167,67 @@ fun TunerScreen(modifier: Modifier = Modifier) {
             }
 
             StructuralCard(
-                title = projection.name,
+                title = current.name,
                 modifier = Modifier.fillMaxWidth(),
-                subtitle = "Table ${projection.tableId} · ${projection.rows}×${projection.cols} · read-only",
+                subtitle = "Table ${current.tableId} · ${current.rows}×${current.cols} · offline draft",
             ) {
                 if (show3d) {
-                    ReadOnlyTable3d(projection)
+                    Table3d(
+                        projection = current,
+                        selection = selection,
+                        preview = pendingPreview,
+                    )
                 } else {
-                    ReadOnlyTable2d(projection)
+                    Table2d(
+                        projection = current,
+                        selection = selection,
+                        preview = pendingPreview,
+                        onCellSelected = ::selectCell,
+                    )
+                }
+            }
+
+            StructuralCard(
+                title = "Selection and preview",
+                modifier = Modifier.fillMaxWidth(),
+                subtitle = "Preview is semantic; Apply changes only the offline draft",
+            ) {
+                val selected = selection
+                if (selected == null) {
+                    Text("Select an editable cell in 2D to begin.")
+                } else {
+                    val index = selected.row * current.cols + selected.col
+                    val committedValue = current.values[index]
+                    Text(
+                        "Cell r${selected.row + 1} c${selected.col + 1} · committed ${formatValue(committedValue, current.displayDecimals)}",
+                    )
+                    pendingPreview?.let { preview ->
+                        Text(
+                            "Preview ${formatValue(preview.value, current.displayDecimals)} · base revision ${preview.baseRevision}",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = { previewStep(TunerCellStep.DECREMENT) }) {
+                            Text("−${formatValue(current.editIncrement, current.displayDecimals)}")
+                        }
+                        OutlinedButton(onClick = { previewStep(TunerCellStep.INCREMENT) }) {
+                            Text("+${formatValue(current.editIncrement, current.displayDecimals)}")
+                        }
+                        Button(
+                            enabled = pendingPreview != null,
+                            onClick = ::applyPreview,
+                        ) {
+                            Text("Apply preview")
+                        }
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = ::undo) { Text("Undo") }
+                    OutlinedButton(onClick = ::redo) { Text("Redo") }
+                }
+                errorMessage?.let { message ->
+                    Text(message, color = MaterialTheme.colorScheme.error)
                 }
             }
 
@@ -97,9 +237,9 @@ fun TunerScreen(modifier: Modifier = Modifier) {
                 subtitle = "Formatting is not storage resolution",
             ) {
                 Text(
-                    "Range ${formatValue(projection.minimum, projection.displayDecimals)}–${formatValue(projection.maximum, projection.displayDecimals)} · " +
-                        "quantum ${formatValue(projection.quantum, projection.displayDecimals)} · " +
-                        "edit increment ${formatValue(projection.editIncrement, projection.displayDecimals)}",
+                    "Range ${formatValue(current.minimum, current.displayDecimals)}–${formatValue(current.maximum, current.displayDecimals)} · " +
+                        "quantum ${formatValue(current.quantum, current.displayDecimals)} · " +
+                        "edit increment ${formatValue(current.editIncrement, current.displayDecimals)}",
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
@@ -108,7 +248,12 @@ fun TunerScreen(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun ReadOnlyTable2d(projection: TunerTableProjection) {
+private fun Table2d(
+    projection: TunerTableProjection,
+    selection: CellSelection?,
+    preview: PendingPreview?,
+    onCellSelected: (Int, Int) -> Unit,
+) {
     val scroll = rememberScrollState()
     Column(
         modifier = Modifier
@@ -127,11 +272,25 @@ private fun ReadOnlyTable2d(projection: TunerTableProjection) {
                 TableCell(formatAxis(projection.yAxis[displayRow]), AXIS_WIDTH_DP, header = true)
                 for (col in 0 until projection.cols) {
                     val index = displayRow * projection.cols + col
+                    val selected = selection?.row == displayRow && selection.col == col
+                    val previewValue = preview
+                        ?.takeIf { it.selection.row == displayRow && it.selection.col == col }
+                        ?.value
                     TableCell(
-                        text = formatValue(projection.values[index], projection.displayDecimals),
+                        text = formatValue(
+                            previewValue ?: projection.values[index],
+                            projection.displayDecimals,
+                        ),
                         widthDp = CELL_WIDTH_DP,
                         header = false,
                         protected = !projection.editable[index],
+                        selected = selected,
+                        previewed = previewValue != null,
+                        onClick = if (projection.editable[index]) {
+                            { onCellSelected(displayRow, col) }
+                        } else {
+                            null
+                        },
                     )
                 }
             }
@@ -145,9 +304,14 @@ private fun TableCell(
     widthDp: Int,
     header: Boolean,
     protected: Boolean = false,
+    selected: Boolean = false,
+    previewed: Boolean = false,
+    onClick: (() -> Unit)? = null,
 ) {
     val background = when {
         protected -> MaterialTheme.colorScheme.surfaceVariant
+        previewed -> MaterialTheme.colorScheme.tertiaryContainer
+        selected -> MaterialTheme.colorScheme.secondaryContainer
         header -> MaterialTheme.colorScheme.surfaceContainerHigh
         else -> MaterialTheme.colorScheme.surfaceContainerLow
     }
@@ -156,6 +320,7 @@ private fun TableCell(
             .width(widthDp.dp)
             .height(42.dp)
             .background(background)
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(horizontal = 6.dp),
         contentAlignment = Alignment.Center,
     ) {
@@ -167,9 +332,15 @@ private fun TableCell(
 }
 
 @Composable
-private fun ReadOnlyTable3d(projection: TunerTableProjection) {
+private fun Table3d(
+    projection: TunerTableProjection,
+    selection: CellSelection?,
+    preview: PendingPreview?,
+) {
     val lineColor = MaterialTheme.colorScheme.primary
     val protectedColor = MaterialTheme.colorScheme.error
+    val selectedColor = MaterialTheme.colorScheme.secondary
+    val previewColor = MaterialTheme.colorScheme.tertiary
     val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -178,8 +349,15 @@ private fun ReadOnlyTable3d(projection: TunerTableProjection) {
                 .fillMaxWidth()
                 .height(300.dp),
         ) {
-            val minValue = projection.values.minOrNull() ?: 0.0
-            val maxValue = projection.values.maxOrNull() ?: minValue
+            val displayValues = projection.values.copyOf()
+            preview?.let { pending ->
+                val index = pending.selection.row * projection.cols + pending.selection.col
+                if (index in displayValues.indices) {
+                    displayValues[index] = pending.value
+                }
+            }
+            val minValue = displayValues.minOrNull() ?: 0.0
+            val maxValue = displayValues.maxOrNull() ?: minValue
             val span = max(maxValue - minValue, 1e-9)
             val xStep = size.width * 0.68f / max(projection.cols - 1, 1)
             val yStep = size.height * 0.34f / max(projection.rows - 1, 1)
@@ -188,7 +366,7 @@ private fun ReadOnlyTable3d(projection: TunerTableProjection) {
 
             fun point(row: Int, col: Int): Offset {
                 val index = row * projection.cols + col
-                val normalized = ((projection.values[index] - minValue) / span).toFloat()
+                val normalized = ((displayValues[index] - minValue) / span).toFloat()
                 return Offset(
                     x = origin.x + col * xStep + row * xStep * 0.22f,
                     y = origin.y - row * yStep - normalized * zScale,
@@ -208,16 +386,24 @@ private fun ReadOnlyTable3d(projection: TunerTableProjection) {
             for (row in 0 until projection.rows) {
                 for (col in 0 until projection.cols) {
                     val index = row * projection.cols + col
+                    val isSelected = selection?.row == row && selection.col == col
+                    val isPreviewed = preview?.selection?.row == row && preview.selection.col == col
+                    val pointColor = when {
+                        isPreviewed -> previewColor
+                        isSelected -> selectedColor
+                        projection.editable[index] -> lineColor
+                        else -> protectedColor
+                    }
                     drawCircle(
-                        color = if (projection.editable[index]) lineColor else protectedColor,
-                        radius = 5f,
+                        color = pointColor,
+                        radius = if (isSelected || isPreviewed) 8f else 5f,
                         center = point(row, col),
                     )
                 }
             }
         }
         Text(
-            "Same table ID ${projection.tableId} · same draft revision ${projection.draftRevision} · read-only 3D projection",
+            "Same table ${projection.tableId} · draft revision ${projection.draftRevision} · shared selection · 3D inspection only",
             color = labelColor,
             style = MaterialTheme.typography.bodySmall,
         )
