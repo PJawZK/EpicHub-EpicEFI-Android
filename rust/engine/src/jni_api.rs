@@ -1,7 +1,7 @@
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use jni::JNIEnv;
-use jni::objects::{JByteBuffer, JObject};
+use jni::objects::{JByteBuffer, JObject, JString};
 use jni::sys::{JNI_FALSE, JNI_TRUE, jboolean, jint, jlong};
 
 use crate::diagnostics::DIAGNOSTIC_BATCH_SIZE;
@@ -11,7 +11,8 @@ use crate::engine::{
 };
 use crate::runtime_snapshot::RUNTIME_SNAPSHOT_SIZE;
 use crate::tuning_fixture::{
-    apply_offline_fixture_rectangle_step, offline_fixture_projection_bytes,
+    apply_offline_fixture_rectangle_numeric, apply_offline_fixture_rectangle_step,
+    offline_fixture_projection_bytes, preview_offline_fixture_rectangle_numeric_bytes,
     preview_offline_fixture_rectangle_step_bytes, redo_offline_fixture, undo_offline_fixture,
 };
 
@@ -66,6 +67,10 @@ fn rectangle_args(
         usize::try_from(focus_row).ok()?,
         usize::try_from(focus_col).ok()?,
     ))
+}
+
+fn numeric_operand(env: &mut JNIEnv, operand: &JString) -> Option<String> {
+    env.get_string(operand).ok().map(Into::into)
 }
 
 #[unsafe(no_mangle)]
@@ -246,6 +251,78 @@ pub extern "system" fn Java_com_epicefi_epichub_engine_OfflineTunerFixture_apply
             focus_row,
             focus_col,
             direction,
+            expected_revision,
+        ))
+    })
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_epicefi_epichub_engine_OfflineTunerFixture_fillRectangleNumericPreviewNative(
+    mut env: JNIEnv,
+    _object: JObject,
+    anchor_row: jint,
+    anchor_col: jint,
+    focus_row: jint,
+    focus_col: jint,
+    operation_code: jint,
+    operand: JString,
+    buffer: JByteBuffer,
+) -> jint {
+    ffi_guard(BUFFER_STATUS_PANIC, || {
+        let Some((anchor_row, anchor_col, focus_row, focus_col)) =
+            rectangle_args(anchor_row, anchor_col, focus_row, focus_col)
+        else {
+            return BUFFER_STATUS_EDIT_REJECTED;
+        };
+        let Some(operand) = numeric_operand(&mut env, &operand) else {
+            return BUFFER_STATUS_EDIT_REJECTED;
+        };
+        let bytes = match preview_offline_fixture_rectangle_numeric_bytes(
+            anchor_row,
+            anchor_col,
+            focus_row,
+            focus_col,
+            operation_code,
+            &operand,
+        ) {
+            Ok(bytes) => bytes,
+            Err(_) => return BUFFER_STATUS_EDIT_REJECTED,
+        };
+        copy_to_direct_buffer(&env, &buffer, &bytes)
+    })
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_epicefi_epichub_engine_OfflineTunerFixture_applyRectangleNumericNative(
+    mut env: JNIEnv,
+    _object: JObject,
+    anchor_row: jint,
+    anchor_col: jint,
+    focus_row: jint,
+    focus_col: jint,
+    operation_code: jint,
+    operand: JString,
+    expected_revision: jlong,
+) -> jlong {
+    ffi_guard(EDIT_STATUS_REJECTED, || {
+        let Some((anchor_row, anchor_col, focus_row, focus_col)) =
+            rectangle_args(anchor_row, anchor_col, focus_row, focus_col)
+        else {
+            return EDIT_STATUS_REJECTED;
+        };
+        let Some(operand) = numeric_operand(&mut env, &operand) else {
+            return EDIT_STATUS_REJECTED;
+        };
+        let Ok(expected_revision) = u64::try_from(expected_revision) else {
+            return EDIT_STATUS_REJECTED;
+        };
+        edit_revision_or_rejected(apply_offline_fixture_rectangle_numeric(
+            anchor_row,
+            anchor_col,
+            focus_row,
+            focus_col,
+            operation_code,
+            &operand,
             expected_revision,
         ))
     })
