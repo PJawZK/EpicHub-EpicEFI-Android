@@ -160,6 +160,127 @@ class TunerCommandRouterTest {
     }
 
     @Test
+    fun brushStrokeBeginsAsPreviewIntentAndTracksSelection() {
+        val parameters = TunerBrushStrokeParameters("5", "1", "100", "1")
+        val result = TunerCommandRouter.route(
+            TunerCommand.BeginBrushStroke(1, 2, parameters),
+            TunerInteractionState(),
+            rows = 4,
+            cols = 5,
+        )
+
+        val stroke = result.state.activeBrushStroke
+        assertEquals(listOf(TunerCellPosition(1, 2)), stroke?.points)
+        assertEquals(parameters, stroke?.parameters)
+        assertEquals(
+            TunerRectangleSelection(TunerCellPosition(1, 2), TunerCellPosition(1, 2)),
+            result.state.selection,
+        )
+        assertEquals(TunerCommandEffect.PreviewBrushStroke(stroke!!), result.effect)
+    }
+
+    @Test
+    fun brushStrokeDropsDuplicateSamplesAndCollapsesForwardCollinearRuns() {
+        val parameters = TunerBrushStrokeParameters("5", "1", "100", "1")
+        var state = TunerCommandRouter.route(
+            TunerCommand.BeginBrushStroke(1, 0, parameters),
+            TunerInteractionState(),
+            rows = 5,
+            cols = 5,
+        ).state
+
+        state = TunerCommandRouter.route(
+            TunerCommand.ContinueBrushStroke(1, 1),
+            state,
+            rows = 5,
+            cols = 5,
+        ).state
+        state = TunerCommandRouter.route(
+            TunerCommand.ContinueBrushStroke(1, 2),
+            state,
+            rows = 5,
+            cols = 5,
+        ).state
+        val duplicate = TunerCommandRouter.route(
+            TunerCommand.ContinueBrushStroke(1, 2),
+            state,
+            rows = 5,
+            cols = 5,
+        )
+
+        assertEquals(
+            listOf(TunerCellPosition(1, 0), TunerCellPosition(1, 2)),
+            state.activeBrushStroke?.points,
+        )
+        assertEquals(state, duplicate.state)
+        assertEquals(TunerCommandEffect.None, duplicate.effect)
+    }
+
+    @Test
+    fun brushStrokePreservesTurnsAndEndsWithoutApplying() {
+        val parameters = TunerBrushStrokeParameters("5", "1", "100", "1")
+        var state = TunerCommandRouter.route(
+            TunerCommand.BeginBrushStroke(0, 0, parameters),
+            TunerInteractionState(),
+            rows = 5,
+            cols = 5,
+        ).state
+        val turn = TunerCommandRouter.route(
+            TunerCommand.ContinueBrushStroke(0, 3),
+            state,
+            rows = 5,
+            cols = 5,
+        )
+        state = turn.state
+        val vertical = TunerCommandRouter.route(
+            TunerCommand.ContinueBrushStroke(2, 3),
+            state,
+            rows = 5,
+            cols = 5,
+        )
+        state = vertical.state
+
+        assertEquals(
+            listOf(
+                TunerCellPosition(0, 0),
+                TunerCellPosition(0, 3),
+                TunerCellPosition(2, 3),
+            ),
+            state.activeBrushStroke?.points,
+        )
+        assertTrue(vertical.effect is TunerCommandEffect.PreviewBrushStroke)
+
+        val ended = TunerCommandRouter.route(
+            TunerCommand.EndBrushStroke,
+            state,
+            rows = 5,
+            cols = 5,
+        )
+        assertNull(ended.state.activeBrushStroke)
+        assertEquals(TunerCommandEffect.None, ended.effect)
+    }
+
+    @Test
+    fun cancelBrushStrokeClearsActiveGestureAndPreview() {
+        val parameters = TunerBrushStrokeParameters("5", "1", "100", "1")
+        val active = TunerCommandRouter.route(
+            TunerCommand.BeginBrushStroke(0, 0, parameters),
+            TunerInteractionState(),
+            rows = 3,
+            cols = 3,
+        ).state
+        val cancelled = TunerCommandRouter.route(
+            TunerCommand.CancelBrushStroke,
+            active,
+            rows = 3,
+            cols = 3,
+        )
+
+        assertNull(cancelled.state.activeBrushStroke)
+        assertEquals(TunerCommandEffect.CancelPreview, cancelled.effect)
+    }
+
+    @Test
     fun editCommandsBecomeEffectsWithoutMutatingSelectionState() {
         val initial = TunerInteractionState(
             selection = TunerRectangleSelection(
@@ -258,6 +379,7 @@ class TunerCommandRouterTest {
 
         assertNull(result.state.selection)
         assertFalse(result.state.persistentExtendSelection)
+        assertNull(result.state.activeBrushStroke)
         assertTrue(result.effect is TunerCommandEffect.CancelPreview)
     }
 
