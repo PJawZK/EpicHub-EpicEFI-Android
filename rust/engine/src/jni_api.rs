@@ -10,6 +10,7 @@ use crate::engine::{
     offline_table_projection, runtime_snapshot,
 };
 use crate::runtime_snapshot::RUNTIME_SNAPSHOT_SIZE;
+use crate::tuning_fixture::offline_fixture_projection_bytes;
 
 const BUFFER_STATUS_OK: jint = 0;
 const BUFFER_STATUS_INVALID_HANDLE: jint = 1;
@@ -140,6 +141,28 @@ pub extern "system" fn Java_com_epicefi_epichub_engine_NativeEngineBridge_fillOf
             Some(bytes) => bytes,
             None => return BUFFER_STATUS_INVALID_HANDLE,
         };
+        copy_to_direct_buffer(&env, &buffer, &bytes)
+    })
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_epicefi_epichub_engine_OfflineTunerFixture_projectionSize(
+    _env: JNIEnv,
+    _object: JObject,
+) -> jint {
+    ffi_guard(-1, || {
+        jint::try_from(offline_fixture_projection_bytes().len()).unwrap_or(-1)
+    })
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_epicefi_epichub_engine_OfflineTunerFixture_fillProjection(
+    env: JNIEnv,
+    _object: JObject,
+    buffer: JByteBuffer,
+) -> jint {
+    ffi_guard(BUFFER_STATUS_PANIC, || {
+        let bytes = offline_fixture_projection_bytes();
         copy_to_direct_buffer(&env, &buffer, &bytes)
     })
 }
