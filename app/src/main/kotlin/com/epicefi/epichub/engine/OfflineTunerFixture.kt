@@ -25,7 +25,7 @@ object OfflineTunerFixture {
     }
 
     fun previewCellStep(row: Int, col: Int, step: TunerCellStep): Double {
-        val value = previewCellStep(row, col, step.nativeCode)
+        val value = previewCellStepNative(row, col, step.nativeCode)
         check(value.isFinite()) { "Offline Tuner preview was rejected." }
         return value
     }
@@ -36,7 +36,7 @@ object OfflineTunerFixture {
         step: TunerCellStep,
         expectedRevision: Long,
     ): TunerTableProjection {
-        val revision = applyCellStep(row, col, step.nativeCode, expectedRevision)
+        val revision = applyCellStepNative(row, col, step.nativeCode, expectedRevision)
         check(revision >= 0L) { "Offline Tuner edit was rejected or stale." }
         return readProjection().also { projection ->
             check(projection.draftRevision == revision) {
@@ -46,7 +46,7 @@ object OfflineTunerFixture {
     }
 
     fun undoProjection(): TunerTableProjection {
-        val revision = undo()
+        val revision = undoNative()
         check(revision >= 0L) { "Offline Tuner undo is unavailable." }
         return readProjection().also { projection ->
             check(projection.draftRevision == revision)
@@ -54,7 +54,7 @@ object OfflineTunerFixture {
     }
 
     fun redoProjection(): TunerTableProjection {
-        val revision = redo()
+        val revision = redoNative()
         check(revision >= 0L) { "Offline Tuner redo is unavailable." }
         return readProjection().also { projection ->
             check(projection.draftRevision == revision)
@@ -63,13 +63,13 @@ object OfflineTunerFixture {
 
     private external fun projectionSize(): Int
     private external fun fillProjection(buffer: ByteBuffer): Int
-    private external fun previewCellStep(row: Int, col: Int, direction: Int): Double
-    private external fun applyCellStep(
+    private external fun previewCellStepNative(row: Int, col: Int, direction: Int): Double
+    private external fun applyCellStepNative(
         row: Int,
         col: Int,
         direction: Int,
         expectedRevision: Long,
     ): Long
-    private external fun undo(): Long
-    private external fun redo(): Long
+    private external fun undoNative(): Long
+    private external fun redoNative(): Long
 }
