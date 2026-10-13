@@ -12,11 +12,11 @@ pub fn preview_smoothing(
     rectangle: TableRectangle,
     parameters: TableSmoothingParameters,
 ) -> Result<TablePreview, TuneError> {
-    if !parameters.strength_percent.is_finite()
-        || parameters.strength_percent <= 0.0
-        || parameters.strength_percent > 100.0
-    {
-        return Err(TuneError::InvalidTransformParameter);
+    if !parameters.strength_percent.is_finite() {
+        return Err(TuneError::NonFiniteValue);
+    }
+    if parameters.strength_percent <= 0.0 || parameters.strength_percent > 100.0 {
+        return Err(TuneError::ValueOutOfRange);
     }
 
     let projection = draft.table_projection(table_id)?;
@@ -266,7 +266,7 @@ mod tests {
     #[test]
     fn smoothing_rejects_invalid_strength() {
         let draft = smoothing_draft(vec![true; 9]);
-        for strength_percent in [0.0, -1.0, 100.25, f64::NAN] {
+        for strength_percent in [0.0, -1.0, 100.25] {
             assert_eq!(
                 preview_smoothing(
                     &draft,
@@ -274,8 +274,19 @@ mod tests {
                     single(1, 1),
                     TableSmoothingParameters { strength_percent },
                 ),
-                Err(TuneError::InvalidTransformParameter)
+                Err(TuneError::ValueOutOfRange)
             );
         }
+        assert_eq!(
+            preview_smoothing(
+                &draft,
+                13,
+                single(1, 1),
+                TableSmoothingParameters {
+                    strength_percent: f64::NAN,
+                },
+            ),
+            Err(TuneError::NonFiniteValue)
+        );
     }
 }
