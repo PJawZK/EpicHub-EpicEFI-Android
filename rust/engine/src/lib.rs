@@ -2,6 +2,7 @@ mod channel_store;
 mod diagnostics;
 mod engine;
 mod jni_api;
+mod jni_smoothing;
 mod runtime_snapshot;
 mod table_projection_abi;
 pub mod tuning;
