@@ -1,3 +1,4 @@
+use crate::table_projection_abi;
 use crate::tuning::{TableDescriptor, TableSnapshot, TuneDraft, TuneSnapshot, TuneSnapshotOrigin};
 
 pub const OFFLINE_FIXTURE_PROFILE_GENERATION: u64 = 42;
@@ -41,9 +42,22 @@ pub fn offline_fixture_draft() -> TuneDraft {
     TuneDraft::from_snapshot(&snapshot)
 }
 
+pub fn offline_fixture_projection_bytes() -> Vec<u8> {
+    let draft = offline_fixture_draft();
+    let projection = draft
+        .table_projection(OFFLINE_FIXTURE_PRIMARY_TABLE_ID)
+        .expect("built-in offline fixture table must exist");
+    table_projection_abi::encode(draft.profile_generation(), draft.origin(), &projection)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::table_projection_abi::TABLE_PROJECTION_ABI_VERSION;
+
+    fn read_u32(bytes: &[u8], offset: usize) -> u32 {
+        u32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap())
+    }
 
     #[test]
     fn offline_fixture_is_explicit_and_profile_bound() {
@@ -58,5 +72,12 @@ mod tests {
         assert_eq!(projection.descriptor.cols, 5);
         assert_eq!(projection.values.len(), 20);
         assert!(!projection.editable[19]);
+    }
+
+    #[test]
+    fn fixture_projection_adapter_uses_the_same_versioned_abi() {
+        let bytes = offline_fixture_projection_bytes();
+        assert_eq!(read_u32(&bytes, 0), TABLE_PROJECTION_ABI_VERSION);
+        assert_eq!(read_u32(&bytes, 28), OFFLINE_FIXTURE_PRIMARY_TABLE_ID);
     }
 }
