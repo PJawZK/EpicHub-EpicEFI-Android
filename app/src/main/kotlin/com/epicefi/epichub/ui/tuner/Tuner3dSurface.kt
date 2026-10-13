@@ -1,6 +1,7 @@
 package com.epicefi.epichub.ui.tuner
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -20,9 +21,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import com.epicefi.epichub.engine.TunerBrushPullMode
 import com.epicefi.epichub.engine.TunerTableProjection
 
 private val TUNER_3D_HIT_RADIUS = 24.dp
+private val TUNER_3D_PULL_PIXELS_PER_STEP = 18.dp
 
 @Composable
 fun Tuner3dSurface(
@@ -32,6 +35,15 @@ fun Tuner3dSurface(
     interactionMode: Tuner3dInteractionMode,
     onCellSelected: (row: Int, col: Int) -> Unit,
     modifier: Modifier = Modifier,
+    directEditGestureEnabled: Boolean = false,
+    brushPullMode: TunerBrushPullMode = TunerBrushPullMode.BRUSH_STROKE,
+    brushParameters: TunerBrushStrokeParameters = TunerBrushStrokeParameters(
+        delta = "5",
+        radiusCells = "1",
+        strengthPercent = "100",
+        falloffExponent = "1",
+    ),
+    onCommand: (TunerCommand) -> Boolean = { false },
 ) {
     val lineColor = MaterialTheme.colorScheme.primary
     val protectedColor = MaterialTheme.colorScheme.error
@@ -39,11 +51,31 @@ fun Tuner3dSurface(
     val previewColor = MaterialTheme.colorScheme.tertiary
     val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
     val hitRadiusPx = with(LocalDensity.current) { TUNER_3D_HIT_RADIUS.toPx() }.toDouble()
+    val pullPixelsPerStep = with(LocalDensity.current) { TUNER_3D_PULL_PIXELS_PER_STEP.toPx() }.toDouble()
     val displayValues = previewProjection?.values ?: projection.values
     var camera by remember { mutableStateOf(Tuner3dCameraState.DEFAULT) }
 
-    val pointerModifier = when (interactionMode) {
-        Tuner3dInteractionMode.SELECT_EDIT -> Modifier.pointerInput(
+    fun projectedCells(width: Double, height: Double) = Tuner3dGeometry.projectCells(
+        rows = projection.rows,
+        cols = projection.cols,
+        values = displayValues,
+        width = width,
+        height = height,
+        camera = camera,
+    )
+
+    val pointerModifier = when {
+        interactionMode == Tuner3dInteractionMode.INSPECT -> Modifier.pointerInput(projection.tableId) {
+            detectTransformGestures { _, pan, zoom, _ ->
+                camera = camera.applyGesture(
+                    panX = pan.x.toDouble(),
+                    panY = pan.y.toDouble(),
+                    zoomFactor = zoom.toDouble(),
+                )
+            }
+        }
+
+        !directEditGestureEnabled -> Modifier.pointerInput(
             projection.tableId,
             projection.draftRevision,
             previewProjection?.draftRevision,
@@ -52,16 +84,8 @@ fun Tuner3dSurface(
             hitRadiusPx,
         ) {
             detectTapGestures { tap ->
-                val cells = Tuner3dGeometry.projectCells(
-                    rows = projection.rows,
-                    cols = projection.cols,
-                    values = displayValues,
-                    width = size.width.toDouble(),
-                    height = size.height.toDouble(),
-                    camera = camera,
-                )
                 Tuner3dGeometry.hitTest(
-                    cells = cells,
+                    cells = projectedCells(size.width.toDouble(), size.height.toDouble()),
                     x = tap.x.toDouble(),
                     y = tap.y.toDouble(),
                     maxDistance = hitRadiusPx,
@@ -71,13 +95,116 @@ fun Tuner3dSurface(
             }
         }
 
-        Tuner3dInteractionMode.INSPECT -> Modifier.pointerInput(projection.tableId) {
-            detectTransformGestures { _, pan, zoom, _ ->
-                camera = camera.applyGesture(
-                    panX = pan.x.toDouble(),
-                    panY = pan.y.toDouble(),
-                    zoomFactor = zoom.toDouble(),
+        brushPullMode == TunerBrushPullMode.BRUSH_STROKE -> Modifier.pointerInput(
+            projection.tableId,
+            projection.draftRevision,
+            displayValues.contentHashCode(),
+            camera,
+            hitRadiusPx,
+            brushParameters,
+        ) {
+            var strokeStarted = false
+            detectDragGestures(
+                onDragStart = { start ->
+                    val hit = Tuner3dGeometry.hitTest(
+                        cells = projectedCells(size.width.toDouble(), size.height.toDouble()),
+                        x = start.x.toDouble(),
+                        y = start.y.toDouble(),
+                        maxDistance = hitRadiusPx,
+                    )
+                    if (hit != null) {
+                        strokeStarted = onCommand(
+                            TunerCommand.BeginBrushStroke(
+                                row = hit.row,
+                                col = hit.col,
+                                parameters = brushParameters,
+                            ),
+                        )
+                    }
+                },
+                onDragEnd = {
+                    if (strokeStarted) onCommand(TunerCommand.EndBrushStroke)
+                    strokeStarted = false
+                },
+                onDragCancel = {
+                    if (strokeStarted) onCommand(TunerCommand.CancelBrushStroke)
+                    strokeStarted = false
+                },
+            ) { change, _ ->
+                if (strokeStarted) {
+                    Tuner3dGeometry.hitTest(
+                        cells = projectedCells(size.width.toDouble(), size.height.toDouble()),
+                        x = change.position.x.toDouble(),
+                        y = change.position.y.toDouble(),
+                        maxDistance = hitRadiusPx,
+                    )?.let { hit ->
+                        onCommand(TunerCommand.ContinueBrushStroke(row = hit.row, col = hit.col))
+                    }
+                    change.consume()
+                }
+            }
+        }
+
+        else -> Modifier.pointerInput(
+            projection.tableId,
+            projection.draftRevision,
+            displayValues.contentHashCode(),
+            camera,
+            hitRadiusPx,
+            pullPixelsPerStep,
+            projection.editIncrement,
+            brushParameters.radiusCells,
+            brushParameters.strengthPercent,
+            brushParameters.falloffExponent,
+        ) {
+            var pullCenter: TunerCellPosition? = null
+            var pullStartY = 0.0
+            var lastDelta: Double? = null
+            detectDragGestures(
+                onDragStart = { start ->
+                    pullCenter = Tuner3dGeometry.hitTest(
+                        cells = projectedCells(size.width.toDouble(), size.height.toDouble()),
+                        x = start.x.toDouble(),
+                        y = start.y.toDouble(),
+                        maxDistance = hitRadiusPx,
+                    )
+                    pullCenter?.let { center ->
+                        pullStartY = start.y.toDouble()
+                        lastDelta = null
+                        onCellSelected(center.row, center.col)
+                    }
+                },
+                onDragEnd = {
+                    pullCenter = null
+                    lastDelta = null
+                },
+                onDragCancel = {
+                    if (pullCenter != null) onCommand(TunerCommand.CancelPreview)
+                    pullCenter = null
+                    lastDelta = null
+                },
+            ) { change, _ ->
+                val center = pullCenter ?: return@detectDragGestures
+                val delta = Tuner3dDirectEdit.pullDeltaForDrag(
+                    startY = pullStartY,
+                    currentY = change.position.y.toDouble(),
+                    pixelsPerStep = pullPixelsPerStep,
+                    editIncrement = projection.editIncrement,
                 )
+                if (delta != null && delta != lastDelta) {
+                    lastDelta = delta
+                    onCellSelected(center.row, center.col)
+                    onCommand(
+                        TunerCommand.PreviewBrushPull(
+                            mode = TunerBrushPullMode.PULL_DEFORM,
+                            delta = delta.toString(),
+                            radiusCells = brushParameters.radiusCells,
+                            strengthPercent = brushParameters.strengthPercent,
+                            falloffExponent = brushParameters.falloffExponent,
+                        ),
+                    )
+                }
+                change.consume()
             }
         }
     }
@@ -92,14 +219,7 @@ fun Tuner3dSurface(
                 .height(300.dp)
                 .then(pointerModifier),
         ) {
-            val cells = Tuner3dGeometry.projectCells(
-                rows = projection.rows,
-                cols = projection.cols,
-                values = displayValues,
-                width = size.width.toDouble(),
-                height = size.height.toDouble(),
-                camera = camera,
-            )
+            val cells = projectedCells(size.width.toDouble(), size.height.toDouble())
             if (cells.size != projection.rows * projection.cols) return@Canvas
 
             fun point(row: Int, col: Int) = cells[row * projection.cols + col]
@@ -159,10 +279,18 @@ fun Tuner3dSurface(
         }
         Text(
             "Same table ${projection.tableId} · draft revision ${projection.draftRevision} · shared selection/preview · " +
-                if (interactionMode == Tuner3dInteractionMode.SELECT_EDIT) {
-                    "Select/Edit: taps resolve semantic cells; camera gestures disabled"
-                } else {
-                    "Inspect: drag orbits · pinch zooms · no tune commands"
+                when {
+                    interactionMode == Tuner3dInteractionMode.INSPECT ->
+                        "Inspect: drag orbits · pinch zooms · no tune commands"
+
+                    !directEditGestureEnabled ->
+                        "Select/Edit: taps resolve semantic cells; camera gestures disabled"
+
+                    brushPullMode == TunerBrushPullMode.BRUSH_STROKE ->
+                        "Select/Edit + Brush gesture: drag across projected vertices; release keeps one Rust preview"
+
+                    else ->
+                        "Select/Edit + Pull gesture: drag a vertex up/down in edit-increment steps; release keeps one Rust preview"
                 },
             color = labelColor,
             style = MaterialTheme.typography.bodySmall,
