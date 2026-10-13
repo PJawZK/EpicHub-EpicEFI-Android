@@ -6,13 +6,14 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isAltPressed
 import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isShiftPressed
-import androidx.compose.ui.input.key.nativeKeyEvent
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.nativeKeyCode
 import androidx.compose.ui.input.key.type
 
 fun KeyEvent.toTunerCommand(): TunerCommand? {
     if (type != KeyEventType.KeyDown) return null
 
-    val keyCode = nativeKeyEvent.keyCode
+    val keyCode = key.nativeKeyCode
     val shortcutKey = when {
         keyCode == AndroidKeyEvent.KEYCODE_DPAD_UP -> TunerShortcutKey.UP
         keyCode == AndroidKeyEvent.KEYCODE_DPAD_DOWN -> TunerShortcutKey.DOWN
