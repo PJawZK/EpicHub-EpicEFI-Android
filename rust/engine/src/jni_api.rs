@@ -205,20 +205,13 @@ pub extern "system" fn Java_com_epicefi_epichub_engine_OfflineTunerFixture_fillR
     buffer: JByteBuffer,
 ) -> jint {
     ffi_guard(BUFFER_STATUS_PANIC, || {
-        let Some((anchor_row, anchor_col, focus_row, focus_col)) = rectangle_args(
-            anchor_row,
-            anchor_col,
-            focus_row,
-            focus_col,
-        ) else {
+        let Some((anchor_row, anchor_col, focus_row, focus_col)) =
+            rectangle_args(anchor_row, anchor_col, focus_row, focus_col)
+        else {
             return BUFFER_STATUS_EDIT_REJECTED;
         };
         let bytes = match preview_offline_fixture_rectangle_step_bytes(
-            anchor_row,
-            anchor_col,
-            focus_row,
-            focus_col,
-            direction,
+            anchor_row, anchor_col, focus_row, focus_col, direction,
         ) {
             Ok(bytes) => bytes,
             Err(_) => return BUFFER_STATUS_EDIT_REJECTED,
@@ -239,12 +232,9 @@ pub extern "system" fn Java_com_epicefi_epichub_engine_OfflineTunerFixture_apply
     expected_revision: jlong,
 ) -> jlong {
     ffi_guard(EDIT_STATUS_REJECTED, || {
-        let Some((anchor_row, anchor_col, focus_row, focus_col)) = rectangle_args(
-            anchor_row,
-            anchor_col,
-            focus_row,
-            focus_col,
-        ) else {
+        let Some((anchor_row, anchor_col, focus_row, focus_col)) =
+            rectangle_args(anchor_row, anchor_col, focus_row, focus_col)
+        else {
             return EDIT_STATUS_REJECTED;
         };
         let Ok(expected_revision) = u64::try_from(expected_revision) else {
