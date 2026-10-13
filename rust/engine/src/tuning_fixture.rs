@@ -48,7 +48,7 @@ pub fn offline_fixture_draft() -> TuneDraft {
     TuneDraft::from_snapshot(&snapshot)
 }
 
-fn with_offline_fixture<T>(operation: impl FnOnce(&mut TuneDraft) -> T) -> T {
+pub(crate) fn with_offline_fixture<T>(operation: impl FnOnce(&mut TuneDraft) -> T) -> T {
     let mut guard = OFFLINE_FIXTURE_DRAFT
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -226,7 +226,7 @@ pub fn redo_offline_fixture() -> Result<u64, TuneError> {
     with_offline_fixture(TuneDraft::redo)
 }
 
-fn encode_primary_projection(
+pub(crate) fn encode_primary_projection(
     draft: &TuneDraft,
     preview_changes: Option<&[crate::tuning::CellChange]>,
 ) -> Vec<u8> {
