@@ -55,14 +55,15 @@ fun Tuner3dSurface(
     val displayValues = previewProjection?.values ?: projection.values
     var camera by remember { mutableStateOf(Tuner3dCameraState.DEFAULT) }
 
-    fun projectedCells(width: Double, height: Double) = Tuner3dGeometry.projectCells(
-        rows = projection.rows,
-        cols = projection.cols,
-        values = displayValues,
-        width = width,
-        height = height,
-        camera = camera,
-    )
+    fun projectedCells(values: DoubleArray, width: Double, height: Double) =
+        Tuner3dGeometry.projectCells(
+            rows = projection.rows,
+            cols = projection.cols,
+            values = values,
+            width = width,
+            height = height,
+            camera = camera,
+        )
 
     val pointerModifier = when {
         interactionMode == Tuner3dInteractionMode.INSPECT -> Modifier.pointerInput(projection.tableId) {
@@ -85,7 +86,7 @@ fun Tuner3dSurface(
         ) {
             detectTapGestures { tap ->
                 Tuner3dGeometry.hitTest(
-                    cells = projectedCells(size.width.toDouble(), size.height.toDouble()),
+                    cells = projectedCells(displayValues, size.width.toDouble(), size.height.toDouble()),
                     x = tap.x.toDouble(),
                     y = tap.y.toDouble(),
                     maxDistance = hitRadiusPx,
@@ -98,7 +99,6 @@ fun Tuner3dSurface(
         brushPullMode == TunerBrushPullMode.BRUSH_STROKE -> Modifier.pointerInput(
             projection.tableId,
             projection.draftRevision,
-            displayValues.contentHashCode(),
             camera,
             hitRadiusPx,
             brushParameters,
@@ -107,7 +107,11 @@ fun Tuner3dSurface(
             detectDragGestures(
                 onDragStart = { start ->
                     val hit = Tuner3dGeometry.hitTest(
-                        cells = projectedCells(size.width.toDouble(), size.height.toDouble()),
+                        cells = projectedCells(
+                            projection.values,
+                            size.width.toDouble(),
+                            size.height.toDouble(),
+                        ),
                         x = start.x.toDouble(),
                         y = start.y.toDouble(),
                         maxDistance = hitRadiusPx,
@@ -133,7 +137,11 @@ fun Tuner3dSurface(
             ) { change, _ ->
                 if (strokeStarted) {
                     Tuner3dGeometry.hitTest(
-                        cells = projectedCells(size.width.toDouble(), size.height.toDouble()),
+                        cells = projectedCells(
+                            projection.values,
+                            size.width.toDouble(),
+                            size.height.toDouble(),
+                        ),
                         x = change.position.x.toDouble(),
                         y = change.position.y.toDouble(),
                         maxDistance = hitRadiusPx,
@@ -148,7 +156,6 @@ fun Tuner3dSurface(
         else -> Modifier.pointerInput(
             projection.tableId,
             projection.draftRevision,
-            displayValues.contentHashCode(),
             camera,
             hitRadiusPx,
             pullPixelsPerStep,
@@ -163,7 +170,11 @@ fun Tuner3dSurface(
             detectDragGestures(
                 onDragStart = { start ->
                     pullCenter = Tuner3dGeometry.hitTest(
-                        cells = projectedCells(size.width.toDouble(), size.height.toDouble()),
+                        cells = projectedCells(
+                            projection.values,
+                            size.width.toDouble(),
+                            size.height.toDouble(),
+                        ),
                         x = start.x.toDouble(),
                         y = start.y.toDouble(),
                         maxDistance = hitRadiusPx,
@@ -219,7 +230,7 @@ fun Tuner3dSurface(
                 .height(300.dp)
                 .then(pointerModifier),
         ) {
-            val cells = projectedCells(size.width.toDouble(), size.height.toDouble())
+            val cells = projectedCells(displayValues, size.width.toDouble(), size.height.toDouble())
             if (cells.size != projection.rows * projection.cols) return@Canvas
 
             fun point(row: Int, col: Int) = cells[row * projection.cols + col]
@@ -287,10 +298,10 @@ fun Tuner3dSurface(
                         "Select/Edit: taps resolve semantic cells; camera gestures disabled"
 
                     brushPullMode == TunerBrushPullMode.BRUSH_STROKE ->
-                        "Select/Edit + Brush gesture: drag across projected vertices; release keeps one Rust preview"
+                        "Select/Edit + Brush gesture: drag across committed projected vertices; release keeps one Rust preview"
 
                     else ->
-                        "Select/Edit + Pull gesture: drag a vertex up/down in edit-increment steps; release keeps one Rust preview"
+                        "Select/Edit + Pull gesture: drag a committed vertex up/down in edit-increment steps; release keeps one Rust preview"
                 },
             color = labelColor,
             style = MaterialTheme.typography.bodySmall,
