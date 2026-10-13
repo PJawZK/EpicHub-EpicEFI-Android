@@ -78,6 +78,8 @@ private sealed interface PendingOperation {
     ) : PendingOperation
 
     data class Interpolation(val mode: TunerInterpolationMode) : PendingOperation
+
+    data class Smoothing(val strengthPercent: String) : PendingOperation
 }
 
 private data class PendingPreview(
@@ -98,6 +100,7 @@ fun TunerScreen(modifier: Modifier = Modifier) {
     var pendingPreview by remember { mutableStateOf<PendingPreview?>(null) }
     var numericOperation by remember { mutableStateOf(TunerNumericOperation.SET) }
     var numericOperand by remember { mutableStateOf("") }
+    var smoothingStrength by remember { mutableStateOf("50") }
 
     fun selectCell(row: Int, col: Int) {
         val cell = CellSelection(row, col)
@@ -191,6 +194,30 @@ fun TunerScreen(modifier: Modifier = Modifier) {
         }
     }
 
+    fun previewSmoothing() {
+        val selected = selection ?: return
+        val current = projection ?: return
+        runCatching {
+            OfflineTunerFixture.previewSmoothing(
+                rectangle = selected.toNative(),
+                strengthPercent = smoothingStrength,
+            ).also { preview ->
+                validatePreview(current, preview)
+            }
+        }.onSuccess { previewProjection ->
+            pendingPreview = PendingPreview(
+                selection = selected,
+                operation = PendingOperation.Smoothing(smoothingStrength),
+                projection = previewProjection,
+                baseRevision = current.draftRevision,
+            )
+            errorMessage = null
+        }.onFailure { error ->
+            pendingPreview = null
+            errorMessage = error.message ?: "Smoothing preview rejected."
+        }
+    }
+
     fun applyPreview() {
         val preview = pendingPreview ?: return
         runCatching {
@@ -211,6 +238,12 @@ fun TunerScreen(modifier: Modifier = Modifier) {
                 is PendingOperation.Interpolation -> OfflineTunerFixture.applyInterpolation(
                     rectangle = preview.selection.toNative(),
                     mode = operation.mode,
+                    expectedRevision = preview.baseRevision,
+                )
+
+                is PendingOperation.Smoothing -> OfflineTunerFixture.applySmoothing(
+                    rectangle = preview.selection.toNative(),
+                    strengthPercent = operation.strengthPercent,
                     expectedRevision = preview.baseRevision,
                 )
             }
@@ -428,6 +461,32 @@ fun TunerScreen(modifier: Modifier = Modifier) {
                         }
                     }
 
+                    Text("Smoothing", style = MaterialTheme.typography.labelLarge)
+                    Text(
+                        "3×3 weighted smoothing uses the committed table as one immutable source surface. Neighbor samples may extend one cell outside the selection; table edges are renormalized.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    OutlinedTextField(
+                        value = smoothingStrength,
+                        onValueChange = {
+                            smoothingStrength = it
+                            pendingPreview = null
+                            errorMessage = null
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        label = { Text("Smoothing strength %") },
+                        supportingText = {
+                            Text("Rust accepts >0 through 100. The result is blended before table-value quantization.")
+                        },
+                    )
+                    OutlinedButton(
+                        enabled = smoothingStrength.isNotBlank(),
+                        onClick = ::previewSmoothing,
+                    ) {
+                        Text("Preview smoothing")
+                    }
+
                     OutlinedButton(
                         onClick = {
                             selection = null
@@ -641,6 +700,8 @@ private fun operationLabel(operation: PendingOperation): String = when (operatio
         "${numericOperationLabel(operation.operation)} ${operation.operand.trim()}"
 
     is PendingOperation.Interpolation -> interpolationModeLabel(operation.mode)
+
+    is PendingOperation.Smoothing -> "Smooth ${operation.strengthPercent.trim()}%"
 }
 
 private fun numericOperationLabel(operation: TunerNumericOperation): String = when (operation) {
