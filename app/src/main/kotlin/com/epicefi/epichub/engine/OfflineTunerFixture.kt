@@ -165,6 +165,46 @@ object OfflineTunerFixture {
         }
     }
 
+    fun previewSmoothing(
+        rectangle: TunerRectangle,
+        strengthPercent: String,
+    ): TunerTableProjection {
+        val buffer = projectionBuffer()
+        val status = fillSmoothingPreviewNative(
+            rectangle.anchorRow,
+            rectangle.anchorCol,
+            rectangle.focusRow,
+            rectangle.focusCol,
+            strengthPercent,
+            buffer,
+        )
+        check(status == NATIVE_BUFFER_STATUS_OK) {
+            "Offline Tuner smoothing preview was rejected with status $status."
+        }
+        return TunerTableProjectionDecoder.decode(buffer)
+    }
+
+    fun applySmoothing(
+        rectangle: TunerRectangle,
+        strengthPercent: String,
+        expectedRevision: Long,
+    ): TunerTableProjection {
+        val revision = applySmoothingNative(
+            rectangle.anchorRow,
+            rectangle.anchorCol,
+            rectangle.focusRow,
+            rectangle.focusCol,
+            strengthPercent,
+            expectedRevision,
+        )
+        check(revision >= 0L) { "Offline Tuner smoothing was rejected or stale." }
+        return readProjection().also { projection ->
+            check(projection.draftRevision == revision) {
+                "Offline Tuner projection revision did not match the applied smoothing."
+            }
+        }
+    }
+
     fun undoProjection(): TunerTableProjection {
         val revision = undoNative()
         check(revision >= 0L) { "Offline Tuner undo is unavailable." }
@@ -237,6 +277,22 @@ object OfflineTunerFixture {
         focusRow: Int,
         focusCol: Int,
         modeCode: Int,
+        expectedRevision: Long,
+    ): Long
+    private external fun fillSmoothingPreviewNative(
+        anchorRow: Int,
+        anchorCol: Int,
+        focusRow: Int,
+        focusCol: Int,
+        strengthPercent: String,
+        buffer: ByteBuffer,
+    ): Int
+    private external fun applySmoothingNative(
+        anchorRow: Int,
+        anchorCol: Int,
+        focusRow: Int,
+        focusCol: Int,
+        strengthPercent: String,
         expectedRevision: Long,
     ): Long
     private external fun undoNative(): Long
