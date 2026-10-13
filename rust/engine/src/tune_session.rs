@@ -50,12 +50,7 @@ impl TuneSession {
         direction: i32,
     ) -> Result<Vec<u8>, TuneError> {
         let command = rectangle_step_command(
-            table_id,
-            anchor_row,
-            anchor_col,
-            focus_row,
-            focus_col,
-            direction,
+            table_id, anchor_row, anchor_col, focus_row, focus_col, direction,
         )?;
         let preview = self.draft.preview(&command)?;
         self.encode_projection(table_id, Some(&preview.changes))
@@ -74,12 +69,7 @@ impl TuneSession {
     ) -> Result<u64, TuneError> {
         self.require_revision(expected_revision)?;
         self.draft.apply(&rectangle_step_command(
-            table_id,
-            anchor_row,
-            anchor_col,
-            focus_row,
-            focus_col,
-            direction,
+            table_id, anchor_row, anchor_col, focus_row, focus_col, direction,
         )?)
     }
 
@@ -498,7 +488,10 @@ mod tests {
         let second = session();
         let table_id = OFFLINE_FIXTURE_PRIMARY_TABLE_ID;
 
-        assert_eq!(first.profile_generation(), first.baseline().profile_generation);
+        assert_eq!(
+            first.profile_generation(),
+            first.baseline().profile_generation
+        );
         assert_eq!(first.revision(), 0);
         assert_eq!(second.revision(), 0);
 
@@ -531,6 +524,9 @@ mod tests {
                 .projection_bytes(OFFLINE_FIXTURE_PRIMARY_TABLE_ID)
                 .is_ok()
         );
-        assert_eq!(session.projection_bytes(u32::MAX), Err(TuneError::UnknownTable));
+        assert_eq!(
+            session.projection_bytes(u32::MAX),
+            Err(TuneError::UnknownTable)
+        );
     }
 }
