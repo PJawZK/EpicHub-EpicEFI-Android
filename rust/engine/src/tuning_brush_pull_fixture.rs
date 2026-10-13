@@ -6,6 +6,7 @@ use crate::tuning_fixture::{
     OFFLINE_FIXTURE_PRIMARY_TABLE_ID, encode_primary_projection, with_offline_fixture,
 };
 
+#[allow(clippy::too_many_arguments)]
 pub fn preview_offline_fixture_brush_pull_bytes(
     anchor_row: usize,
     anchor_col: usize,
