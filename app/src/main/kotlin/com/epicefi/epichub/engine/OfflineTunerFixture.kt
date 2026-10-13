@@ -32,6 +32,11 @@ data class TunerRectangle(
     val focusCol: Int,
 )
 
+data class TunerBrushPathPoint(
+    val row: Int,
+    val col: Int,
+)
+
 object OfflineTunerFixture {
     init {
         System.loadLibrary("epichub_engine")
@@ -266,6 +271,52 @@ object OfflineTunerFixture {
         }
     }
 
+    fun previewBrushPath(
+        path: List<TunerBrushPathPoint>,
+        delta: String,
+        radiusCells: String,
+        strengthPercent: String,
+        falloffExponent: String,
+    ): TunerTableProjection {
+        val buffer = projectionBuffer()
+        val status = fillBrushPathPreviewNative(
+            encodeBrushPath(path),
+            delta,
+            radiusCells,
+            strengthPercent,
+            falloffExponent,
+            buffer,
+        )
+        check(status == NATIVE_BUFFER_STATUS_OK) {
+            "Offline Tuner Brush path preview was rejected with status $status."
+        }
+        return TunerTableProjectionDecoder.decode(buffer)
+    }
+
+    fun applyBrushPath(
+        path: List<TunerBrushPathPoint>,
+        delta: String,
+        radiusCells: String,
+        strengthPercent: String,
+        falloffExponent: String,
+        expectedRevision: Long,
+    ): TunerTableProjection {
+        val revision = applyBrushPathNative(
+            encodeBrushPath(path),
+            delta,
+            radiusCells,
+            strengthPercent,
+            falloffExponent,
+            expectedRevision,
+        )
+        check(revision >= 0L) { "Offline Tuner Brush path edit was rejected or stale." }
+        return readProjection().also { projection ->
+            check(projection.draftRevision == revision) {
+                "Offline Tuner projection revision did not match the applied Brush path edit."
+            }
+        }
+    }
+
     fun undoProjection(): TunerTableProjection {
         val revision = undoNative()
         check(revision >= 0L) { "Offline Tuner undo is unavailable." }
@@ -279,6 +330,16 @@ object OfflineTunerFixture {
         check(revision >= 0L) { "Offline Tuner redo is unavailable." }
         return readProjection().also { projection ->
             check(projection.draftRevision == revision)
+        }
+    }
+
+    private fun encodeBrushPath(path: List<TunerBrushPathPoint>): IntArray {
+        require(path.isNotEmpty()) { "Brush path must contain at least one cell." }
+        return IntArray(path.size * 2).also { packed ->
+            path.forEachIndexed { index, point ->
+                packed[index * 2] = point.row
+                packed[index * 2 + 1] = point.col
+            }
         }
     }
 
@@ -374,6 +435,22 @@ object OfflineTunerFixture {
         focusRow: Int,
         focusCol: Int,
         modeCode: Int,
+        delta: String,
+        radiusCells: String,
+        strengthPercent: String,
+        falloffExponent: String,
+        expectedRevision: Long,
+    ): Long
+    private external fun fillBrushPathPreviewNative(
+        path: IntArray,
+        delta: String,
+        radiusCells: String,
+        strengthPercent: String,
+        falloffExponent: String,
+        buffer: ByteBuffer,
+    ): Int
+    private external fun applyBrushPathNative(
+        path: IntArray,
         delta: String,
         radiusCells: String,
         strengthPercent: String,
