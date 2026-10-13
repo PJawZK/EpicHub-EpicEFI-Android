@@ -12,24 +12,22 @@ import androidx.compose.ui.input.key.type
 fun KeyEvent.toTunerCommand(): TunerCommand? {
     if (type != KeyEventType.KeyDown) return null
 
-    val shortcutKey = when (nativeKeyEvent.keyCode) {
-        AndroidKeyEvent.KEYCODE_DPAD_UP -> TunerShortcutKey.UP
-        AndroidKeyEvent.KEYCODE_DPAD_DOWN -> TunerShortcutKey.DOWN
-        AndroidKeyEvent.KEYCODE_DPAD_LEFT -> TunerShortcutKey.LEFT
-        AndroidKeyEvent.KEYCODE_DPAD_RIGHT -> TunerShortcutKey.RIGHT
-        AndroidKeyEvent.KEYCODE_PLUS,
-        AndroidKeyEvent.KEYCODE_EQUALS,
-        AndroidKeyEvent.KEYCODE_NUMPAD_ADD,
-        -> TunerShortcutKey.PLUS
-        AndroidKeyEvent.KEYCODE_MINUS,
-        AndroidKeyEvent.KEYCODE_NUMPAD_SUBTRACT,
-        -> TunerShortcutKey.MINUS
-        AndroidKeyEvent.KEYCODE_ENTER,
-        AndroidKeyEvent.KEYCODE_NUMPAD_ENTER,
-        -> TunerShortcutKey.ENTER
-        AndroidKeyEvent.KEYCODE_ESCAPE -> TunerShortcutKey.ESCAPE
-        AndroidKeyEvent.KEYCODE_Z -> TunerShortcutKey.Z
-        AndroidKeyEvent.KEYCODE_Y -> TunerShortcutKey.Y
+    val keyCode = nativeKeyEvent.keyCode
+    val shortcutKey = when {
+        keyCode == AndroidKeyEvent.KEYCODE_DPAD_UP -> TunerShortcutKey.UP
+        keyCode == AndroidKeyEvent.KEYCODE_DPAD_DOWN -> TunerShortcutKey.DOWN
+        keyCode == AndroidKeyEvent.KEYCODE_DPAD_LEFT -> TunerShortcutKey.LEFT
+        keyCode == AndroidKeyEvent.KEYCODE_DPAD_RIGHT -> TunerShortcutKey.RIGHT
+        keyCode == AndroidKeyEvent.KEYCODE_PLUS -> TunerShortcutKey.PLUS
+        keyCode == AndroidKeyEvent.KEYCODE_NUMPAD_ADD -> TunerShortcutKey.PLUS
+        keyCode == AndroidKeyEvent.KEYCODE_EQUALS && isShiftPressed -> TunerShortcutKey.PLUS
+        keyCode == AndroidKeyEvent.KEYCODE_MINUS -> TunerShortcutKey.MINUS
+        keyCode == AndroidKeyEvent.KEYCODE_NUMPAD_SUBTRACT -> TunerShortcutKey.MINUS
+        keyCode == AndroidKeyEvent.KEYCODE_ENTER -> TunerShortcutKey.ENTER
+        keyCode == AndroidKeyEvent.KEYCODE_NUMPAD_ENTER -> TunerShortcutKey.ENTER
+        keyCode == AndroidKeyEvent.KEYCODE_ESCAPE -> TunerShortcutKey.ESCAPE
+        keyCode == AndroidKeyEvent.KEYCODE_Z -> TunerShortcutKey.Z
+        keyCode == AndroidKeyEvent.KEYCODE_Y -> TunerShortcutKey.Y
         else -> return null
     }
 
