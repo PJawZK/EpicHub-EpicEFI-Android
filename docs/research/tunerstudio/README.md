@@ -57,7 +57,7 @@ High-value subsystems are investigated progressively rather than by dumping a ge
 Current order:
 
 1. project/INI authority, ECU identity, connection/session, reconnect/recovery;
-2. tune read/write state, difference handling, burn/persistence safeguards;
+2. tune read/write state, difference handling, Burn/persistence safeguards;
 3. table/curve/3D editing and keyboard/mouse workflows;
 4. runtime dashboards, channel subscription, calculated channels, and layout persistence;
 5. logging and recorded-log behavior;
@@ -65,14 +65,45 @@ Current order:
 7. project migration/compatibility and firmware upgrades;
 8. large-project/table/log performance and cache behavior.
 
-## Current status
+## Completed research slices
 
-The first subsystem is documented in:
+### 1. Connection / project / INI / session authority
 
-- `CONNECTION_PROJECT_INI_SESSION.md`
+`CONNECTION_PROJECT_INI_SESSION.md`
 
-A running implementation-independent action list lives in:
+Covers transport candidate vs verified ECU identity, project-local profile authority, signature mismatch handling, offline mode, tune reconciliation, reconnect/failure implications, and diagnostic requirements.
 
-- `EPICHUB_BACKLOG.md`
+### 2. Tune write / Burn / persistence safety
+
+`TUNE_WRITE_BURN_SAFETY.md`
+
+Covers local working tune vs ECU RAM/live state vs ECU nonvolatile state, page/region-specific persistence capability, Burn ordering, restore/checkpoint behavior, batching, verification, and failure cases.
+
+### 3. Table / curve / 3D editing
+
+`TABLE_CURVE_3D_EDITING.md`
+
+Covers shared 2D/3D tune-object semantics, definition-driven table/curve capabilities, selected vs live-active position, weighted lookup overlays, keyboard-first editing, multi-cell transforms, interpolation, smoothing, re-binning, undo/redo, Apply/Cancel baselines, clipboard/import/export, 3D preference persistence, performance implications, and 50 regression-test ideas.
+
+## Running backlog
+
+`EPICHUB_BACKLOG.md`
+
+This is a review backlog rather than an implementation queue. Findings remain proposals until explicitly accepted into EpicHub architecture/runtime work.
+
+## Next research slice
+
+Proceed to **runtime dashboards, channel subscription, calculated channels, and dashboard/layout persistence**.
+
+High-value questions include:
+
+- what a gauge subscribes to and when subscription is released;
+- stale/invalid runtime behavior across disconnect/reconnect;
+- calculated-channel dependency and failure propagation;
+- dashboard layout persistence and compatibility;
+- runtime update throttling/caching;
+- per-gauge warning/limit behavior;
+- whether hidden dashboards stop consuming update work;
+- how user-defined dashboards survive profile/project upgrades.
 
 The research branch intentionally contains documentation/specification only until a reviewed finding is explicitly accepted for implementation.
