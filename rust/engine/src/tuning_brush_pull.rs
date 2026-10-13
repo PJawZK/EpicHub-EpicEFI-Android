@@ -4,6 +4,7 @@ use crate::tuning::{
 
 pub const MAX_BRUSH_RADIUS_CELLS: usize = 32;
 pub const MAX_FALLOFF_EXPONENT: f64 = 8.0;
+pub const MAX_BRUSH_PATH_POINTS: usize = 256;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BrushPullMode {
@@ -27,28 +28,64 @@ pub fn preview_brush_pull(
     mode: BrushPullMode,
     parameters: BrushPullParameters,
 ) -> Result<TablePreview, TuneError> {
+    match mode {
+        BrushPullMode::BrushStroke => {
+            preview_brush_path(draft, table_id, &[anchor, focus], parameters)
+        }
+        BrushPullMode::PullDeform => preview_pull(draft, table_id, focus, parameters),
+    }
+}
+
+pub fn preview_brush_path(
+    draft: &TuneDraft,
+    table_id: u32,
+    path: &[CellCoord],
+    parameters: BrushPullParameters,
+) -> Result<TablePreview, TuneError> {
     validate_parameters(parameters)?;
     let projection = draft.table_projection(table_id)?;
-    validate_cell(&projection, anchor)?;
-    validate_cell(&projection, focus)?;
-
-    if mode == BrushPullMode::PullDeform {
-        let focus_index = focus.row * projection.descriptor.cols + focus.col;
-        if !projection.editable[focus_index] {
-            return Err(TuneError::ProtectedCell);
-        }
+    let path = canonicalize_brush_path(path)?;
+    for point in &path {
+        validate_cell(&projection, *point)?;
     }
 
+    preview_weighted_cells(draft, table_id, parameters, |coord| {
+        point_to_path_distance(coord, &path)
+    })
+}
+
+fn preview_pull(
+    draft: &TuneDraft,
+    table_id: u32,
+    focus: CellCoord,
+    parameters: BrushPullParameters,
+) -> Result<TablePreview, TuneError> {
+    validate_parameters(parameters)?;
+    let projection = draft.table_projection(table_id)?;
+    validate_cell(&projection, focus)?;
+    let focus_index = focus.row * projection.descriptor.cols + focus.col;
+    if !projection.editable[focus_index] {
+        return Err(TuneError::ProtectedCell);
+    }
+
+    preview_weighted_cells(draft, table_id, parameters, |coord| {
+        point_distance(coord, focus)
+    })
+}
+
+fn preview_weighted_cells(
+    draft: &TuneDraft,
+    table_id: u32,
+    parameters: BrushPullParameters,
+    distance_for: impl Fn(CellCoord) -> f64,
+) -> Result<TablePreview, TuneError> {
+    let projection = draft.table_projection(table_id)?;
     let mut changes = Vec::new();
     for row in 0..projection.descriptor.rows {
         for col in 0..projection.descriptor.cols {
             let coord = CellCoord { row, col };
-            let distance = match mode {
-                BrushPullMode::BrushStroke => point_to_segment_distance(coord, anchor, focus),
-                BrushPullMode::PullDeform => point_distance(coord, focus),
-            };
             let Some(weight) = influence_weight(
-                distance,
+                distance_for(coord),
                 parameters.radius_cells,
                 parameters.falloff_exponent,
             ) else {
@@ -88,6 +125,52 @@ pub fn preview_brush_pull(
         base_revision: draft.revision(),
         changes,
     })
+}
+
+fn canonicalize_brush_path(path: &[CellCoord]) -> Result<Vec<CellCoord>, TuneError> {
+    if path.is_empty() {
+        return Err(TuneError::EmptySelection);
+    }
+
+    let mut canonical = Vec::with_capacity(path.len().min(MAX_BRUSH_PATH_POINTS));
+    for point in path.iter().copied() {
+        if canonical.last().copied() == Some(point) {
+            continue;
+        }
+        if canonical.len() >= 2 {
+            let a = canonical[canonical.len() - 2];
+            let b = canonical[canonical.len() - 1];
+            if same_forward_line(a, b, point) {
+                let last = canonical.len() - 1;
+                canonical[last] = point;
+                continue;
+            }
+        }
+        if canonical.len() >= MAX_BRUSH_PATH_POINTS {
+            return Err(TuneError::ValueOutOfRange);
+        }
+        canonical.push(point);
+    }
+    Ok(canonical)
+}
+
+fn same_forward_line(a: CellCoord, b: CellCoord, c: CellCoord) -> bool {
+    let ab_row = b.row as i64 - a.row as i64;
+    let ab_col = b.col as i64 - a.col as i64;
+    let bc_row = c.row as i64 - b.row as i64;
+    let bc_col = c.col as i64 - b.col as i64;
+    let cross = ab_row * bc_col - ab_col * bc_row;
+    let dot = ab_row * bc_row + ab_col * bc_col;
+    cross == 0 && dot >= 0
+}
+
+fn point_to_path_distance(point: CellCoord, path: &[CellCoord]) -> f64 {
+    if path.len() == 1 {
+        return point_distance(point, path[0]);
+    }
+    path.windows(2)
+        .map(|segment| point_to_segment_distance(point, segment[0], segment[1]))
+        .fold(f64::INFINITY, f64::min)
 }
 
 fn validate_parameters(parameters: BrushPullParameters) -> Result<(), TuneError> {
@@ -222,6 +305,80 @@ mod tests {
             assert_eq!(change.after, 60.0);
         }
         assert_eq!(draft.revision(), 0);
+    }
+
+    #[test]
+    fn polyline_brush_follows_turns_without_sampling_density_amplification() {
+        let draft = flat_draft();
+        let sparse = preview_brush_path(
+            &draft,
+            21,
+            &[
+                CellCoord { row: 0, col: 0 },
+                CellCoord { row: 0, col: 4 },
+                CellCoord { row: 4, col: 4 },
+            ],
+            parameters(10.0, 0),
+        )
+        .unwrap();
+        let dense = preview_brush_path(
+            &draft,
+            21,
+            &[
+                CellCoord { row: 0, col: 0 },
+                CellCoord { row: 0, col: 1 },
+                CellCoord { row: 0, col: 2 },
+                CellCoord { row: 0, col: 3 },
+                CellCoord { row: 0, col: 4 },
+                CellCoord { row: 1, col: 4 },
+                CellCoord { row: 2, col: 4 },
+                CellCoord { row: 3, col: 4 },
+                CellCoord { row: 4, col: 4 },
+            ],
+            parameters(10.0, 0),
+        )
+        .unwrap();
+
+        assert_eq!(sparse, dense);
+        assert_eq!(sparse.changes.len(), 9);
+        assert_eq!(draft.revision(), 0);
+    }
+
+    #[test]
+    fn brush_path_canonicalization_drops_duplicates_and_forward_collinear_points() {
+        assert_eq!(
+            canonicalize_brush_path(&[
+                CellCoord { row: 1, col: 0 },
+                CellCoord { row: 1, col: 0 },
+                CellCoord { row: 1, col: 1 },
+                CellCoord { row: 1, col: 2 },
+                CellCoord { row: 2, col: 2 },
+            ])
+            .unwrap(),
+            vec![
+                CellCoord { row: 1, col: 0 },
+                CellCoord { row: 1, col: 2 },
+                CellCoord { row: 2, col: 2 },
+            ]
+        );
+    }
+
+    #[test]
+    fn brush_path_rejects_empty_and_out_of_bounds_samples() {
+        let draft = flat_draft();
+        assert_eq!(
+            preview_brush_path(&draft, 21, &[], parameters(1.0, 0)),
+            Err(TuneError::EmptySelection)
+        );
+        assert_eq!(
+            preview_brush_path(
+                &draft,
+                21,
+                &[CellCoord { row: 9, col: 0 }],
+                parameters(1.0, 0),
+            ),
+            Err(TuneError::CellOutOfBounds)
+        );
     }
 
     #[test]
