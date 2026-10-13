@@ -1,7 +1,5 @@
 use crate::tuning::{CellCoord, TuneError};
-use crate::tuning_brush_pull::{
-    BrushPullMode, BrushPullParameters, preview_brush_pull,
-};
+use crate::tuning_brush_pull::{BrushPullMode, BrushPullParameters, preview_brush_pull};
 use crate::tuning_fixture::{
     OFFLINE_FIXTURE_PRIMARY_TABLE_ID, encode_primary_projection, with_offline_fixture,
 };
@@ -19,12 +17,7 @@ pub fn preview_offline_fixture_brush_pull_bytes(
     falloff_text: &str,
 ) -> Result<Vec<u8>, TuneError> {
     let mode = brush_pull_mode(mode_code)?;
-    let parameters = brush_pull_parameters(
-        delta_text,
-        radius_text,
-        strength_text,
-        falloff_text,
-    )?;
+    let parameters = brush_pull_parameters(delta_text, radius_text, strength_text, falloff_text)?;
     with_offline_fixture(|draft| {
         let preview = preview_brush_pull(
             draft,
@@ -58,12 +51,7 @@ pub fn apply_offline_fixture_brush_pull(
     expected_revision: u64,
 ) -> Result<u64, TuneError> {
     let mode = brush_pull_mode(mode_code)?;
-    let parameters = brush_pull_parameters(
-        delta_text,
-        radius_text,
-        strength_text,
-        falloff_text,
-    )?;
+    let parameters = brush_pull_parameters(delta_text, radius_text, strength_text, falloff_text)?;
     with_offline_fixture(|draft| {
         if draft.revision() != expected_revision {
             return Err(TuneError::StalePreview);
