@@ -50,6 +50,34 @@ The active development branch at the start of this research is `phase2/performan
 
 TunerStudio findings must be mapped onto those existing ownership boundaries instead of recreating its historical architecture.
 
+## Prior EpicHub table-interaction evidence
+
+The TunerStudio table/editor research must also be reconciled with the pre-existing **EpicEFI Table Interaction Lab** work now preserved under:
+
+`docs/research/table-interaction-lab/`
+
+That prior work already establishes/project-prototypes several important EpicHub behaviors, including:
+
+- 2D and 3D as peer **CORE** Tuner functionality;
+- one authoritative `TuneDraft`/table state feeding both representations;
+- shared selection, preview, protection/editability, and history semantics;
+- semantic edit commands shared by 2D and 3D;
+- input adapters calling shared domain operations;
+- rich 3D inspection layers;
+- explicit separation between table editing and ECU RAM-write/Burn ownership.
+
+Therefore TunerStudio findings must distinguish:
+
+1. **new mature behavior EpicHub had not yet modeled**;
+2. **independent validation of an existing EpicHub design/prototype decision**;
+3. **behavior where TunerStudio is intentionally weaker or more legacy-coupled than EpicHub's existing design**.
+
+See:
+
+`../table-interaction-lab/TUNERSTUDIO_RECONCILIATION.md`
+
+for the explicit crosswalk.
+
 ## Research order
 
 High-value subsystems are investigated progressively rather than by dumping a generic feature list.
@@ -83,7 +111,9 @@ Covers local working tune vs ECU RAM/live state vs ECU nonvolatile state, page/r
 
 `TABLE_CURVE_3D_EDITING.md`
 
-Covers shared 2D/3D tune-object semantics, definition-driven table/curve capabilities, selected vs live-active position, weighted lookup overlays, keyboard-first editing, multi-cell transforms, interpolation, smoothing, re-binning, undo/redo, Apply/Cancel baselines, clipboard/import/export, 3D preference persistence, performance implications, and 50 regression-test ideas.
+Covers shared 2D/3D tune-object semantics, definition-driven table/curve capabilities, selected vs live-active position, weighted lookup overlays, keyboard-first editing, multi-cell transforms, interpolation, smoothing, re-binning, undo/redo, Apply/Cancel baselines, clipboard/import/export, 3D preference persistence, performance implications, and regression-test ideas.
+
+This slice is now explicitly reconciled with the earlier Table Interaction Lab. The prior Lab remains stronger EpicHub-specific design evidence for several interaction/3D decisions, while TunerStudio supplies maturity validation and additional edge cases.
 
 ## Running backlog
 
