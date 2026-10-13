@@ -3,3 +3,4 @@ mod diagnostics;
 mod engine;
 mod jni_api;
 mod runtime_snapshot;
+mod tuning;
