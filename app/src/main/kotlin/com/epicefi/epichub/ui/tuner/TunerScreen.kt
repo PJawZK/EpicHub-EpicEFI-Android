@@ -35,6 +35,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.unit.dp
 import com.epicefi.epichub.engine.OfflineTunerFixture
+import com.epicefi.epichub.engine.TunerBrushPathPoint
 import com.epicefi.epichub.engine.TunerBrushPullMode
 import com.epicefi.epichub.engine.TunerCellStep
 import com.epicefi.epichub.engine.TunerInterpolationMode
@@ -66,6 +67,8 @@ private sealed interface PendingOperation {
         val strengthPercent: String,
         val falloffExponent: String,
     ) : PendingOperation
+
+    data class BrushPath(val stroke: TunerBrushStrokeIntent) : PendingOperation
 }
 
 private data class PendingPreview(
@@ -92,6 +95,14 @@ fun TunerScreen(modifier: Modifier = Modifier) {
     var brushPullRadius by remember { mutableStateOf("1") }
     var brushPullStrength by remember { mutableStateOf("100") }
     var brushPullFalloff by remember { mutableStateOf("1") }
+    var brushGestureEnabled by remember { mutableStateOf(false) }
+
+    fun brushStrokeParameters() = TunerBrushStrokeParameters(
+        delta = brushPullDelta,
+        radiusCells = brushPullRadius,
+        strengthPercent = brushPullStrength,
+        falloffExponent = brushPullFalloff,
+    )
 
     fun validatePreview(
         current: TunerTableProjection,
@@ -201,6 +212,34 @@ fun TunerScreen(modifier: Modifier = Modifier) {
                 }
             }
 
+            is TunerCommandEffect.PreviewBrushStroke -> {
+                val selected = interactionState.selection ?: return
+                val current = projection ?: return
+                val parameters = effect.stroke.parameters
+                runCatching {
+                    OfflineTunerFixture.previewBrushPath(
+                        path = effect.stroke.points.map { point ->
+                            TunerBrushPathPoint(row = point.row, col = point.col)
+                        },
+                        delta = parameters.delta,
+                        radiusCells = parameters.radiusCells,
+                        strengthPercent = parameters.strengthPercent,
+                        falloffExponent = parameters.falloffExponent,
+                    ).also { preview -> validatePreview(current, preview) }
+                }.onSuccess { previewProjection ->
+                    pendingPreview = PendingPreview(
+                        selection = selected,
+                        operation = PendingOperation.BrushPath(effect.stroke),
+                        projection = previewProjection,
+                        baseRevision = current.draftRevision,
+                    )
+                    errorMessage = null
+                }.onFailure { error ->
+                    pendingPreview = null
+                    errorMessage = error.message ?: "Brush stroke preview rejected."
+                }
+            }
+
             is TunerCommandEffect.PreviewBrushPull -> {
                 val selected = interactionState.selection ?: return
                 val current = projection ?: return
@@ -271,6 +310,20 @@ fun TunerScreen(modifier: Modifier = Modifier) {
                             falloffExponent = operation.falloffExponent,
                             expectedRevision = preview.baseRevision,
                         )
+
+                        is PendingOperation.BrushPath -> {
+                            val parameters = operation.stroke.parameters
+                            OfflineTunerFixture.applyBrushPath(
+                                path = operation.stroke.points.map { point ->
+                                    TunerBrushPathPoint(row = point.row, col = point.col)
+                                },
+                                delta = parameters.delta,
+                                radiusCells = parameters.radiusCells,
+                                strengthPercent = parameters.strengthPercent,
+                                falloffExponent = parameters.falloffExponent,
+                                expectedRevision = preview.baseRevision,
+                            )
+                        }
                     }
                 }.onSuccess { next ->
                     projection = next
@@ -371,6 +424,15 @@ fun TunerScreen(modifier: Modifier = Modifier) {
                         )
                     },
                 )
+                AssistChip(
+                    onClick = {
+                        brushGestureEnabled = !brushGestureEnabled
+                        dispatch(TunerCommand.CancelBrushStroke)
+                    },
+                    label = {
+                        Text(if (brushGestureEnabled) "Brush draw · active" else "Brush draw")
+                    },
+                )
             }
 
             StructuralCard(
@@ -395,6 +457,10 @@ fun TunerScreen(modifier: Modifier = Modifier) {
                         projection = current,
                         selection = selection,
                         preview = pendingPreview,
+                        brushGestureEnabled = brushGestureEnabled &&
+                            brushPullMode == TunerBrushPullMode.BRUSH_STROKE,
+                        brushParameters = brushStrokeParameters(),
+                        onCommand = ::dispatch,
                         onCellSelected = { row, col ->
                             tableFocusRequester.requestFocus()
                             dispatch(TunerCommand.SelectCell(row, col))
@@ -402,7 +468,11 @@ fun TunerScreen(modifier: Modifier = Modifier) {
                     )
                 }
                 Text(
-                    "Keyboard: arrows move · Shift+arrows extend · +/− preview step · Enter apply · Esc cancel · Ctrl+Z undo · Ctrl+Y or Ctrl+Shift+Z redo",
+                    if (brushGestureEnabled && !show3d) {
+                        "Brush draw: drag across the 2D cells to build one previewed stroke. Release keeps the preview; Apply commits it as one history transaction."
+                    } else {
+                        "Keyboard: arrows move · Shift+arrows extend · +/− preview step · Enter apply · Esc cancel · Ctrl+Z undo · Ctrl+Y or Ctrl+Shift+Z redo"
+                    },
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
@@ -414,7 +484,7 @@ fun TunerScreen(modifier: Modifier = Modifier) {
             ) {
                 val selected = selection
                 if (selected == null) {
-                    Text("Tap a cell to start a selection. Arrow keys also create a deterministic starting selection. Enable Extend selection, Shift+Arrow, or later another input adapter to move the focus corner.")
+                    Text("Tap a cell to start a selection. Arrow keys also create a deterministic starting selection. Enable Extend selection, Shift+Arrow, or Brush draw for routed pointer input.")
                 } else {
                     val protectedCount = countProtectedCells(current, selected)
                     Text(
@@ -427,6 +497,12 @@ fun TunerScreen(modifier: Modifier = Modifier) {
                             "Focus r${selected.focus.row + 1} c${selected.focus.col + 1}",
                         style = MaterialTheme.typography.bodySmall,
                     )
+                    interactionState.activeBrushStroke?.let { stroke ->
+                        Text(
+                            "Active Brush gesture · ${stroke.points.size} coalesced path points",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
                     if (protectedCount > 0) {
                         Text(
                             "$protectedCount protected cell${if (protectedCount == 1) "" else "s"} inside the rectangle. Rectangle transforms reject protected targets; Brush/Pull keeps pinned cells fixed.",
@@ -565,7 +641,7 @@ fun TunerScreen(modifier: Modifier = Modifier) {
 
                     Text("Brush / Pull", style = MaterialTheme.typography.labelLarge)
                     Text(
-                        "Brush sweeps from anchor to focus. Pull is a rubber-sheet deformation centered on focus. Radius and falloff are grid-space edit weights, not ECU lookup weights.",
+                        "Brush sweeps through the routed path; Pull is a rubber-sheet deformation centered on focus. Radius and falloff are grid-space edit weights, not ECU lookup weights.",
                         style = MaterialTheme.typography.bodySmall,
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -573,6 +649,9 @@ fun TunerScreen(modifier: Modifier = Modifier) {
                             AssistChip(
                                 onClick = {
                                     brushPullMode = mode
+                                    if (mode != TunerBrushPullMode.BRUSH_STROKE) {
+                                        brushGestureEnabled = false
+                                    }
                                     dispatch(TunerCommand.CancelPreview)
                                 },
                                 label = {
@@ -692,6 +771,9 @@ private fun Table2d(
     projection: TunerTableProjection,
     selection: TunerRectangleSelection?,
     preview: PendingPreview?,
+    brushGestureEnabled: Boolean,
+    brushParameters: TunerBrushStrokeParameters,
+    onCommand: (TunerCommand) -> Boolean,
     onCellSelected: (Int, Int) -> Unit,
 ) {
     val scroll = rememberScrollState()
@@ -727,6 +809,18 @@ private fun Table2d(
                         protected = !projection.editable[index],
                         selected = selected,
                         previewed = previewed,
+                        brushBinding = if (brushGestureEnabled) {
+                            TunerBrushPointerBinding(
+                                startRow = displayRow,
+                                startCol = col,
+                                rows = projection.rows,
+                                cols = projection.cols,
+                                parameters = brushParameters,
+                                onCommand = onCommand,
+                            )
+                        } else {
+                            null
+                        },
                         onClick = { onCellSelected(displayRow, col) },
                     )
                 }
@@ -743,6 +837,7 @@ private fun TableCell(
     protected: Boolean = false,
     selected: Boolean = false,
     previewed: Boolean = false,
+    brushBinding: TunerBrushPointerBinding? = null,
     onClick: (() -> Unit)? = null,
 ) {
     val background = when {
@@ -752,12 +847,17 @@ private fun TableCell(
         header -> MaterialTheme.colorScheme.surfaceContainerHigh
         else -> MaterialTheme.colorScheme.surfaceContainerLow
     }
+    val inputModifier = when {
+        brushBinding != null -> Modifier.tunerBrushPointerInput(brushBinding)
+        onClick != null -> Modifier.clickable(onClick = onClick)
+        else -> Modifier
+    }
     Box(
         modifier = Modifier
             .width(widthDp.dp)
             .height(42.dp)
             .background(background)
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .then(inputModifier)
             .padding(horizontal = 6.dp),
         contentAlignment = Alignment.Center,
     ) {
@@ -881,6 +981,9 @@ private fun operationLabel(operation: PendingOperation): String = when (operatio
     is PendingOperation.BrushPull ->
         "${brushPullModeLabel(operation.mode)} Δ${operation.delta.trim()} r${operation.radiusCells.trim()} " +
             "${operation.strengthPercent.trim()}% f${operation.falloffExponent.trim()}"
+
+    is PendingOperation.BrushPath ->
+        "Brush path · ${operation.stroke.points.size} points · Δ${operation.stroke.parameters.delta.trim()}"
 }
 
 private fun numericOperationLabel(operation: TunerNumericOperation): String = when (operation) {
