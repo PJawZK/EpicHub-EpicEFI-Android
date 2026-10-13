@@ -225,7 +225,7 @@ private fun ReadOnlyTable3d(projection: TunerTableProjection) {
 }
 
 private fun formatValue(value: Double, decimals: Int): String =
-    String.format(Locale.US, ".${decimals}f", value)
+    String.format(Locale.US, "%.${decimals}f", value)
 
 private fun formatAxis(value: Double): String =
     if (value % 1.0 == 0.0) value.toLong().toString() else String.format(Locale.US, "%.2f", value)
