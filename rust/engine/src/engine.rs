@@ -247,15 +247,7 @@ mod tests {
         let first_revision = registry
             .tune_session(first_handle, |session| {
                 session
-                    .apply_rectangle_step(
-                        OFFLINE_SOURCE_PRIMARY_TABLE_ID,
-                        0,
-                        0,
-                        0,
-                        0,
-                        1,
-                        0,
-                    )
+                    .apply_rectangle_step(OFFLINE_SOURCE_PRIMARY_TABLE_ID, 0, 0, 0, 0, 1, 0)
                     .unwrap()
             })
             .unwrap();
@@ -292,9 +284,17 @@ mod tests {
 
         assert!(registry.snapshot(handle).is_none());
         assert!(registry.diagnostic_batch(handle).is_none());
-        assert!(registry.tune_session(handle, TuneSession::revision).is_none());
+        assert!(
+            registry
+                .tune_session(handle, TuneSession::revision)
+                .is_none()
+        );
         assert!(registry.snapshot(i64::MAX).is_none());
         assert!(registry.diagnostic_batch(i64::MAX).is_none());
-        assert!(registry.tune_session(i64::MAX, TuneSession::revision).is_none());
+        assert!(
+            registry
+                .tune_session(i64::MAX, TuneSession::revision)
+                .is_none()
+        );
     }
 }
