@@ -72,17 +72,9 @@ Therefore TunerStudio findings must distinguish:
 2. **independent validation of an existing EpicHub design/prototype decision**;
 3. **behavior where TunerStudio is intentionally weaker or more legacy-coupled than EpicHub's existing design**.
 
-See:
-
-`../table-interaction-lab/TUNERSTUDIO_RECONCILIATION.md`
-
-for the explicit crosswalk.
+See `../table-interaction-lab/TUNERSTUDIO_RECONCILIATION.md` for the explicit crosswalk.
 
 ## Research order
-
-High-value subsystems are investigated progressively rather than by dumping a generic feature list.
-
-Current order:
 
 1. project/INI authority, ECU identity, connection/session, reconnect/recovery;
 2. tune read/write state, difference handling, Burn/persistence safeguards;
@@ -121,57 +113,48 @@ This slice is explicitly reconciled with the earlier Table Interaction Lab. The 
 
 Covers semantic output-channel binding, hidden-dashboard subscription release, raw/bitfield/alias/expression channels, calculated-channel dependency graphs, persisted accumulators, dashboard project persistence, compatibility metadata, gauge limits/history, responsive geometry, stale/invalid data requirements, and separation of acquisition/calculation/render rates.
 
-Important conclusions include:
-
-- dashboard widgets consume semantic channels, not ECU memory geometry;
-- hidden presentation should release unnecessary channel demand without implicitly stopping ECU acquisition;
-- derived channels should be compiled into a validated dependency graph and shared across consumers;
-- runtime samples need explicit validity and session-generation state;
-- stateful and durable accumulators require explicit lifecycle/persistence semantics;
-- dashboard layouts are independent project/UI state, not tune calibration state;
-- acquisition, derived publication, and Compose rendering rates should remain independent.
-
 ### 5. Live logging / recorded logs
 
 `LIVE_LOGGING_RECORDED_LOGS.md`
 
 Covers manual and automatic logging, named Data Log Profiles, definition-driven log schemas, the distinction between ECU acquisition and retained log fields, calculated/stateful channels in logs, specialized/high-speed logger definitions, multiple recorded-log representations, project-local log storage, failure/reconnect requirements, buffering/backpressure, crash recovery, and long/high-rate regression cases.
 
+### 6. Tune compare / difference reporting / restore history
+
+`TUNE_COMPARE_DIFF_RESTORE_HISTORY.md`
+
+Covers reusable semantic comparison between working tune, ECU, saved tune and historical checkpoints; non-mutating difference reports followed by explicit authority resolution; object/table-aware diff requirements; validation-generated differences; event-driven full-state restore points; deduplication and storage retention; guarded restore loading; pre-firmware-upgrade preservation; and typed cross-profile migration classifications.
+
 Important conclusions include:
 
-- logging is a stateful project workflow rather than a file-writer call;
-- automatic start/stop conditions should use validated channel/expression semantics;
-- log schemas and ECU acquisition plans are separate layers;
-- logger consumes the shared ChannelStore/derived-channel graph rather than owning a second formula engine;
-- specialized trigger/tooth/composite/high-speed loggers need acquisition semantics separate from ordinary RuntimeSnapshot logging;
-- the logging domain must remain format-neutral so MLG, MDF4 and CSV/export are persistence adapters rather than architecture;
-- disk I/O/backpressure must never block the ECU session owner;
-- disconnects and dropped samples need explicit gaps/events rather than fabricated continuity;
-- exact TunerStudio disconnect, flush, crash-repair and bookmark behavior remains intentionally unclaimed until dynamic validation.
+- comparison is observational and separate from mutation;
+- one semantic diff service should compare any two compatible tune authorities/checkpoints;
+- restore points are durable comparable history, not merely backup files;
+- checkpoints should be created around meaningful transitions and deduplicated when tune content is unchanged;
+- tune-import normalization must retain provenance so later differences can be explained;
+- firmware/profile migration needs explicit mapping and a preserved pre-migration snapshot;
+- ambiguous labels such as `current`, `saved` and `original` should be replaced with explicit authority labels.
 
 ## Running backlog
 
 `EPICHUB_BACKLOG.md`
 
-This is a review backlog rather than an implementation queue. Findings remain proposals until explicitly accepted into EpicHub architecture/runtime work.
-
-The backlog currently runs through **EH-TS-064**.
+The main backlog currently runs through **EH-TS-064**. Compare/history findings are documented in the slice above and should be consolidated into the numbered backlog at the next backlog-maintenance checkpoint; the research document is authoritative in the meantime.
 
 ## Next research slice
 
-Proceed to **tune compare/diff and restore history**.
+Proceed to **project migration/compatibility and firmware upgrades**.
 
 High-value questions include:
 
-- comparison granularity and presentation;
-- local tune vs ECU vs saved tune authority labels;
-- ignored/non-comparable settings;
-- table/curve difference visualization;
-- whether comparisons operate offline;
-- restore-point creation/retention and naming;
-- firmware/profile compatibility across comparisons;
-- rollback after bulk tuning or migration;
-- performance on large tunes;
-- how compare/history should integrate with the semantic `TuneDraft` history already planned for EpicHub.
+- project/profile version provenance across upgrades;
+- firmware-definition replacement and migration boundaries;
+- setting rename/add/remove/scale transformations;
+- sensor calibration restoration;
+- unsupported or ambiguous settings;
+- rollback after failed migration;
+- project archive/backup behavior;
+- compatibility of dashboards/log profiles/history with a migrated ECU profile;
+- how EpicHub should version migration rules without turning raw INI structure into product architecture.
 
 The research branch intentionally contains documentation/specification only until a reviewed finding is explicitly accepted for implementation.
