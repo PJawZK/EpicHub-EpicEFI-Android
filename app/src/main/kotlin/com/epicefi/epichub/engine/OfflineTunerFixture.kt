@@ -37,183 +37,69 @@ data class TunerBrushPathPoint(
     val col: Int,
 )
 
-object OfflineTunerFixture {
-    init {
-        System.loadLibrary("epichub_engine")
-    }
+private const val OFFLINE_SOURCE_PRIMARY_TABLE_ID = 7
 
-    fun readProjection(): TunerTableProjection {
-        val buffer = projectionBuffer()
-        val status = fillProjection(buffer)
-        check(status == NATIVE_BUFFER_STATUS_OK) {
-            "Offline Tuner fixture projection failed with status $status."
-        }
-        return TunerTableProjectionDecoder.decode(buffer)
-    }
+/**
+ * Compatibility facade for the current offline-source Tuner screen.
+ *
+ * This object does not own tune state. Every operation resolves the one active NativeEngine and
+ * delegates to that engine's handle-scoped TuneSession. The source table is still the built-in
+ * offline snapshot, but draft/history authority now lives in EngineState.
+ */
+object OfflineTunerFixture {
+    private fun client(): TunerSessionClient = TunerSessionClient(
+        handle = NativeEngine.requireCurrentHandle(),
+        tableId = OFFLINE_SOURCE_PRIMARY_TABLE_ID,
+    )
+
+    fun readProjection(): TunerTableProjection = client().readProjection()
 
     fun previewRectangleStep(
         rectangle: TunerRectangle,
         step: TunerCellStep,
-    ): TunerTableProjection {
-        val buffer = projectionBuffer()
-        val status = fillRectanglePreviewNative(
-            rectangle.anchorRow,
-            rectangle.anchorCol,
-            rectangle.focusRow,
-            rectangle.focusCol,
-            step.nativeCode,
-            buffer,
-        )
-        check(status == NATIVE_BUFFER_STATUS_OK) {
-            "Offline Tuner rectangle preview was rejected with status $status."
-        }
-        return TunerTableProjectionDecoder.decode(buffer)
-    }
+    ): TunerTableProjection = client().previewRectangleStep(rectangle, step)
 
     fun applyRectangleStep(
         rectangle: TunerRectangle,
         step: TunerCellStep,
         expectedRevision: Long,
-    ): TunerTableProjection {
-        val revision = applyRectangleStepNative(
-            rectangle.anchorRow,
-            rectangle.anchorCol,
-            rectangle.focusRow,
-            rectangle.focusCol,
-            step.nativeCode,
-            expectedRevision,
-        )
-        check(revision >= 0L) { "Offline Tuner rectangle edit was rejected or stale." }
-        return readProjection().also { projection ->
-            check(projection.draftRevision == revision) {
-                "Offline Tuner projection revision did not match the applied rectangle edit."
-            }
-        }
-    }
+    ): TunerTableProjection = client().applyRectangleStep(rectangle, step, expectedRevision)
 
     fun previewRectangleNumeric(
         rectangle: TunerRectangle,
         operation: TunerNumericOperation,
         operand: String,
-    ): TunerTableProjection {
-        val buffer = projectionBuffer()
-        val status = fillRectangleNumericPreviewNative(
-            rectangle.anchorRow,
-            rectangle.anchorCol,
-            rectangle.focusRow,
-            rectangle.focusCol,
-            operation.nativeCode,
-            operand,
-            buffer,
-        )
-        check(status == NATIVE_BUFFER_STATUS_OK) {
-            "Offline Tuner numeric preview was rejected with status $status."
-        }
-        return TunerTableProjectionDecoder.decode(buffer)
-    }
+    ): TunerTableProjection = client().previewRectangleNumeric(rectangle, operation, operand)
 
     fun applyRectangleNumeric(
         rectangle: TunerRectangle,
         operation: TunerNumericOperation,
         operand: String,
         expectedRevision: Long,
-    ): TunerTableProjection {
-        val revision = applyRectangleNumericNative(
-            rectangle.anchorRow,
-            rectangle.anchorCol,
-            rectangle.focusRow,
-            rectangle.focusCol,
-            operation.nativeCode,
-            operand,
-            expectedRevision,
-        )
-        check(revision >= 0L) { "Offline Tuner numeric edit was rejected or stale." }
-        return readProjection().also { projection ->
-            check(projection.draftRevision == revision) {
-                "Offline Tuner projection revision did not match the applied numeric edit."
-            }
-        }
-    }
+    ): TunerTableProjection =
+        client().applyRectangleNumeric(rectangle, operation, operand, expectedRevision)
 
     fun previewInterpolation(
         rectangle: TunerRectangle,
         mode: TunerInterpolationMode,
-    ): TunerTableProjection {
-        val buffer = projectionBuffer()
-        val status = fillInterpolationPreviewNative(
-            rectangle.anchorRow,
-            rectangle.anchorCol,
-            rectangle.focusRow,
-            rectangle.focusCol,
-            mode.nativeCode,
-            buffer,
-        )
-        check(status == NATIVE_BUFFER_STATUS_OK) {
-            "Offline Tuner interpolation preview was rejected with status $status."
-        }
-        return TunerTableProjectionDecoder.decode(buffer)
-    }
+    ): TunerTableProjection = client().previewInterpolation(rectangle, mode)
 
     fun applyInterpolation(
         rectangle: TunerRectangle,
         mode: TunerInterpolationMode,
         expectedRevision: Long,
-    ): TunerTableProjection {
-        val revision = applyInterpolationNative(
-            rectangle.anchorRow,
-            rectangle.anchorCol,
-            rectangle.focusRow,
-            rectangle.focusCol,
-            mode.nativeCode,
-            expectedRevision,
-        )
-        check(revision >= 0L) { "Offline Tuner interpolation was rejected or stale." }
-        return readProjection().also { projection ->
-            check(projection.draftRevision == revision) {
-                "Offline Tuner projection revision did not match the applied interpolation."
-            }
-        }
-    }
+    ): TunerTableProjection = client().applyInterpolation(rectangle, mode, expectedRevision)
 
     fun previewSmoothing(
         rectangle: TunerRectangle,
         strengthPercent: String,
-    ): TunerTableProjection {
-        val buffer = projectionBuffer()
-        val status = fillSmoothingPreviewNative(
-            rectangle.anchorRow,
-            rectangle.anchorCol,
-            rectangle.focusRow,
-            rectangle.focusCol,
-            strengthPercent,
-            buffer,
-        )
-        check(status == NATIVE_BUFFER_STATUS_OK) {
-            "Offline Tuner smoothing preview was rejected with status $status."
-        }
-        return TunerTableProjectionDecoder.decode(buffer)
-    }
+    ): TunerTableProjection = client().previewSmoothing(rectangle, strengthPercent)
 
     fun applySmoothing(
         rectangle: TunerRectangle,
         strengthPercent: String,
         expectedRevision: Long,
-    ): TunerTableProjection {
-        val revision = applySmoothingNative(
-            rectangle.anchorRow,
-            rectangle.anchorCol,
-            rectangle.focusRow,
-            rectangle.focusCol,
-            strengthPercent,
-            expectedRevision,
-        )
-        check(revision >= 0L) { "Offline Tuner smoothing was rejected or stale." }
-        return readProjection().also { projection ->
-            check(projection.draftRevision == revision) {
-                "Offline Tuner projection revision did not match the applied smoothing."
-            }
-        }
-    }
+    ): TunerTableProjection = client().applySmoothing(rectangle, strengthPercent, expectedRevision)
 
     fun previewBrushPull(
         rectangle: TunerRectangle,
@@ -222,9 +108,232 @@ object OfflineTunerFixture {
         radiusCells: String,
         strengthPercent: String,
         falloffExponent: String,
-    ): TunerTableProjection {
+    ): TunerTableProjection = client().previewBrushPull(
+        rectangle,
+        mode,
+        delta,
+        radiusCells,
+        strengthPercent,
+        falloffExponent,
+    )
+
+    fun applyBrushPull(
+        rectangle: TunerRectangle,
+        mode: TunerBrushPullMode,
+        delta: String,
+        radiusCells: String,
+        strengthPercent: String,
+        falloffExponent: String,
+        expectedRevision: Long,
+    ): TunerTableProjection = client().applyBrushPull(
+        rectangle,
+        mode,
+        delta,
+        radiusCells,
+        strengthPercent,
+        falloffExponent,
+        expectedRevision,
+    )
+
+    fun previewBrushPath(
+        path: List<TunerBrushPathPoint>,
+        delta: String,
+        radiusCells: String,
+        strengthPercent: String,
+        falloffExponent: String,
+    ): TunerTableProjection = client().previewBrushPath(
+        path,
+        delta,
+        radiusCells,
+        strengthPercent,
+        falloffExponent,
+    )
+
+    fun applyBrushPath(
+        path: List<TunerBrushPathPoint>,
+        delta: String,
+        radiusCells: String,
+        strengthPercent: String,
+        falloffExponent: String,
+        expectedRevision: Long,
+    ): TunerTableProjection = client().applyBrushPath(
+        path,
+        delta,
+        radiusCells,
+        strengthPercent,
+        falloffExponent,
+        expectedRevision,
+    )
+
+    fun undoProjection(): TunerTableProjection = client().undoProjection()
+
+    fun redoProjection(): TunerTableProjection = client().redoProjection()
+}
+
+internal class TunerSessionClient(
+    private val handle: Long,
+    private val tableId: Int,
+) {
+    fun readProjection(): TunerTableProjection {
         val buffer = projectionBuffer()
-        val status = fillBrushPullPreviewNative(
+        val status = NativeEngineBridge.fillTuneProjection(handle, tableId, buffer)
+        check(status == NATIVE_BUFFER_STATUS_OK) {
+            "TuneSession projection failed with status $status."
+        }
+        return TunerTableProjectionDecoder.decode(buffer)
+    }
+
+    fun previewRectangleStep(
+        rectangle: TunerRectangle,
+        step: TunerCellStep,
+    ): TunerTableProjection = preview { buffer ->
+        NativeEngineBridge.fillTuneRectangleStepPreview(
+            handle,
+            tableId,
+            rectangle.anchorRow,
+            rectangle.anchorCol,
+            rectangle.focusRow,
+            rectangle.focusCol,
+            step.nativeCode,
+            buffer,
+        )
+    }
+
+    fun applyRectangleStep(
+        rectangle: TunerRectangle,
+        step: TunerCellStep,
+        expectedRevision: Long,
+    ): TunerTableProjection = applied(
+        NativeEngineBridge.applyTuneRectangleStep(
+            handle,
+            tableId,
+            rectangle.anchorRow,
+            rectangle.anchorCol,
+            rectangle.focusRow,
+            rectangle.focusCol,
+            step.nativeCode,
+            expectedRevision,
+        ),
+        "rectangle edit",
+    )
+
+    fun previewRectangleNumeric(
+        rectangle: TunerRectangle,
+        operation: TunerNumericOperation,
+        operand: String,
+    ): TunerTableProjection = preview { buffer ->
+        NativeEngineBridge.fillTuneRectangleNumericPreview(
+            handle,
+            tableId,
+            rectangle.anchorRow,
+            rectangle.anchorCol,
+            rectangle.focusRow,
+            rectangle.focusCol,
+            operation.nativeCode,
+            operand,
+            buffer,
+        )
+    }
+
+    fun applyRectangleNumeric(
+        rectangle: TunerRectangle,
+        operation: TunerNumericOperation,
+        operand: String,
+        expectedRevision: Long,
+    ): TunerTableProjection = applied(
+        NativeEngineBridge.applyTuneRectangleNumeric(
+            handle,
+            tableId,
+            rectangle.anchorRow,
+            rectangle.anchorCol,
+            rectangle.focusRow,
+            rectangle.focusCol,
+            operation.nativeCode,
+            operand,
+            expectedRevision,
+        ),
+        "numeric edit",
+    )
+
+    fun previewInterpolation(
+        rectangle: TunerRectangle,
+        mode: TunerInterpolationMode,
+    ): TunerTableProjection = preview { buffer ->
+        NativeEngineBridge.fillTuneInterpolationPreview(
+            handle,
+            tableId,
+            rectangle.anchorRow,
+            rectangle.anchorCol,
+            rectangle.focusRow,
+            rectangle.focusCol,
+            mode.nativeCode,
+            buffer,
+        )
+    }
+
+    fun applyInterpolation(
+        rectangle: TunerRectangle,
+        mode: TunerInterpolationMode,
+        expectedRevision: Long,
+    ): TunerTableProjection = applied(
+        NativeEngineBridge.applyTuneInterpolation(
+            handle,
+            tableId,
+            rectangle.anchorRow,
+            rectangle.anchorCol,
+            rectangle.focusRow,
+            rectangle.focusCol,
+            mode.nativeCode,
+            expectedRevision,
+        ),
+        "interpolation",
+    )
+
+    fun previewSmoothing(
+        rectangle: TunerRectangle,
+        strengthPercent: String,
+    ): TunerTableProjection = preview { buffer ->
+        NativeEngineBridge.fillTuneSmoothingPreview(
+            handle,
+            tableId,
+            rectangle.anchorRow,
+            rectangle.anchorCol,
+            rectangle.focusRow,
+            rectangle.focusCol,
+            strengthPercent,
+            buffer,
+        )
+    }
+
+    fun applySmoothing(
+        rectangle: TunerRectangle,
+        strengthPercent: String,
+        expectedRevision: Long,
+    ): TunerTableProjection = applied(
+        NativeEngineBridge.applyTuneSmoothing(
+            handle,
+            tableId,
+            rectangle.anchorRow,
+            rectangle.anchorCol,
+            rectangle.focusRow,
+            rectangle.focusCol,
+            strengthPercent,
+            expectedRevision,
+        ),
+        "smoothing",
+    )
+
+    fun previewBrushPull(
+        rectangle: TunerRectangle,
+        mode: TunerBrushPullMode,
+        delta: String,
+        radiusCells: String,
+        strengthPercent: String,
+        falloffExponent: String,
+    ): TunerTableProjection = preview { buffer ->
+        NativeEngineBridge.fillTuneBrushPullPreview(
+            handle,
+            tableId,
             rectangle.anchorRow,
             rectangle.anchorCol,
             rectangle.focusRow,
@@ -236,10 +345,6 @@ object OfflineTunerFixture {
             falloffExponent,
             buffer,
         )
-        check(status == NATIVE_BUFFER_STATUS_OK) {
-            "Offline Tuner Brush/Pull preview was rejected with status $status."
-        }
-        return TunerTableProjectionDecoder.decode(buffer)
     }
 
     fun applyBrushPull(
@@ -250,8 +355,10 @@ object OfflineTunerFixture {
         strengthPercent: String,
         falloffExponent: String,
         expectedRevision: Long,
-    ): TunerTableProjection {
-        val revision = applyBrushPullNative(
+    ): TunerTableProjection = applied(
+        NativeEngineBridge.applyTuneBrushPull(
+            handle,
+            tableId,
             rectangle.anchorRow,
             rectangle.anchorCol,
             rectangle.focusRow,
@@ -262,14 +369,9 @@ object OfflineTunerFixture {
             strengthPercent,
             falloffExponent,
             expectedRevision,
-        )
-        check(revision >= 0L) { "Offline Tuner Brush/Pull edit was rejected or stale." }
-        return readProjection().also { projection ->
-            check(projection.draftRevision == revision) {
-                "Offline Tuner projection revision did not match the applied Brush/Pull edit."
-            }
-        }
-    }
+        ),
+        "Brush/Pull edit",
+    )
 
     fun previewBrushPath(
         path: List<TunerBrushPathPoint>,
@@ -277,9 +379,10 @@ object OfflineTunerFixture {
         radiusCells: String,
         strengthPercent: String,
         falloffExponent: String,
-    ): TunerTableProjection {
-        val buffer = projectionBuffer()
-        val status = fillBrushPathPreviewNative(
+    ): TunerTableProjection = preview { buffer ->
+        NativeEngineBridge.fillTuneBrushPathPreview(
+            handle,
+            tableId,
             encodeBrushPath(path),
             delta,
             radiusCells,
@@ -287,10 +390,6 @@ object OfflineTunerFixture {
             falloffExponent,
             buffer,
         )
-        check(status == NATIVE_BUFFER_STATUS_OK) {
-            "Offline Tuner Brush path preview was rejected with status $status."
-        }
-        return TunerTableProjectionDecoder.decode(buffer)
     }
 
     fun applyBrushPath(
@@ -300,36 +399,45 @@ object OfflineTunerFixture {
         strengthPercent: String,
         falloffExponent: String,
         expectedRevision: Long,
-    ): TunerTableProjection {
-        val revision = applyBrushPathNative(
+    ): TunerTableProjection = applied(
+        NativeEngineBridge.applyTuneBrushPath(
+            handle,
+            tableId,
             encodeBrushPath(path),
             delta,
             radiusCells,
             strengthPercent,
             falloffExponent,
             expectedRevision,
-        )
-        check(revision >= 0L) { "Offline Tuner Brush path edit was rejected or stale." }
+        ),
+        "Brush path edit",
+    )
+
+    fun undoProjection(): TunerTableProjection = applied(
+        NativeEngineBridge.undoTune(handle),
+        "undo",
+    )
+
+    fun redoProjection(): TunerTableProjection = applied(
+        NativeEngineBridge.redoTune(handle),
+        "redo",
+    )
+
+    private fun preview(nativeCall: (ByteBuffer) -> Int): TunerTableProjection {
+        val buffer = projectionBuffer()
+        val status = nativeCall(buffer)
+        check(status == NATIVE_BUFFER_STATUS_OK) {
+            "TuneSession preview was rejected with status $status."
+        }
+        return TunerTableProjectionDecoder.decode(buffer)
+    }
+
+    private fun applied(revision: Long, operation: String): TunerTableProjection {
+        check(revision >= 0L) { "TuneSession $operation was rejected or stale." }
         return readProjection().also { projection ->
             check(projection.draftRevision == revision) {
-                "Offline Tuner projection revision did not match the applied Brush path edit."
+                "TuneSession projection revision did not match $operation."
             }
-        }
-    }
-
-    fun undoProjection(): TunerTableProjection {
-        val revision = undoNative()
-        check(revision >= 0L) { "Offline Tuner undo is unavailable." }
-        return readProjection().also { projection ->
-            check(projection.draftRevision == revision)
-        }
-    }
-
-    fun redoProjection(): TunerTableProjection {
-        val revision = redoNative()
-        check(revision >= 0L) { "Offline Tuner redo is unavailable." }
-        return readProjection().also { projection ->
-            check(projection.draftRevision == revision)
         }
     }
 
@@ -344,119 +452,8 @@ object OfflineTunerFixture {
     }
 
     private fun projectionBuffer(): ByteBuffer {
-        val size = projectionSize()
-        check(size > 0) { "Offline Tuner fixture projection is unavailable." }
+        val size = NativeEngineBridge.tuneProjectionSize(handle, tableId)
+        check(size > 0) { "TuneSession table $tableId is unavailable." }
         return ByteBuffer.allocateDirect(size).order(ByteOrder.LITTLE_ENDIAN)
     }
-
-    private external fun projectionSize(): Int
-    private external fun fillProjection(buffer: ByteBuffer): Int
-    private external fun fillRectanglePreviewNative(
-        anchorRow: Int,
-        anchorCol: Int,
-        focusRow: Int,
-        focusCol: Int,
-        direction: Int,
-        buffer: ByteBuffer,
-    ): Int
-    private external fun applyRectangleStepNative(
-        anchorRow: Int,
-        anchorCol: Int,
-        focusRow: Int,
-        focusCol: Int,
-        direction: Int,
-        expectedRevision: Long,
-    ): Long
-    private external fun fillRectangleNumericPreviewNative(
-        anchorRow: Int,
-        anchorCol: Int,
-        focusRow: Int,
-        focusCol: Int,
-        operationCode: Int,
-        operand: String,
-        buffer: ByteBuffer,
-    ): Int
-    private external fun applyRectangleNumericNative(
-        anchorRow: Int,
-        anchorCol: Int,
-        focusRow: Int,
-        focusCol: Int,
-        operationCode: Int,
-        operand: String,
-        expectedRevision: Long,
-    ): Long
-    private external fun fillInterpolationPreviewNative(
-        anchorRow: Int,
-        anchorCol: Int,
-        focusRow: Int,
-        focusCol: Int,
-        modeCode: Int,
-        buffer: ByteBuffer,
-    ): Int
-    private external fun applyInterpolationNative(
-        anchorRow: Int,
-        anchorCol: Int,
-        focusRow: Int,
-        focusCol: Int,
-        modeCode: Int,
-        expectedRevision: Long,
-    ): Long
-    private external fun fillSmoothingPreviewNative(
-        anchorRow: Int,
-        anchorCol: Int,
-        focusRow: Int,
-        focusCol: Int,
-        strengthPercent: String,
-        buffer: ByteBuffer,
-    ): Int
-    private external fun applySmoothingNative(
-        anchorRow: Int,
-        anchorCol: Int,
-        focusRow: Int,
-        focusCol: Int,
-        strengthPercent: String,
-        expectedRevision: Long,
-    ): Long
-    private external fun fillBrushPullPreviewNative(
-        anchorRow: Int,
-        anchorCol: Int,
-        focusRow: Int,
-        focusCol: Int,
-        modeCode: Int,
-        delta: String,
-        radiusCells: String,
-        strengthPercent: String,
-        falloffExponent: String,
-        buffer: ByteBuffer,
-    ): Int
-    private external fun applyBrushPullNative(
-        anchorRow: Int,
-        anchorCol: Int,
-        focusRow: Int,
-        focusCol: Int,
-        modeCode: Int,
-        delta: String,
-        radiusCells: String,
-        strengthPercent: String,
-        falloffExponent: String,
-        expectedRevision: Long,
-    ): Long
-    private external fun fillBrushPathPreviewNative(
-        path: IntArray,
-        delta: String,
-        radiusCells: String,
-        strengthPercent: String,
-        falloffExponent: String,
-        buffer: ByteBuffer,
-    ): Int
-    private external fun applyBrushPathNative(
-        path: IntArray,
-        delta: String,
-        radiusCells: String,
-        strengthPercent: String,
-        falloffExponent: String,
-        expectedRevision: Long,
-    ): Long
-    private external fun undoNative(): Long
-    private external fun redoNative(): Long
 }
