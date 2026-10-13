@@ -85,12 +85,8 @@ pub fn preview_offline_fixture_brush_path_bytes(
 ) -> Result<Vec<u8>, TuneError> {
     let parameters = brush_pull_parameters(delta_text, radius_text, strength_text, falloff_text)?;
     with_offline_fixture(|draft| {
-        let preview = preview_brush_path(
-            draft,
-            OFFLINE_FIXTURE_PRIMARY_TABLE_ID,
-            path,
-            parameters,
-        )?;
+        let preview =
+            preview_brush_path(draft, OFFLINE_FIXTURE_PRIMARY_TABLE_ID, path, parameters)?;
         Ok(encode_primary_projection(draft, Some(&preview.changes)))
     })
 }
@@ -109,12 +105,8 @@ pub fn apply_offline_fixture_brush_path(
         if draft.revision() != expected_revision {
             return Err(TuneError::StalePreview);
         }
-        let preview = preview_brush_path(
-            draft,
-            OFFLINE_FIXTURE_PRIMARY_TABLE_ID,
-            path,
-            parameters,
-        )?;
+        let preview =
+            preview_brush_path(draft, OFFLINE_FIXTURE_PRIMARY_TABLE_ID, path, parameters)?;
         draft.commit_preview(preview)
     })
 }
