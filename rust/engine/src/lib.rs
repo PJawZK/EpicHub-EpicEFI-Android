@@ -6,6 +6,7 @@ mod jni_smoothing;
 mod runtime_snapshot;
 mod table_projection_abi;
 pub mod tuning;
+mod tuning_brush_pull;
 mod tuning_fixture;
 mod tuning_interpolation;
 mod tuning_smoothing;
