@@ -7,7 +7,7 @@ use jni::sys::{JNI_FALSE, JNI_TRUE, jboolean, jint, jlong};
 use crate::diagnostics::DIAGNOSTIC_BATCH_SIZE;
 use crate::engine::{
     active_engine_count, close_engine, create_engine, diagnostic_batch, engine_is_alive,
-    runtime_snapshot,
+    offline_table_projection, runtime_snapshot,
 };
 use crate::runtime_snapshot::RUNTIME_SNAPSHOT_SIZE;
 
@@ -112,5 +112,34 @@ pub extern "system" fn Java_com_epicefi_epichub_engine_NativeEngineBridge_fillDi
         };
         debug_assert_eq!(batch.len(), DIAGNOSTIC_BATCH_SIZE);
         copy_to_direct_buffer(&env, &buffer, &batch)
+    })
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_epicefi_epichub_engine_NativeEngineBridge_offlineTableProjectionSize(
+    _env: JNIEnv,
+    _object: JObject,
+    handle: jlong,
+) -> jint {
+    ffi_guard(-1, || {
+        offline_table_projection(handle)
+            .and_then(|bytes| jint::try_from(bytes.len()).ok())
+            .unwrap_or(-1)
+    })
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_epicefi_epichub_engine_NativeEngineBridge_fillOfflineTableProjection(
+    env: JNIEnv,
+    _object: JObject,
+    handle: jlong,
+    buffer: JByteBuffer,
+) -> jint {
+    ffi_guard(BUFFER_STATUS_PANIC, || {
+        let bytes = match offline_table_projection(handle) {
+            Some(bytes) => bytes,
+            None => return BUFFER_STATUS_INVALID_HANDLE,
+        };
+        copy_to_direct_buffer(&env, &buffer, &bytes)
     })
 }
