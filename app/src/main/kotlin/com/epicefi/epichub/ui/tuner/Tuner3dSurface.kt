@@ -2,11 +2,14 @@ package com.epicefi.epichub.ui.tuner
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -23,6 +26,9 @@ fun Tuner3dSurface(
     selection: TunerRectangleSelection?,
     previewProjection: TunerTableProjection?,
     interactionMode: Tuner3dInteractionMode,
+    camera: Tuner3dCameraState,
+    onCameraGesture: (panX: Double, panY: Double, zoomFactor: Double) -> Unit,
+    onResetCamera: () -> Unit,
     onCellSelected: (row: Int, col: Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -34,12 +40,13 @@ fun Tuner3dSurface(
     val hitRadiusPx = with(LocalDensity.current) { TUNER_3D_HIT_RADIUS.toPx() }.toDouble()
     val displayValues = previewProjection?.values ?: projection.values
 
-    val pointerModifier = if (interactionMode == Tuner3dInteractionMode.SELECT_EDIT) {
-        Modifier.pointerInput(
+    val pointerModifier = when (interactionMode) {
+        Tuner3dInteractionMode.SELECT_EDIT -> Modifier.pointerInput(
             projection.tableId,
             projection.draftRevision,
             previewProjection?.draftRevision,
             displayValues.contentHashCode(),
+            camera,
             hitRadiusPx,
         ) {
             detectTapGestures { tap ->
@@ -49,6 +56,7 @@ fun Tuner3dSurface(
                     values = displayValues,
                     width = size.width.toDouble(),
                     height = size.height.toDouble(),
+                    camera = camera,
                 )
                 Tuner3dGeometry.hitTest(
                     cells = cells,
@@ -60,8 +68,16 @@ fun Tuner3dSurface(
                 }
             }
         }
-    } else {
-        Modifier
+
+        Tuner3dInteractionMode.INSPECT -> Modifier.pointerInput(projection.tableId) {
+            detectTransformGestures { _, pan, zoom, _ ->
+                onCameraGesture(
+                    pan.x.toDouble(),
+                    pan.y.toDouble(),
+                    zoom.toDouble(),
+                )
+            }
+        }
     }
 
     Column(
@@ -80,6 +96,7 @@ fun Tuner3dSurface(
                 values = displayValues,
                 width = size.width.toDouble(),
                 height = size.height.toDouble(),
+                camera = camera,
             )
             if (cells.size != projection.rows * projection.cols) return@Canvas
 
@@ -131,12 +148,19 @@ fun Tuner3dSurface(
                 }
             }
         }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (interactionMode == Tuner3dInteractionMode.INSPECT) {
+                OutlinedButton(onClick = onResetCamera) {
+                    Text("Reset 3D view")
+                }
+            }
+        }
         Text(
             "Same table ${projection.tableId} · draft revision ${projection.draftRevision} · shared selection/preview · " +
                 if (interactionMode == Tuner3dInteractionMode.SELECT_EDIT) {
-                    "Select/Edit hit testing active"
+                    "Select/Edit: taps resolve semantic cells; camera gestures disabled"
                 } else {
-                    "Inspect mode"
+                    "Inspect: drag orbits · pinch zooms · no tune commands"
                 },
             color = labelColor,
             style = MaterialTheme.typography.bodySmall,
