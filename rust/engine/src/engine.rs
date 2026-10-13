@@ -8,12 +8,16 @@ use crate::diagnostics::{
     EngineDiagnostics,
 };
 use crate::runtime_snapshot::{RUNTIME_SNAPSHOT_SIZE, RuntimeSnapshot};
+use crate::table_projection_abi;
+use crate::tuning::TuneDraft;
+use crate::tuning_fixture::{OFFLINE_FIXTURE_PRIMARY_TABLE_ID, offline_fixture_draft};
 
 struct EngineState {
     started_at: Instant,
     sequence: u64,
     channels: ChannelStore,
     diagnostics: EngineDiagnostics,
+    offline_tune: TuneDraft,
 }
 
 impl EngineState {
@@ -23,6 +27,7 @@ impl EngineState {
             sequence: 0,
             channels: ChannelStore::new_synthetic(),
             diagnostics: EngineDiagnostics::new(u64::try_from(handle).unwrap_or(0)),
+            offline_tune: offline_fixture_draft(),
         }
     }
 
@@ -53,6 +58,18 @@ impl EngineState {
 
     fn drain_diagnostics(&mut self) -> [u8; DIAGNOSTIC_BATCH_SIZE] {
         self.diagnostics.drain_batch()
+    }
+
+    fn offline_table_projection(&self) -> Option<Vec<u8>> {
+        let projection = self
+            .offline_tune
+            .table_projection(OFFLINE_FIXTURE_PRIMARY_TABLE_ID)
+            .ok()?;
+        Some(table_projection_abi::encode(
+            self.offline_tune.profile_generation(),
+            self.offline_tune.origin(),
+            &projection,
+        ))
     }
 }
 
@@ -106,6 +123,10 @@ impl EngineRegistry {
             .get_mut(&handle)
             .map(EngineState::drain_diagnostics)
     }
+
+    fn offline_table_projection(&self, handle: i64) -> Option<Vec<u8>> {
+        self.engines.get(&handle)?.offline_table_projection()
+    }
 }
 
 static ENGINE_REGISTRY: LazyLock<Mutex<EngineRegistry>> =
@@ -142,6 +163,10 @@ pub fn diagnostic_batch(handle: i64) -> Option<[u8; DIAGNOSTIC_BATCH_SIZE]> {
     with_registry(|registry| registry.diagnostic_batch(handle))
 }
 
+pub fn offline_table_projection(handle: i64) -> Option<Vec<u8>> {
+    with_registry(|registry| registry.offline_table_projection(handle))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -150,6 +175,7 @@ mod tests {
         DIAGNOSTIC_CODE_RUNTIME_SNAPSHOT_PUBLISHED,
     };
     use crate::runtime_snapshot::{RUNTIME_SNAPSHOT_ABI_VERSION, RUNTIME_SNAPSHOT_SIZE};
+    use crate::table_projection_abi::TABLE_PROJECTION_ABI_VERSION;
 
     fn read_u32(bytes: &[u8], offset: usize) -> u32 {
         u32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap())
@@ -211,6 +237,17 @@ mod tests {
     }
 
     #[test]
+    fn offline_table_projection_is_owned_by_the_engine_generation() {
+        let mut registry = EngineRegistry::new();
+        let handle = registry.create();
+        let projection = registry.offline_table_projection(handle).unwrap();
+
+        assert_eq!(read_u32(&projection, 0), TABLE_PROJECTION_ABI_VERSION);
+        assert_eq!(read_u32(&projection, 28), OFFLINE_FIXTURE_PRIMARY_TABLE_ID);
+        assert_eq!(read_u64(&projection, 16), 0);
+    }
+
+    #[test]
     fn closed_or_unknown_handle_cannot_publish_state() {
         let mut registry = EngineRegistry::new();
         let handle = registry.create();
@@ -218,7 +255,9 @@ mod tests {
 
         assert!(registry.snapshot(handle).is_none());
         assert!(registry.diagnostic_batch(handle).is_none());
+        assert!(registry.offline_table_projection(handle).is_none());
         assert!(registry.snapshot(i64::MAX).is_none());
         assert!(registry.diagnostic_batch(i64::MAX).is_none());
+        assert!(registry.offline_table_projection(i64::MAX).is_none());
     }
 }
