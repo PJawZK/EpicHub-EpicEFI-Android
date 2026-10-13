@@ -1,4 +1,6 @@
-use crate::tuning::{CellCoord, TableEditCommand, TableEditOperation, TablePreview, TuneDraft, TuneError};
+use crate::tuning::{
+    CellCoord, TableEditCommand, TableEditOperation, TablePreview, TuneDraft, TuneError,
+};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TableInterpolationMode {
@@ -248,13 +250,9 @@ mod tests {
     #[test]
     fn vertical_interpolation_uses_real_y_axis_spacing() {
         let draft = non_uniform_draft();
-        let preview = preview_interpolation(
-            &draft,
-            11,
-            whole_table(),
-            TableInterpolationMode::Vertical,
-        )
-        .unwrap();
+        let preview =
+            preview_interpolation(&draft, 11, whole_table(), TableInterpolationMode::Vertical)
+                .unwrap();
         let middle = preview
             .changes
             .iter()
@@ -301,14 +299,7 @@ mod tests {
 
     #[test]
     fn interpolation_rejects_protected_cells_atomically() {
-        let mut draft = non_uniform_draft();
-        draft
-            .commit_preview(TablePreview {
-                table_id: 11,
-                base_revision: 0,
-                changes: vec![],
-            })
-            .ok();
+        let draft = non_uniform_draft();
         let mut projection = draft.table_projection(11).unwrap();
         projection.editable[4] = false;
 
