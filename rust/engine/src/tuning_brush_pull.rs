@@ -61,8 +61,8 @@ pub fn preview_brush_pull(
             }
 
             let current = projection.values[index];
-            let target = current
-                + parameters.delta * (parameters.strength_percent / 100.0) * weight;
+            let target =
+                current + parameters.delta * (parameters.strength_percent / 100.0) * weight;
             let cell_preview = draft.preview(&TableEditCommand {
                 table_id,
                 cells: vec![coord],
@@ -118,11 +118,7 @@ fn validate_cell(
     Ok(())
 }
 
-fn influence_weight(
-    distance: f64,
-    radius_cells: usize,
-    falloff_exponent: f64,
-) -> Option<f64> {
+fn influence_weight(distance: f64, radius_cells: usize, falloff_exponent: f64) -> Option<f64> {
     let radius = radius_cells as f64;
     if distance > radius + 1e-9 {
         return None;
@@ -330,7 +326,12 @@ mod tests {
             parameters(10.0, 0),
         )
         .unwrap();
-        assert!(!brush.changes.iter().any(|change| change.coord == CellCoord { row: 2, col: 2 }));
+        assert!(
+            !brush
+                .changes
+                .iter()
+                .any(|change| change.coord == CellCoord { row: 2, col: 2 })
+        );
 
         assert_eq!(
             preview_brush_pull(
@@ -418,15 +419,17 @@ mod tests {
                 ..parameters(1.0, 1)
             },
         ] {
-            assert!(preview_brush_pull(
-                &draft,
-                21,
-                anchor,
-                focus,
-                BrushPullMode::BrushStroke,
-                params,
-            )
-            .is_err());
+            assert!(
+                preview_brush_pull(
+                    &draft,
+                    21,
+                    anchor,
+                    focus,
+                    BrushPullMode::BrushStroke,
+                    params,
+                )
+                .is_err()
+            );
         }
     }
 }
