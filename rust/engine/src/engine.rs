@@ -26,6 +26,7 @@ impl EngineState {
             tune_session.profile_generation(),
             tune_session.baseline().profile_generation,
         );
+        debug_assert_eq!(tune_session.revision(), 0);
         Self {
             started_at: Instant::now(),
             sequence: 0,
@@ -286,14 +287,14 @@ mod tests {
         assert!(registry.diagnostic_batch(handle).is_none());
         assert!(
             registry
-                .tune_session(handle, TuneSession::revision)
+                .tune_session(handle, |session| session.revision())
                 .is_none()
         );
         assert!(registry.snapshot(i64::MAX).is_none());
         assert!(registry.diagnostic_batch(i64::MAX).is_none());
         assert!(
             registry
-                .tune_session(i64::MAX, TuneSession::revision)
+                .tune_session(i64::MAX, |session| session.revision())
                 .is_none()
         );
     }
