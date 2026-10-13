@@ -6,6 +6,8 @@ import com.epicefi.epichub.engine.TunerInterpolationMode
 import com.epicefi.epichub.engine.TunerNumericOperation
 import com.epicefi.epichub.engine.TunerRectangle
 
+private const val MAX_ROUTED_BRUSH_PATH_POINTS = 256
+
 data class TunerCellPosition(
     val row: Int,
     val col: Int,
@@ -32,9 +34,22 @@ data class TunerRectangleSelection(
     )
 }
 
+data class TunerBrushStrokeParameters(
+    val delta: String,
+    val radiusCells: String,
+    val strengthPercent: String,
+    val falloffExponent: String,
+)
+
+data class TunerBrushStrokeIntent(
+    val points: List<TunerCellPosition>,
+    val parameters: TunerBrushStrokeParameters,
+)
+
 data class TunerInteractionState(
     val selection: TunerRectangleSelection? = null,
     val persistentExtendSelection: Boolean = false,
+    val activeBrushStroke: TunerBrushStrokeIntent? = null,
 )
 
 enum class TunerMoveDirection {
@@ -58,6 +73,20 @@ sealed interface TunerCommand {
 
     data object ToggleExtendSelection : TunerCommand
     data object ClearSelection : TunerCommand
+
+    data class BeginBrushStroke(
+        val row: Int,
+        val col: Int,
+        val parameters: TunerBrushStrokeParameters,
+    ) : TunerCommand
+
+    data class ContinueBrushStroke(
+        val row: Int,
+        val col: Int,
+    ) : TunerCommand
+
+    data object EndBrushStroke : TunerCommand
+    data object CancelBrushStroke : TunerCommand
 
     data class PreviewStep(val step: TunerCellStep) : TunerCommand
 
@@ -99,6 +128,7 @@ sealed interface TunerCommandEffect {
 
     data class PreviewInterpolation(val mode: TunerInterpolationMode) : TunerCommandEffect
     data class PreviewSmoothing(val strengthPercent: String) : TunerCommandEffect
+    data class PreviewBrushStroke(val stroke: TunerBrushStrokeIntent) : TunerCommandEffect
 
     data class PreviewBrushPull(
         val mode: TunerBrushPullMode,
@@ -127,6 +157,7 @@ object TunerCommandRouter {
         TunerCommand.ToggleExtendSelection -> TunerRouteResult(
             state = state.copy(
                 persistentExtendSelection = !state.persistentExtendSelection,
+                activeBrushStroke = null,
             ),
             effect = TunerCommandEffect.CancelPreview,
         )
@@ -136,28 +167,38 @@ object TunerCommandRouter {
             effect = TunerCommandEffect.CancelPreview,
         )
 
+        is TunerCommand.BeginBrushStroke -> beginBrushStroke(command, state, rows, cols)
+        is TunerCommand.ContinueBrushStroke -> continueBrushStroke(command, state, rows, cols)
+        TunerCommand.EndBrushStroke -> TunerRouteResult(
+            state = state.copy(activeBrushStroke = null),
+        )
+        TunerCommand.CancelBrushStroke -> TunerRouteResult(
+            state = state.copy(activeBrushStroke = null),
+            effect = TunerCommandEffect.CancelPreview,
+        )
+
         is TunerCommand.PreviewStep -> TunerRouteResult(
-            state,
+            state.copy(activeBrushStroke = null),
             TunerCommandEffect.PreviewStep(command.step),
         )
 
         is TunerCommand.PreviewNumeric -> TunerRouteResult(
-            state,
+            state.copy(activeBrushStroke = null),
             TunerCommandEffect.PreviewNumeric(command.operation, command.operand),
         )
 
         is TunerCommand.PreviewInterpolation -> TunerRouteResult(
-            state,
+            state.copy(activeBrushStroke = null),
             TunerCommandEffect.PreviewInterpolation(command.mode),
         )
 
         is TunerCommand.PreviewSmoothing -> TunerRouteResult(
-            state,
+            state.copy(activeBrushStroke = null),
             TunerCommandEffect.PreviewSmoothing(command.strengthPercent),
         )
 
         is TunerCommand.PreviewBrushPull -> TunerRouteResult(
-            state,
+            state.copy(activeBrushStroke = null),
             TunerCommandEffect.PreviewBrushPull(
                 mode = command.mode,
                 delta = command.delta,
@@ -167,10 +208,22 @@ object TunerCommandRouter {
             ),
         )
 
-        TunerCommand.ApplyPreview -> TunerRouteResult(state, TunerCommandEffect.ApplyPreview)
-        TunerCommand.CancelPreview -> TunerRouteResult(state, TunerCommandEffect.CancelPreview)
-        TunerCommand.Undo -> TunerRouteResult(state, TunerCommandEffect.Undo)
-        TunerCommand.Redo -> TunerRouteResult(state, TunerCommandEffect.Redo)
+        TunerCommand.ApplyPreview -> TunerRouteResult(
+            state.copy(activeBrushStroke = null),
+            TunerCommandEffect.ApplyPreview,
+        )
+        TunerCommand.CancelPreview -> TunerRouteResult(
+            state.copy(activeBrushStroke = null),
+            TunerCommandEffect.CancelPreview,
+        )
+        TunerCommand.Undo -> TunerRouteResult(
+            state.copy(activeBrushStroke = null),
+            TunerCommandEffect.Undo,
+        )
+        TunerCommand.Redo -> TunerRouteResult(
+            state.copy(activeBrushStroke = null),
+            TunerCommandEffect.Redo,
+        )
     }
 
     private fun selectCell(
@@ -191,7 +244,7 @@ object TunerCommandRouter {
             TunerRectangleSelection(anchor = cell, focus = cell)
         }
         return TunerRouteResult(
-            state = state.copy(selection = selection),
+            state = state.copy(selection = selection, activeBrushStroke = null),
             effect = TunerCommandEffect.CancelPreview,
         )
     }
@@ -211,6 +264,7 @@ object TunerCommandRouter {
             return TunerRouteResult(
                 state = state.copy(
                     selection = TunerRectangleSelection(initial, initial),
+                    activeBrushStroke = null,
                 ),
                 effect = TunerCommandEffect.CancelPreview,
             )
@@ -230,9 +284,86 @@ object TunerCommandRouter {
             TunerRectangleSelection(anchor = moved, focus = moved)
         }
         return TunerRouteResult(
-            state = state.copy(selection = selection),
+            state = state.copy(selection = selection, activeBrushStroke = null),
             effect = TunerCommandEffect.CancelPreview,
         )
+    }
+
+    private fun beginBrushStroke(
+        command: TunerCommand.BeginBrushStroke,
+        state: TunerInteractionState,
+        rows: Int,
+        cols: Int,
+    ): TunerRouteResult {
+        if (!isValidCell(command.row, command.col, rows, cols)) {
+            return TunerRouteResult(state = state, consumed = false)
+        }
+        val point = TunerCellPosition(command.row, command.col)
+        val stroke = TunerBrushStrokeIntent(
+            points = listOf(point),
+            parameters = command.parameters,
+        )
+        return TunerRouteResult(
+            state = state.copy(
+                selection = TunerRectangleSelection(point, point),
+                activeBrushStroke = stroke,
+            ),
+            effect = TunerCommandEffect.PreviewBrushStroke(stroke),
+        )
+    }
+
+    private fun continueBrushStroke(
+        command: TunerCommand.ContinueBrushStroke,
+        state: TunerInteractionState,
+        rows: Int,
+        cols: Int,
+    ): TunerRouteResult {
+        val active = state.activeBrushStroke
+            ?: return TunerRouteResult(state = state, consumed = false)
+        if (!isValidCell(command.row, command.col, rows, cols)) {
+            return TunerRouteResult(state = state, consumed = false)
+        }
+
+        val point = TunerCellPosition(command.row, command.col)
+        val nextPoints = appendBrushPoint(active.points, point)
+        if (nextPoints == active.points) {
+            return TunerRouteResult(state = state)
+        }
+        val stroke = active.copy(points = nextPoints)
+        val selection = TunerRectangleSelection(
+            anchor = nextPoints.first(),
+            focus = nextPoints.last(),
+        )
+        return TunerRouteResult(
+            state = state.copy(selection = selection, activeBrushStroke = stroke),
+            effect = TunerCommandEffect.PreviewBrushStroke(stroke),
+        )
+    }
+
+    private fun appendBrushPoint(
+        points: List<TunerCellPosition>,
+        point: TunerCellPosition,
+    ): List<TunerCellPosition> {
+        if (points.lastOrNull() == point) return points
+        if (points.size >= 2 && sameForwardLine(points[points.lastIndex - 1], points.last(), point)) {
+            return points.dropLast(1) + point
+        }
+        if (points.size >= MAX_ROUTED_BRUSH_PATH_POINTS) return points
+        return points + point
+    }
+
+    private fun sameForwardLine(
+        a: TunerCellPosition,
+        b: TunerCellPosition,
+        c: TunerCellPosition,
+    ): Boolean {
+        val abRow = b.row - a.row
+        val abCol = b.col - a.col
+        val bcRow = c.row - b.row
+        val bcCol = c.col - b.col
+        val cross = abRow * bcCol - abCol * bcRow
+        val dot = abRow * bcRow + abCol * bcCol
+        return cross == 0 && dot >= 0
     }
 
     private fun isValidCell(row: Int, col: Int, rows: Int, cols: Int): Boolean =
