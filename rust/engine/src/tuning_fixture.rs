@@ -2,8 +2,8 @@ use std::sync::{LazyLock, Mutex};
 
 use crate::table_projection_abi;
 use crate::tuning::{
-    CellCoord, TableDescriptor, TableEditCommand, TableEditOperation, TableProjection, TableSnapshot,
-    TuneDraft, TuneError, TuneSnapshot, TuneSnapshotOrigin,
+    CellCoord, TableDescriptor, TableEditCommand, TableEditOperation, TableProjection,
+    TableSnapshot, TuneDraft, TuneError, TuneSnapshot, TuneSnapshotOrigin,
 };
 
 pub const OFFLINE_FIXTURE_PROFILE_GENERATION: u64 = 42;
@@ -65,13 +65,8 @@ pub fn preview_offline_fixture_rectangle_step_bytes(
     direction: i32,
 ) -> Result<Vec<u8>, TuneError> {
     with_offline_fixture(|draft| {
-        let command = rectangle_step_command(
-            anchor_row,
-            anchor_col,
-            focus_row,
-            focus_col,
-            direction,
-        )?;
+        let command =
+            rectangle_step_command(anchor_row, anchor_col, focus_row, focus_col, direction)?;
         let preview = draft.preview(&command)?;
         Ok(encode_primary_projection(draft, Some(&preview.changes)))
     })
@@ -90,11 +85,7 @@ pub fn apply_offline_fixture_rectangle_step(
             return Err(TuneError::StalePreview);
         }
         draft.apply(&rectangle_step_command(
-            anchor_row,
-            anchor_col,
-            focus_row,
-            focus_col,
-            direction,
+            anchor_row, anchor_col, focus_row, focus_col, direction,
         )?)
     })
 }
@@ -218,30 +209,54 @@ mod tests {
         assert_eq!(preview.base_revision, 0);
         assert_eq!(preview.changes.len(), 4);
         assert_eq!(preview.changes[0].after, 42.5);
-        assert_eq!(draft.table_projection(OFFLINE_FIXTURE_PRIMARY_TABLE_ID).unwrap().values[0], 42.0);
+        assert_eq!(
+            draft
+                .table_projection(OFFLINE_FIXTURE_PRIMARY_TABLE_ID)
+                .unwrap()
+                .values[0],
+            42.0
+        );
 
         let revision = draft.apply(&command).unwrap();
         assert_eq!(revision, 1);
-        let applied = draft.table_projection(OFFLINE_FIXTURE_PRIMARY_TABLE_ID).unwrap();
+        let applied = draft
+            .table_projection(OFFLINE_FIXTURE_PRIMARY_TABLE_ID)
+            .unwrap();
         assert_eq!(applied.values[0], 42.5);
         assert_eq!(applied.values[1], 46.5);
         assert_eq!(applied.values[5], 50.5);
         assert_eq!(applied.values[6], 56.5);
 
         assert_eq!(draft.undo().unwrap(), 2);
-        assert_eq!(draft.table_projection(OFFLINE_FIXTURE_PRIMARY_TABLE_ID).unwrap().values[0], 42.0);
-        assert_eq!(draft.table_projection(OFFLINE_FIXTURE_PRIMARY_TABLE_ID).unwrap().values[6], 56.0);
+        assert_eq!(
+            draft
+                .table_projection(OFFLINE_FIXTURE_PRIMARY_TABLE_ID)
+                .unwrap()
+                .values[0],
+            42.0
+        );
+        assert_eq!(
+            draft
+                .table_projection(OFFLINE_FIXTURE_PRIMARY_TABLE_ID)
+                .unwrap()
+                .values[6],
+            56.0
+        );
     }
 
     #[test]
     fn rectangle_preview_rejects_entire_selection_when_one_cell_is_protected() {
         let draft = offline_fixture_draft();
-        let before = draft.table_projection(OFFLINE_FIXTURE_PRIMARY_TABLE_ID).unwrap();
+        let before = draft
+            .table_projection(OFFLINE_FIXTURE_PRIMARY_TABLE_ID)
+            .unwrap();
         let command = rectangle_step_command(2, 3, 3, 4, 1).unwrap();
 
         assert_eq!(draft.preview(&command), Err(TuneError::ProtectedCell));
         assert_eq!(
-            draft.table_projection(OFFLINE_FIXTURE_PRIMARY_TABLE_ID).unwrap(),
+            draft
+                .table_projection(OFFLINE_FIXTURE_PRIMARY_TABLE_ID)
+                .unwrap(),
             before
         );
     }
