@@ -31,6 +31,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.dp
 import com.epicefi.epichub.engine.OfflineTunerFixture
 import com.epicefi.epichub.engine.TunerCellStep
+import com.epicefi.epichub.engine.TunerRectangle
 import com.epicefi.epichub.engine.TunerTableProjection
 import com.epicefi.epichub.ui.components.StructuralCard
 import java.util.Locale
@@ -44,10 +45,31 @@ private data class CellSelection(
     val col: Int,
 )
 
+private data class RectangleSelection(
+    val anchor: CellSelection,
+    val focus: CellSelection,
+) {
+    val firstRow: Int get() = minOf(anchor.row, focus.row)
+    val lastRow: Int get() = maxOf(anchor.row, focus.row)
+    val firstCol: Int get() = minOf(anchor.col, focus.col)
+    val lastCol: Int get() = maxOf(anchor.col, focus.col)
+    val cellCount: Int get() = (lastRow - firstRow + 1) * (lastCol - firstCol + 1)
+
+    fun contains(row: Int, col: Int): Boolean =
+        row in firstRow..lastRow && col in firstCol..lastCol
+
+    fun toNative(): TunerRectangle = TunerRectangle(
+        anchorRow = anchor.row,
+        anchorCol = anchor.col,
+        focusRow = focus.row,
+        focusCol = focus.col,
+    )
+}
+
 private data class PendingPreview(
-    val selection: CellSelection,
+    val selection: RectangleSelection,
     val step: TunerCellStep,
-    val value: Double,
+    val projection: TunerTableProjection,
     val baseRevision: Long,
 )
 
@@ -57,11 +79,17 @@ fun TunerScreen(modifier: Modifier = Modifier) {
     var projection by remember { mutableStateOf(initialProjection.getOrNull()) }
     var errorMessage by remember { mutableStateOf(initialProjection.exceptionOrNull()?.message) }
     var show3d by remember { mutableStateOf(false) }
-    var selection by remember { mutableStateOf<CellSelection?>(null) }
+    var extendSelection by remember { mutableStateOf(false) }
+    var selection by remember { mutableStateOf<RectangleSelection?>(null) }
     var pendingPreview by remember { mutableStateOf<PendingPreview?>(null) }
 
     fun selectCell(row: Int, col: Int) {
-        selection = CellSelection(row, col)
+        val cell = CellSelection(row, col)
+        selection = if (extendSelection && selection != null) {
+            selection?.copy(focus = cell)
+        } else {
+            RectangleSelection(anchor = cell, focus = cell)
+        }
         pendingPreview = null
         errorMessage = null
     }
@@ -70,12 +98,18 @@ fun TunerScreen(modifier: Modifier = Modifier) {
         val selected = selection ?: return
         val current = projection ?: return
         runCatching {
-            OfflineTunerFixture.previewCellStep(selected.row, selected.col, step)
-        }.onSuccess { value ->
+            OfflineTunerFixture.previewRectangleStep(selected.toNative(), step).also { preview ->
+                check(preview.tableId == current.tableId)
+                check(preview.profileGeneration == current.profileGeneration)
+                check(preview.draftRevision == current.draftRevision) {
+                    "Preview revision changed the committed draft."
+                }
+            }
+        }.onSuccess { previewProjection ->
             pendingPreview = PendingPreview(
                 selection = selected,
                 step = step,
-                value = value,
+                projection = previewProjection,
                 baseRevision = current.draftRevision,
             )
             errorMessage = null
@@ -88,9 +122,8 @@ fun TunerScreen(modifier: Modifier = Modifier) {
     fun applyPreview() {
         val preview = pendingPreview ?: return
         runCatching {
-            OfflineTunerFixture.applyCellStep(
-                row = preview.selection.row,
-                col = preview.selection.col,
+            OfflineTunerFixture.applyRectangleStep(
+                rectangle = preview.selection.toNative(),
                 step = preview.step,
                 expectedRevision = preview.baseRevision,
             )
@@ -164,6 +197,15 @@ fun TunerScreen(modifier: Modifier = Modifier) {
                     onClick = { show3d = true },
                     label = { Text(if (show3d) "3D · active" else "3D") },
                 )
+                AssistChip(
+                    onClick = {
+                        extendSelection = !extendSelection
+                        pendingPreview = null
+                    },
+                    label = {
+                        Text(if (extendSelection) "Extend · active" else "Extend selection")
+                    },
+                )
             }
 
             StructuralCard(
@@ -190,20 +232,33 @@ fun TunerScreen(modifier: Modifier = Modifier) {
             StructuralCard(
                 title = "Selection and preview",
                 modifier = Modifier.fillMaxWidth(),
-                subtitle = "Preview is semantic; Apply changes only the offline draft",
+                subtitle = "One rectangle · one semantic transaction · one history entry",
             ) {
                 val selected = selection
                 if (selected == null) {
-                    Text("Select an editable cell in 2D to begin.")
+                    Text("Tap a cell to start a selection. Enable Extend selection, then tap another cell to move the focus corner.")
                 } else {
-                    val index = selected.row * current.cols + selected.col
-                    val committedValue = current.values[index]
+                    val protectedCount = countProtectedCells(current, selected)
                     Text(
-                        "Cell r${selected.row + 1} c${selected.col + 1} · committed ${formatValue(committedValue, current.displayDecimals)}",
+                        "Rows ${selected.firstRow + 1}–${selected.lastRow + 1} · " +
+                            "Cols ${selected.firstCol + 1}–${selected.lastCol + 1} · " +
+                            "${selected.cellCount} cell${if (selected.cellCount == 1) "" else "s"}",
                     )
+                    Text(
+                        "Anchor r${selected.anchor.row + 1} c${selected.anchor.col + 1} · " +
+                            "Focus r${selected.focus.row + 1} c${selected.focus.col + 1}",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    if (protectedCount > 0) {
+                        Text(
+                            "$protectedCount protected cell${if (protectedCount == 1) "" else "s"} included · Rust will reject the whole edit atomically.",
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
                     pendingPreview?.let { preview ->
                         Text(
-                            "Preview ${formatValue(preview.value, current.displayDecimals)} · base revision ${preview.baseRevision}",
+                            "Preview generated by Rust · ${preview.selection.cellCount} cells · base revision ${preview.baseRevision}",
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }
@@ -220,6 +275,16 @@ fun TunerScreen(modifier: Modifier = Modifier) {
                         ) {
                             Text("Apply preview")
                         }
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            selection = null
+                            pendingPreview = null
+                            extendSelection = false
+                            errorMessage = null
+                        },
+                    ) {
+                        Text("Clear selection")
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -250,7 +315,7 @@ fun TunerScreen(modifier: Modifier = Modifier) {
 @Composable
 private fun Table2d(
     projection: TunerTableProjection,
-    selection: CellSelection?,
+    selection: RectangleSelection?,
     preview: PendingPreview?,
     onCellSelected: (Int, Int) -> Unit,
 ) {
@@ -272,24 +337,20 @@ private fun Table2d(
                 TableCell(formatAxis(projection.yAxis[displayRow]), AXIS_WIDTH_DP, header = true)
                 for (col in 0 until projection.cols) {
                     val index = displayRow * projection.cols + col
-                    val cell = CellSelection(displayRow, col)
-                    val selected = selection == cell
-                    val previewValue = preview?.takeIf { it.selection == cell }?.value
+                    val selected = selection?.contains(displayRow, col) == true
+                    val previewed = preview?.selection?.contains(displayRow, col) == true
+                    val displayProjection = preview?.projection ?: projection
                     TableCell(
                         text = formatValue(
-                            previewValue ?: projection.values[index],
+                            displayProjection.values[index],
                             projection.displayDecimals,
                         ),
                         widthDp = CELL_WIDTH_DP,
                         header = false,
                         protected = !projection.editable[index],
                         selected = selected,
-                        previewed = previewValue != null,
-                        onClick = if (projection.editable[index]) {
-                            { onCellSelected(displayRow, col) }
-                        } else {
-                            null
-                        },
+                        previewed = previewed,
+                        onClick = { onCellSelected(displayRow, col) },
                     )
                 }
             }
@@ -308,9 +369,9 @@ private fun TableCell(
     onClick: (() -> Unit)? = null,
 ) {
     val background = when {
-        protected -> MaterialTheme.colorScheme.surfaceVariant
         previewed -> MaterialTheme.colorScheme.tertiaryContainer
         selected -> MaterialTheme.colorScheme.secondaryContainer
+        protected -> MaterialTheme.colorScheme.surfaceVariant
         header -> MaterialTheme.colorScheme.surfaceContainerHigh
         else -> MaterialTheme.colorScheme.surfaceContainerLow
     }
@@ -333,7 +394,7 @@ private fun TableCell(
 @Composable
 private fun Table3d(
     projection: TunerTableProjection,
-    selection: CellSelection?,
+    selection: RectangleSelection?,
     preview: PendingPreview?,
 ) {
     val lineColor = MaterialTheme.colorScheme.primary
@@ -348,13 +409,7 @@ private fun Table3d(
                 .fillMaxWidth()
                 .height(300.dp),
         ) {
-            val displayValues = projection.values.copyOf()
-            preview?.let { pending ->
-                val index = pending.selection.row * projection.cols + pending.selection.col
-                if (index in displayValues.indices) {
-                    displayValues[index] = pending.value
-                }
-            }
+            val displayValues = preview?.projection?.values ?: projection.values
             val minValue = displayValues.minOrNull() ?: 0.0
             val maxValue = displayValues.maxOrNull() ?: minValue
             val span = max(maxValue - minValue, 1e-9)
@@ -385,9 +440,8 @@ private fun Table3d(
             for (row in 0 until projection.rows) {
                 for (col in 0 until projection.cols) {
                     val index = row * projection.cols + col
-                    val cell = CellSelection(row, col)
-                    val isSelected = selection == cell
-                    val isPreviewed = preview?.selection == cell
+                    val isSelected = selection?.contains(row, col) == true
+                    val isPreviewed = preview?.selection?.contains(row, col) == true
                     val pointColor = when {
                         isPreviewed -> previewColor
                         isSelected -> selectedColor
@@ -403,11 +457,26 @@ private fun Table3d(
             }
         }
         Text(
-            "Same table ${projection.tableId} · draft revision ${projection.draftRevision} · shared selection · 3D inspection only",
+            "Same table ${projection.tableId} · draft revision ${projection.draftRevision} · shared rectangular selection · 3D inspection only",
             color = labelColor,
             style = MaterialTheme.typography.bodySmall,
         )
     }
+}
+
+private fun countProtectedCells(
+    projection: TunerTableProjection,
+    selection: RectangleSelection,
+): Int {
+    var count = 0
+    for (row in selection.firstRow..selection.lastRow) {
+        for (col in selection.firstCol..selection.lastCol) {
+            if (!projection.editable[row * projection.cols + col]) {
+                count += 1
+            }
+        }
+    }
+    return count
 }
 
 private fun formatValue(value: Double, decimals: Int): String =
