@@ -1,0 +1,114 @@
+use std::panic::{AssertUnwindSafe, catch_unwind};
+
+use jni::JNIEnv;
+use jni::objects::{JByteBuffer, JObject};
+use jni::sys::{JNI_FALSE, JNI_TRUE, jboolean, jint, jlong};
+
+use crate::diagnostics::DIAGNOSTIC_BATCH_SIZE;
+use crate::engine::{
+    active_engine_count, close_engine, create_engine, diagnostic_batch, engine_is_alive,
+    runtime_snapshot,
+};
+use crate::runtime_snapshot::RUNTIME_SNAPSHOT_SIZE;
+
+const BUFFER_STATUS_OK: jint = 0;
+const BUFFER_STATUS_INVALID_HANDLE: jint = 1;
+const BUFFER_STATUS_NOT_DIRECT: jint = 2;
+const BUFFER_STATUS_TOO_SMALL: jint = 3;
+const BUFFER_STATUS_PANIC: jint = 255;
+
+fn ffi_guard<T: Copy>(fallback: T, operation: impl FnOnce() -> T) -> T {
+    catch_unwind(AssertUnwindSafe(operation)).unwrap_or(fallback)
+}
+
+fn copy_to_direct_buffer(env: &JNIEnv, buffer: &JByteBuffer, bytes: &[u8]) -> jint {
+    let capacity = match env.get_direct_buffer_capacity(buffer) {
+        Ok(capacity) => capacity,
+        Err(_) => return BUFFER_STATUS_NOT_DIRECT,
+    };
+    if capacity < bytes.len() {
+        return BUFFER_STATUS_TOO_SMALL;
+    }
+    let address = match env.get_direct_buffer_address(buffer) {
+        Ok(address) => address,
+        Err(_) => return BUFFER_STATUS_NOT_DIRECT,
+    };
+    unsafe {
+        std::ptr::copy_nonoverlapping(bytes.as_ptr(), address, bytes.len());
+    }
+    BUFFER_STATUS_OK
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_epicefi_epichub_engine_NativeEngineBridge_create(
+    _env: JNIEnv,
+    _object: JObject,
+) -> jlong {
+    ffi_guard(0, create_engine)
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_epicefi_epichub_engine_NativeEngineBridge_close(
+    _env: JNIEnv,
+    _object: JObject,
+    handle: jlong,
+) {
+    ffi_guard((), || close_engine(handle));
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_epicefi_epichub_engine_NativeEngineBridge_isAlive(
+    _env: JNIEnv,
+    _object: JObject,
+    handle: jlong,
+) -> jboolean {
+    ffi_guard(JNI_FALSE, || {
+        if engine_is_alive(handle) {
+            JNI_TRUE
+        } else {
+            JNI_FALSE
+        }
+    })
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_epicefi_epichub_engine_NativeEngineBridge_activeCount(
+    _env: JNIEnv,
+    _object: JObject,
+) -> jint {
+    ffi_guard(0, active_engine_count)
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_epicefi_epichub_engine_NativeEngineBridge_fillRuntimeSnapshot(
+    env: JNIEnv,
+    _object: JObject,
+    handle: jlong,
+    buffer: JByteBuffer,
+) -> jint {
+    ffi_guard(BUFFER_STATUS_PANIC, || {
+        let snapshot = match runtime_snapshot(handle) {
+            Some(snapshot) => snapshot,
+            None => return BUFFER_STATUS_INVALID_HANDLE,
+        };
+        debug_assert_eq!(snapshot.len(), RUNTIME_SNAPSHOT_SIZE);
+        copy_to_direct_buffer(&env, &buffer, &snapshot)
+    })
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_epicefi_epichub_engine_NativeEngineBridge_fillDiagnosticEvents(
+    env: JNIEnv,
+    _object: JObject,
+    handle: jlong,
+    buffer: JByteBuffer,
+) -> jint {
+    ffi_guard(BUFFER_STATUS_PANIC, || {
+        let batch = match diagnostic_batch(handle) {
+            Some(batch) => batch,
+            None => return BUFFER_STATUS_INVALID_HANDLE,
+        };
+        debug_assert_eq!(batch.len(), DIAGNOSTIC_BATCH_SIZE);
+        copy_to_direct_buffer(&env, &buffer, &batch)
+    })
+}
