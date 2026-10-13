@@ -12,6 +12,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -26,9 +30,6 @@ fun Tuner3dSurface(
     selection: TunerRectangleSelection?,
     previewProjection: TunerTableProjection?,
     interactionMode: Tuner3dInteractionMode,
-    camera: Tuner3dCameraState,
-    onCameraGesture: (panX: Double, panY: Double, zoomFactor: Double) -> Unit,
-    onResetCamera: () -> Unit,
     onCellSelected: (row: Int, col: Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -39,6 +40,7 @@ fun Tuner3dSurface(
     val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
     val hitRadiusPx = with(LocalDensity.current) { TUNER_3D_HIT_RADIUS.toPx() }.toDouble()
     val displayValues = previewProjection?.values ?: projection.values
+    var camera by remember { mutableStateOf(Tuner3dCameraState.DEFAULT) }
 
     val pointerModifier = when (interactionMode) {
         Tuner3dInteractionMode.SELECT_EDIT -> Modifier.pointerInput(
@@ -71,10 +73,10 @@ fun Tuner3dSurface(
 
         Tuner3dInteractionMode.INSPECT -> Modifier.pointerInput(projection.tableId) {
             detectTransformGestures { _, pan, zoom, _ ->
-                onCameraGesture(
-                    pan.x.toDouble(),
-                    pan.y.toDouble(),
-                    zoom.toDouble(),
+                camera = camera.applyGesture(
+                    panX = pan.x.toDouble(),
+                    panY = pan.y.toDouble(),
+                    zoomFactor = zoom.toDouble(),
                 )
             }
         }
@@ -150,7 +152,7 @@ fun Tuner3dSurface(
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (interactionMode == Tuner3dInteractionMode.INSPECT) {
-                OutlinedButton(onClick = onResetCamera) {
+                OutlinedButton(onClick = { camera = Tuner3dCameraState.DEFAULT }) {
                     Text("Reset 3D view")
                 }
             }
