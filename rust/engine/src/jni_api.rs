@@ -2,7 +2,7 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use jni::JNIEnv;
 use jni::objects::{JByteBuffer, JObject};
-use jni::sys::{JNI_FALSE, JNI_TRUE, jboolean, jint, jlong};
+use jni::sys::{JNI_FALSE, JNI_TRUE, jboolean, jdouble, jint, jlong};
 
 use crate::diagnostics::DIAGNOSTIC_BATCH_SIZE;
 use crate::engine::{
@@ -10,13 +10,17 @@ use crate::engine::{
     offline_table_projection, runtime_snapshot,
 };
 use crate::runtime_snapshot::RUNTIME_SNAPSHOT_SIZE;
-use crate::tuning_fixture::offline_fixture_projection_bytes;
+use crate::tuning_fixture::{
+    apply_offline_fixture_cell_step, offline_fixture_projection_bytes,
+    preview_offline_fixture_cell_step, redo_offline_fixture, undo_offline_fixture,
+};
 
 const BUFFER_STATUS_OK: jint = 0;
 const BUFFER_STATUS_INVALID_HANDLE: jint = 1;
 const BUFFER_STATUS_NOT_DIRECT: jint = 2;
 const BUFFER_STATUS_TOO_SMALL: jint = 3;
 const BUFFER_STATUS_PANIC: jint = 255;
+const EDIT_STATUS_REJECTED: jlong = -1;
 
 fn ffi_guard<T: Copy>(fallback: T, operation: impl FnOnce() -> T) -> T {
     catch_unwind(AssertUnwindSafe(operation)).unwrap_or(fallback)
@@ -40,6 +44,13 @@ fn copy_to_direct_buffer(env: &JNIEnv, buffer: &JByteBuffer, bytes: &[u8]) -> ji
         std::ptr::copy_nonoverlapping(bytes.as_ptr(), address, bytes.len());
     }
     BUFFER_STATUS_OK
+}
+
+fn edit_revision_or_rejected(result: Result<u64, crate::tuning::TuneError>) -> jlong {
+    result
+        .ok()
+        .and_then(|revision| jlong::try_from(revision).ok())
+        .unwrap_or(EDIT_STATUS_REJECTED)
 }
 
 #[unsafe(no_mangle)]
@@ -164,5 +175,72 @@ pub extern "system" fn Java_com_epicefi_epichub_engine_OfflineTunerFixture_fillP
     ffi_guard(BUFFER_STATUS_PANIC, || {
         let bytes = offline_fixture_projection_bytes();
         copy_to_direct_buffer(&env, &buffer, &bytes)
+    })
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_epicefi_epichub_engine_OfflineTunerFixture_previewCellStep(
+    _env: JNIEnv,
+    _object: JObject,
+    row: jint,
+    col: jint,
+    direction: jint,
+) -> jdouble {
+    ffi_guard(f64::NAN, || {
+        let Ok(row) = usize::try_from(row) else {
+            return f64::NAN;
+        };
+        let Ok(col) = usize::try_from(col) else {
+            return f64::NAN;
+        };
+        preview_offline_fixture_cell_step(row, col, direction).unwrap_or(f64::NAN)
+    })
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_epicefi_epichub_engine_OfflineTunerFixture_applyCellStep(
+    _env: JNIEnv,
+    _object: JObject,
+    row: jint,
+    col: jint,
+    direction: jint,
+    expected_revision: jlong,
+) -> jlong {
+    ffi_guard(EDIT_STATUS_REJECTED, || {
+        let Ok(row) = usize::try_from(row) else {
+            return EDIT_STATUS_REJECTED;
+        };
+        let Ok(col) = usize::try_from(col) else {
+            return EDIT_STATUS_REJECTED;
+        };
+        let Ok(expected_revision) = u64::try_from(expected_revision) else {
+            return EDIT_STATUS_REJECTED;
+        };
+        edit_revision_or_rejected(apply_offline_fixture_cell_step(
+            row,
+            col,
+            direction,
+            expected_revision,
+        ))
+    })
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_epicefi_epichub_engine_OfflineTunerFixture_undo(
+    _env: JNIEnv,
+    _object: JObject,
+) -> jlong {
+    ffi_guard(EDIT_STATUS_REJECTED, || {
+        edit_revision_or_rejected(undo_offline_fixture())
+    })
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_epicefi_epichub_engine_OfflineTunerFixture_redo(
+    _env: JNIEnv,
+    _object: JObject,
+) -> jlong {
+    ffi_guard(EDIT_STATUS_REJECTED, || {
+        edit_revision_or_rejected(redo_offline_fixture())
     })
 }
