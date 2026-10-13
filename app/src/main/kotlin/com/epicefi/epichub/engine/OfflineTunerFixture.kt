@@ -20,6 +20,11 @@ enum class TunerInterpolationMode(val nativeCode: Int) {
     TWO_DIMENSIONAL(2),
 }
 
+enum class TunerBrushPullMode(val nativeCode: Int) {
+    BRUSH_STROKE(0),
+    PULL_DEFORM(1),
+}
+
 data class TunerRectangle(
     val anchorRow: Int,
     val anchorCol: Int,
@@ -205,6 +210,62 @@ object OfflineTunerFixture {
         }
     }
 
+    fun previewBrushPull(
+        rectangle: TunerRectangle,
+        mode: TunerBrushPullMode,
+        delta: String,
+        radiusCells: String,
+        strengthPercent: String,
+        falloffExponent: String,
+    ): TunerTableProjection {
+        val buffer = projectionBuffer()
+        val status = fillBrushPullPreviewNative(
+            rectangle.anchorRow,
+            rectangle.anchorCol,
+            rectangle.focusRow,
+            rectangle.focusCol,
+            mode.nativeCode,
+            delta,
+            radiusCells,
+            strengthPercent,
+            falloffExponent,
+            buffer,
+        )
+        check(status == NATIVE_BUFFER_STATUS_OK) {
+            "Offline Tuner Brush/Pull preview was rejected with status $status."
+        }
+        return TunerTableProjectionDecoder.decode(buffer)
+    }
+
+    fun applyBrushPull(
+        rectangle: TunerRectangle,
+        mode: TunerBrushPullMode,
+        delta: String,
+        radiusCells: String,
+        strengthPercent: String,
+        falloffExponent: String,
+        expectedRevision: Long,
+    ): TunerTableProjection {
+        val revision = applyBrushPullNative(
+            rectangle.anchorRow,
+            rectangle.anchorCol,
+            rectangle.focusRow,
+            rectangle.focusCol,
+            mode.nativeCode,
+            delta,
+            radiusCells,
+            strengthPercent,
+            falloffExponent,
+            expectedRevision,
+        )
+        check(revision >= 0L) { "Offline Tuner Brush/Pull edit was rejected or stale." }
+        return readProjection().also { projection ->
+            check(projection.draftRevision == revision) {
+                "Offline Tuner projection revision did not match the applied Brush/Pull edit."
+            }
+        }
+    }
+
     fun undoProjection(): TunerTableProjection {
         val revision = undoNative()
         check(revision >= 0L) { "Offline Tuner undo is unavailable." }
@@ -293,6 +354,30 @@ object OfflineTunerFixture {
         focusRow: Int,
         focusCol: Int,
         strengthPercent: String,
+        expectedRevision: Long,
+    ): Long
+    private external fun fillBrushPullPreviewNative(
+        anchorRow: Int,
+        anchorCol: Int,
+        focusRow: Int,
+        focusCol: Int,
+        modeCode: Int,
+        delta: String,
+        radiusCells: String,
+        strengthPercent: String,
+        falloffExponent: String,
+        buffer: ByteBuffer,
+    ): Int
+    private external fun applyBrushPullNative(
+        anchorRow: Int,
+        anchorCol: Int,
+        focusRow: Int,
+        focusCol: Int,
+        modeCode: Int,
+        delta: String,
+        radiusCells: String,
+        strengthPercent: String,
+        falloffExponent: String,
         expectedRevision: Long,
     ): Long
     private external fun undoNative(): Long
