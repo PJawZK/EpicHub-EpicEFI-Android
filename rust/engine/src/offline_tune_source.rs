@@ -1,6 +1,4 @@
-use crate::tuning::{
-    TableDescriptor, TableSnapshot, TuneSnapshot, TuneSnapshotOrigin,
-};
+use crate::tuning::{TableDescriptor, TableSnapshot, TuneSnapshot, TuneSnapshotOrigin};
 
 pub const OFFLINE_SOURCE_PROFILE_GENERATION: u64 = 42;
 pub const OFFLINE_SOURCE_PRIMARY_TABLE_ID: u32 = 7;
@@ -25,8 +23,8 @@ pub fn offline_source_snapshot() -> TuneSnapshot {
             x_axis: vec![1000.0, 2000.0, 3000.0, 4000.0, 5000.0],
             y_axis: vec![30.0, 60.0, 100.0, 150.0],
             values: vec![
-                42.0, 46.0, 50.0, 54.0, 57.0, 50.0, 56.0, 62.0, 68.0, 72.0, 62.0, 70.0,
-                78.0, 86.0, 92.0, 72.0, 82.0, 92.0, 102.0, 110.0,
+                42.0, 46.0, 50.0, 54.0, 57.0, 50.0, 56.0, 62.0, 68.0, 72.0, 62.0, 70.0, 78.0, 86.0,
+                92.0, 72.0, 82.0, 92.0, 102.0, 110.0,
             ],
             editable: vec![
                 true, true, true, true, true, true, true, true, true, true, true, true, true, true,
