@@ -6,3 +6,4 @@ mod runtime_snapshot;
 mod table_projection_abi;
 pub mod tuning;
 mod tuning_fixture;
+mod tuning_interpolation;
