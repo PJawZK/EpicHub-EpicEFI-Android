@@ -125,36 +125,48 @@ Covers manual and automatic logging, named Data Log Profiles, definition-driven 
 
 Covers reusable semantic comparison between working tune, ECU, saved tune and historical checkpoints; non-mutating difference reports followed by explicit authority resolution; object/table-aware diff requirements; validation-generated differences; event-driven full-state restore points; deduplication and storage retention; guarded restore loading; pre-firmware-upgrade preservation; and typed cross-profile migration classifications.
 
+### 7. Project migration / compatibility / firmware upgrades
+
+`PROJECT_MIGRATION_FIRMWARE_UPGRADES.md`
+
+Covers project-local profile authority across firmware changes, explicit separation of flashing from project migration, project-local overrides, pre-upgrade archives and firmware-provenance boundaries, compatibility-aware tune restoration, migration/validation provenance, separate sensor-calibration handling, partial/object-level migration, non-tune project-state migration, atomic source/destination project generations, and ordered rollback requirements.
+
 Important conclusions include:
 
-- comparison is observational and separate from mutation;
-- one semantic diff service should compare any two compatible tune authorities/checkpoints;
-- restore points are durable comparable history, not merely backup files;
-- checkpoints should be created around meaningful transitions and deduplicated when tune content is unchanged;
-- tune-import normalization must retain provenance so later differences can be explained;
-- firmware/profile migration needs explicit mapping and a preserved pre-migration snapshot;
-- ambiguous labels such as `current`, `saved` and `original` should be replaced with explicit authority labels.
+- flashing firmware does not itself migrate the project or prove tune compatibility;
+- a project must retain its own profile generation until an explicit migration succeeds;
+- project archives preserve broad application/project state but must not be represented as firmware-image backups unless the binary is actually included;
+- migration needs per-setting/object classification and provenance for all automatic transforms;
+- sensor/controller calibration assets can have lifecycle semantics distinct from ordinary tune settings;
+- dashboards, log profiles, calculated channels and history need independent schema migration and may be partially compatible even when the tune itself migrates successfully;
+- the source project/profile generation must remain available for rollback and comparison.
 
 ## Running backlog
 
-`EPICHUB_BACKLOG.md`
+`EPICHUB_BACKLOG.md` contains EH-TS-001 through EH-TS-064.
 
-The main backlog currently runs through **EH-TS-064**. Compare/history findings are documented in the slice above and should be consolidated into the numbered backlog at the next backlog-maintenance checkpoint; the research document is authoritative in the meantime.
+Additional reviewed backlog extensions are currently kept separate to avoid destructive large-file rewrites during research:
+
+- `EPICHUB_BACKLOG_COMPARE_HISTORY.md` — EH-TS-065 through EH-TS-076;
+- `EPICHUB_BACKLOG_MIGRATION.md` — EH-TS-077 through EH-TS-090.
+
+They should be consolidated into one ordered backlog during the final research-maintenance pass.
 
 ## Next research slice
 
-Proceed to **project migration/compatibility and firmware upgrades**.
+Proceed to **large-project/table/log performance and cache behavior**.
 
 High-value questions include:
 
-- project/profile version provenance across upgrades;
-- firmware-definition replacement and migration boundaries;
-- setting rename/add/remove/scale transformations;
-- sensor calibration restoration;
-- unsupported or ambiguous settings;
-- rollback after failed migration;
-- project archive/backup behavior;
-- compatibility of dashboards/log profiles/history with a migrated ECU profile;
-- how EpicHub should version migration rules without turning raw INI structure into product architecture.
+- project-open/profile-parse cost and caching;
+- large tune/table editor responsiveness;
+- runtime-channel/calculated-channel scaling;
+- dashboard hidden/visible work suppression;
+- long-log memory and indexing behavior;
+- comparison/diff cost for large tunes;
+- restore/history storage growth;
+- resource/cache invalidation after profile or project changes;
+- whether any mature TunerStudio cache behavior reveals failure modes EpicHub should explicitly avoid;
+- concrete performance/regression budgets that fit EpicHub's existing `phase2/performance-foundation` work.
 
 The research branch intentionally contains documentation/specification only until a reviewed finding is explicitly accepted for implementation.
