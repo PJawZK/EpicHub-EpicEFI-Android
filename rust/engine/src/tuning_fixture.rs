@@ -5,9 +5,7 @@ use crate::tuning::{
     CellCoord, TableDescriptor, TableEditCommand, TableEditOperation, TableProjection,
     TableSnapshot, TuneDraft, TuneError, TuneSnapshot, TuneSnapshotOrigin,
 };
-use crate::tuning_interpolation::{
-    TableInterpolationMode, TableRectangle, preview_interpolation,
-};
+use crate::tuning_interpolation::{TableInterpolationMode, TableRectangle, preview_interpolation};
 
 pub const OFFLINE_FIXTURE_PROFILE_GENERATION: u64 = 42;
 pub const OFFLINE_FIXTURE_PRIMARY_TABLE_ID: u32 = 7;
@@ -463,7 +461,10 @@ mod tests {
 
     #[test]
     fn interpolation_mode_codes_are_typed_in_rust() {
-        assert_eq!(interpolation_mode(0), Ok(TableInterpolationMode::Horizontal));
+        assert_eq!(
+            interpolation_mode(0),
+            Ok(TableInterpolationMode::Horizontal)
+        );
         assert_eq!(interpolation_mode(1), Ok(TableInterpolationMode::Vertical));
         assert_eq!(
             interpolation_mode(2),
