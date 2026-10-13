@@ -18,4 +18,10 @@ mod tuning_fixture {
         OFFLINE_SOURCE_PRIMARY_TABLE_ID as OFFLINE_FIXTURE_PRIMARY_TABLE_ID,
         offline_source_snapshot as offline_fixture_snapshot,
     };
+    use crate::tuning::TuneDraft;
+
+    pub fn offline_fixture_draft() -> TuneDraft {
+        let snapshot = offline_fixture_snapshot();
+        TuneDraft::from_snapshot(&snapshot)
+    }
 }
