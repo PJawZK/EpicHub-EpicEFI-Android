@@ -84,7 +84,9 @@ class TunerTableProjectionDecoderTest {
             doubleArrayOf(50.0, 55.0, 60.0, 70.0, 75.0, 80.0).forEachIndexed { index, value ->
                 putDouble(valuesOffset + index * Double.SIZE_BYTES, value)
             }
-            repeat(6) { index -> put(editableOffset + index, if (index == 4) 0 else 1) }
+            repeat(6) { index ->
+                put(editableOffset + index, if (index == 4) 0.toByte() else 1.toByte())
+            }
         }
     }
 }
