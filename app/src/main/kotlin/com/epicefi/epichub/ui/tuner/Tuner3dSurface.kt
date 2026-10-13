@@ -202,7 +202,12 @@ fun Tuner3dSurface(
                     pixelsPerStep = pullPixelsPerStep,
                     editIncrement = projection.editIncrement,
                 )
-                if (delta != null && delta != lastDelta) {
+                if (delta == null) {
+                    if (lastDelta != null) {
+                        lastDelta = null
+                        onCommand(TunerCommand.CancelPreview)
+                    }
+                } else if (delta != lastDelta) {
                     lastDelta = delta
                     onCellSelected(center.row, center.col)
                     onCommand(
