@@ -431,7 +431,7 @@ fun TunerScreen(modifier: Modifier = Modifier) {
                         dispatch(TunerCommand.CancelBrushStroke)
                     },
                     label = {
-                        Text(if (brushGestureEnabled) "Brush draw · active" else "Brush draw")
+                        Text(if (brushGestureEnabled) "Direct gesture · active" else "Direct gesture")
                     },
                 )
             }
@@ -486,6 +486,10 @@ fun TunerScreen(modifier: Modifier = Modifier) {
                             tableFocusRequester.requestFocus()
                             dispatch(TunerCommand.SelectCell(row, col))
                         },
+                        directEditGestureEnabled = brushGestureEnabled,
+                        brushPullMode = brushPullMode,
+                        brushParameters = brushStrokeParameters(),
+                        onCommand = ::dispatch,
                     )
                 } else {
                     Table2d(
@@ -504,14 +508,28 @@ fun TunerScreen(modifier: Modifier = Modifier) {
                 }
                 Text(
                     when {
+                        show3d &&
+                            threeDInteractionMode == Tuner3dInteractionMode.SELECT_EDIT &&
+                            brushGestureEnabled &&
+                            brushPullMode == TunerBrushPullMode.BRUSH_STROKE ->
+                            "3D Brush gesture: drag across projected vertices to build the same routed Brush path used by 2D. Release keeps the Rust preview; Apply commits one history transaction."
+
+                        show3d &&
+                            threeDInteractionMode == Tuner3dInteractionMode.SELECT_EDIT &&
+                            brushGestureEnabled ->
+                            "3D Pull gesture: drag a visible mesh vertex up/down. Each 18 dp step requests one table edit-increment of Pull displacement; Rust owns quantization, bounds and the prospective surface."
+
                         show3d && threeDInteractionMode == Tuner3dInteractionMode.SELECT_EDIT ->
                             "3D Select/Edit: tap a visible mesh vertex to route the same cell-selection command used by 2D. Keyboard edit commands then use the shared selection."
 
                         show3d ->
-                            "3D Inspect: pointer/touch selection is disabled. Switch to Select/Edit to route mesh hits into the shared command router."
+                            "3D Inspect: drag/pinch controls the presentation-only camera. Switch to Select/Edit for selection or direct Brush/Pull gestures."
+
+                        brushGestureEnabled && brushPullMode == TunerBrushPullMode.BRUSH_STROKE ->
+                            "2D Brush gesture: drag across cells to build one previewed stroke. Release keeps the preview; Apply commits it as one history transaction."
 
                         brushGestureEnabled ->
-                            "Brush draw: drag across the 2D cells to build one previewed stroke. Release keeps the preview; Apply commits it as one history transaction."
+                            "Direct Pull gesture is currently available in 3D Select/Edit. The ordinary Preview Pull button remains available in 2D."
 
                         else ->
                             "Keyboard: arrows move · Shift+arrows extend · +/− preview step · Enter apply · Esc cancel · Ctrl+Z undo · Ctrl+Y or Ctrl+Shift+Z redo"
@@ -527,7 +545,7 @@ fun TunerScreen(modifier: Modifier = Modifier) {
             ) {
                 val selected = selection
                 if (selected == null) {
-                    Text("Tap a cell to start a selection. Arrow keys also create a deterministic starting selection. Enable Extend selection, Shift+Arrow, or Brush draw for routed pointer input.")
+                    Text("Tap a cell to start a selection. Arrow keys also create a deterministic starting selection. Enable Extend selection, Shift+Arrow, or Direct gesture for routed pointer input.")
                 } else {
                     val protectedCount = countProtectedCells(current, selected)
                     Text(
@@ -692,9 +710,6 @@ fun TunerScreen(modifier: Modifier = Modifier) {
                             AssistChip(
                                 onClick = {
                                     brushPullMode = mode
-                                    if (mode != TunerBrushPullMode.BRUSH_STROKE) {
-                                        brushGestureEnabled = false
-                                    }
                                     dispatch(TunerCommand.CancelPreview)
                                 },
                                 label = {
@@ -718,7 +733,9 @@ fun TunerScreen(modifier: Modifier = Modifier) {
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         label = { Text("Value displacement") },
-                        supportingText = { Text("Signed delta; parsed and quantized by Rust.") },
+                        supportingText = {
+                            Text("Signed delta for buttons/2D Brush. Direct 3D Pull derives displacement from vertical edit-increment steps; Rust still validates the requested result.")
+                        },
                     )
                     OutlinedTextField(
                         value = brushPullRadius,
