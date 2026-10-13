@@ -14,6 +14,7 @@ Current Phase-2 work establishes the application shell, native Tuning Tools, fou
 - `UI_FOUNDATION_LAYOUT.md` — four primary workspaces, six distinct functional/domain routes, four presentation-authority classes and diagnostics/control separation.
 - `TUNING_TOOLS_FOUNDATION.md` — native replacement for historical AE/PID/TCharge/Injection-Angle plugin packaging and the UI/runtime ownership contract for those tools.
 - `DIAGNOSTICS_CAPTURE_FOUNDATION.md` — typed diagnostics, bounded flight recorder and problem-capture foundation.
+- `TUNER_3D_EDITING_CONTRACT.md` — accepted semantic contract satisfying D-016's condition for direct 3D editing while keeping camera/mesh state presentation-owned and all tune mutation/history Rust-owned.
 - `../HANDOFF.md` — single current development continuation index.
 
 Phase-1 closure/history:
@@ -65,6 +66,10 @@ Likewise, historical TunerStudio plugin/JAR packaging is evidence only. D-024 ma
 - `UI_FOUNDATION_LAYOUT.md` — concrete workspace/route/presentation contract before real feature depth.
 - `TUNING_TOOLS_FOUNDATION.md` — native guided tuning-tool surface and shared Rust-analysis integration.
 - `DIAGNOSTICS_CAPTURE_FOUNDATION.md` — concrete diagnostic flight-recorder/capture/export foundation before real subsystem complexity.
+- `TUNER_TABLE_PROJECTION.md` — representation-neutral Rust table projection shared by native 2D and 3D views.
+- `TUNER_COMMAND_ROUTER.md` — shared table command/selection/input convergence layer.
+- `TUNER_POINTER_BRUSH.md` — continuous 2D pointer Brush routing and coalescing contract.
+- `TUNER_3D_EDITING_CONTRACT.md` — direct 3D selection/edit input contract over the same command router, preview and TuneDraft authority.
 
 ## Authority interpretation
 
@@ -74,7 +79,7 @@ When documents differ in level of detail:
 2. `RUNTIME_LANGUAGE_AND_SERIALIZATION.md` defines the D-023 language/runtime/serialization boundary.
 3. protocol/source truth is resolved by `PROTOCOL_AUTHORITIES.md` plus direct evidence documents.
 4. `STATE_OWNERSHIP.md`, `DEPENDENCY_RULES.md`, `DATA_FLOW.md`, `KOTLIN_RUST_BOUNDARY.md`, `ACTION_MODEL.md` and `SAFETY_BOUNDARIES.md` define cross-domain contracts.
-5. Phase-2 implementation contracts such as `UI_FOUNDATION_LAYOUT.md`, `TUNING_TOOLS_FOUNDATION.md` and `DIAGNOSTICS_CAPTURE_FOUNDATION.md` refine the accepted architecture for implementation but may not override durable decisions.
+5. Phase-2 implementation contracts such as `UI_FOUNDATION_LAYOUT.md`, `TUNING_TOOLS_FOUNDATION.md`, `DIAGNOSTICS_CAPTURE_FOUNDATION.md` and `TUNER_3D_EDITING_CONTRACT.md` refine the accepted architecture for implementation but may not override durable decisions. `TUNER_3D_EDITING_CONTRACT.md` specifically satisfies the extension condition already stated by D-016; it does not replace D-016's semantic/presentation state separation.
 6. `CODEBASE_TOPOLOGY.md` maps those contracts into current/planned homes; it must not override them.
 7. evidence documents explain why a decision exists but do not silently supersede a later durable decision.
 8. `GAP_ANALYSIS.md` identifies work still open; an open implementation/benchmark gap does not negate an already-locked ownership boundary.
