@@ -4,6 +4,7 @@ mod engine;
 mod jni_api;
 mod jni_brush_pull;
 mod jni_smoothing;
+mod offline_tune_source;
 mod runtime_snapshot;
 mod table_projection_abi;
 mod tune_session;
