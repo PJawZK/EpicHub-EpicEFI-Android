@@ -6,6 +6,7 @@ use crate::tuning::{
     TableSnapshot, TuneDraft, TuneError, TuneSnapshot, TuneSnapshotOrigin,
 };
 use crate::tuning_interpolation::{TableInterpolationMode, TableRectangle, preview_interpolation};
+use crate::tuning_smoothing::{TableSmoothingParameters, preview_smoothing};
 
 pub const OFFLINE_FIXTURE_PROFILE_GENERATION: u64 = 42;
 pub const OFFLINE_FIXTURE_PRIMARY_TABLE_ID: u32 = 7;
@@ -148,7 +149,7 @@ pub fn preview_offline_fixture_interpolation_bytes(
         let preview = preview_interpolation(
             draft,
             OFFLINE_FIXTURE_PRIMARY_TABLE_ID,
-            interpolation_rectangle(anchor_row, anchor_col, focus_row, focus_col),
+            table_rectangle(anchor_row, anchor_col, focus_row, focus_col),
             interpolation_mode(mode_code)?,
         )?;
         Ok(encode_primary_projection(draft, Some(&preview.changes)))
@@ -170,8 +171,48 @@ pub fn apply_offline_fixture_interpolation(
         let preview = preview_interpolation(
             draft,
             OFFLINE_FIXTURE_PRIMARY_TABLE_ID,
-            interpolation_rectangle(anchor_row, anchor_col, focus_row, focus_col),
+            table_rectangle(anchor_row, anchor_col, focus_row, focus_col),
             interpolation_mode(mode_code)?,
+        )?;
+        draft.commit_preview(preview)
+    })
+}
+
+pub fn preview_offline_fixture_smoothing_bytes(
+    anchor_row: usize,
+    anchor_col: usize,
+    focus_row: usize,
+    focus_col: usize,
+    strength_text: &str,
+) -> Result<Vec<u8>, TuneError> {
+    with_offline_fixture(|draft| {
+        let preview = preview_smoothing(
+            draft,
+            OFFLINE_FIXTURE_PRIMARY_TABLE_ID,
+            table_rectangle(anchor_row, anchor_col, focus_row, focus_col),
+            smoothing_parameters(strength_text)?,
+        )?;
+        Ok(encode_primary_projection(draft, Some(&preview.changes)))
+    })
+}
+
+pub fn apply_offline_fixture_smoothing(
+    anchor_row: usize,
+    anchor_col: usize,
+    focus_row: usize,
+    focus_col: usize,
+    strength_text: &str,
+    expected_revision: u64,
+) -> Result<u64, TuneError> {
+    with_offline_fixture(|draft| {
+        if draft.revision() != expected_revision {
+            return Err(TuneError::StalePreview);
+        }
+        let preview = preview_smoothing(
+            draft,
+            OFFLINE_FIXTURE_PRIMARY_TABLE_ID,
+            table_rectangle(anchor_row, anchor_col, focus_row, focus_col),
+            smoothing_parameters(strength_text)?,
         )?;
         draft.commit_preview(preview)
     })
@@ -224,7 +265,7 @@ fn rectangle_cells(
     cells
 }
 
-fn interpolation_rectangle(
+fn table_rectangle(
     anchor_row: usize,
     anchor_col: usize,
     focus_row: usize,
@@ -245,6 +286,17 @@ fn interpolation_mode(code: i32) -> Result<TableInterpolationMode, TuneError> {
         2 => Ok(TableInterpolationMode::TwoDimensional),
         _ => Err(TuneError::EmptySelection),
     }
+}
+
+fn smoothing_parameters(strength_text: &str) -> Result<TableSmoothingParameters, TuneError> {
+    let strength_percent = strength_text
+        .trim()
+        .parse::<f64>()
+        .map_err(|_| TuneError::NonFiniteValue)?;
+    if !strength_percent.is_finite() {
+        return Err(TuneError::NonFiniteValue);
+    }
+    Ok(TableSmoothingParameters { strength_percent })
 }
 
 fn rectangle_step_command(
@@ -471,5 +523,19 @@ mod tests {
             Ok(TableInterpolationMode::TwoDimensional)
         );
         assert_eq!(interpolation_mode(3), Err(TuneError::EmptySelection));
+    }
+
+    #[test]
+    fn smoothing_strength_is_parsed_in_rust() {
+        assert_eq!(
+            smoothing_parameters(" 50.5 "),
+            Ok(TableSmoothingParameters {
+                strength_percent: 50.5,
+            })
+        );
+        assert_eq!(
+            smoothing_parameters("not-a-number"),
+            Err(TuneError::NonFiniteValue)
+        );
     }
 }
