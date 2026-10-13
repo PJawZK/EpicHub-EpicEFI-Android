@@ -320,7 +320,31 @@ TuneDraft edit
 
 ---
 
-# 5. Regression consequences
+# 5. Dashboard/runtime-channel interaction with table overlays
+
+The dashboard/runtime-channel research reinforces the Table Lab's state separation.
+
+Live table overlays should consume the same semantic runtime-channel system used by dashboards, logging, diagnostics, warnings, and analyzers.
+
+That implies two deliberately separate timing/state domains:
+
+```text
+TuneDraft / table calibration state
+    slow-changing, editable, historical
+
+Runtime lookup overlay
+    high-rate, session-scoped, validity-aware
+```
+
+A live RPM/load marker, lookup contributors, or history trail must not require rebuilding, serializing, or crossing JNI with the entire table on every runtime sample.
+
+When the table/3D screen is hidden, presentation demand for lookup overlays may be released, but this must not implicitly stop ECU acquisition or source channels still required by logger, diagnostics, warnings, analyzers, or other consumers.
+
+**Decision: KEEP and strengthen the Lab boundary.**
+
+---
+
+# 6. Regression consequences
 
 The pre-existing Lab regression requirements remain mandatory:
 
@@ -348,11 +372,13 @@ Add TunerStudio-derived regression coverage for:
 9. local edit checkpoint does not imply ECU RAM write;
 10. ECU RAM write does not imply Burn/nonvolatile persistence;
 11. switching 2D↔3D during preview/history/live overlay cannot fork tune state;
-12. direct 3D editing produces the same semantic history/diff as equivalent 2D editing.
+12. direct 3D editing produces the same semantic history/diff as equivalent 2D editing;
+13. high-rate runtime lookup updates do not mutate or reallocate the TuneDraft;
+14. hiding the table/3D screen releases presentation demand without breaking independent runtime consumers.
 
 ---
 
-# 6. Status interpretation
+# 7. Status interpretation
 
 TunerStudio research comparison markers describe the **current production EpicHub implementation**, not merely whether an idea existed in a prototype.
 
