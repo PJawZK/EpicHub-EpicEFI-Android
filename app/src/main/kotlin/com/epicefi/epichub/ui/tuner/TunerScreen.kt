@@ -31,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.dp
 import com.epicefi.epichub.engine.OfflineTunerFixture
+import com.epicefi.epichub.engine.TunerBrushPullMode
 import com.epicefi.epichub.engine.TunerCellStep
 import com.epicefi.epichub.engine.TunerInterpolationMode
 import com.epicefi.epichub.engine.TunerNumericOperation
@@ -80,6 +81,14 @@ private sealed interface PendingOperation {
     data class Interpolation(val mode: TunerInterpolationMode) : PendingOperation
 
     data class Smoothing(val strengthPercent: String) : PendingOperation
+
+    data class BrushPull(
+        val mode: TunerBrushPullMode,
+        val delta: String,
+        val radiusCells: String,
+        val strengthPercent: String,
+        val falloffExponent: String,
+    ) : PendingOperation
 }
 
 private data class PendingPreview(
@@ -101,6 +110,11 @@ fun TunerScreen(modifier: Modifier = Modifier) {
     var numericOperation by remember { mutableStateOf(TunerNumericOperation.SET) }
     var numericOperand by remember { mutableStateOf("") }
     var smoothingStrength by remember { mutableStateOf("50") }
+    var brushPullMode by remember { mutableStateOf(TunerBrushPullMode.BRUSH_STROKE) }
+    var brushPullDelta by remember { mutableStateOf("5") }
+    var brushPullRadius by remember { mutableStateOf("1") }
+    var brushPullStrength by remember { mutableStateOf("100") }
+    var brushPullFalloff by remember { mutableStateOf("1") }
 
     fun selectCell(row: Int, col: Int) {
         val cell = CellSelection(row, col)
@@ -218,6 +232,40 @@ fun TunerScreen(modifier: Modifier = Modifier) {
         }
     }
 
+    fun previewBrushPull() {
+        val selected = selection ?: return
+        val current = projection ?: return
+        runCatching {
+            OfflineTunerFixture.previewBrushPull(
+                rectangle = selected.toNative(),
+                mode = brushPullMode,
+                delta = brushPullDelta,
+                radiusCells = brushPullRadius,
+                strengthPercent = brushPullStrength,
+                falloffExponent = brushPullFalloff,
+            ).also { preview ->
+                validatePreview(current, preview)
+            }
+        }.onSuccess { previewProjection ->
+            pendingPreview = PendingPreview(
+                selection = selected,
+                operation = PendingOperation.BrushPull(
+                    mode = brushPullMode,
+                    delta = brushPullDelta,
+                    radiusCells = brushPullRadius,
+                    strengthPercent = brushPullStrength,
+                    falloffExponent = brushPullFalloff,
+                ),
+                projection = previewProjection,
+                baseRevision = current.draftRevision,
+            )
+            errorMessage = null
+        }.onFailure { error ->
+            pendingPreview = null
+            errorMessage = error.message ?: "Brush/Pull preview rejected."
+        }
+    }
+
     fun applyPreview() {
         val preview = pendingPreview ?: return
         runCatching {
@@ -244,6 +292,16 @@ fun TunerScreen(modifier: Modifier = Modifier) {
                 is PendingOperation.Smoothing -> OfflineTunerFixture.applySmoothing(
                     rectangle = preview.selection.toNative(),
                     strengthPercent = operation.strengthPercent,
+                    expectedRevision = preview.baseRevision,
+                )
+
+                is PendingOperation.BrushPull -> OfflineTunerFixture.applyBrushPull(
+                    rectangle = preview.selection.toNative(),
+                    mode = operation.mode,
+                    delta = operation.delta,
+                    radiusCells = operation.radiusCells,
+                    strengthPercent = operation.strengthPercent,
+                    falloffExponent = operation.falloffExponent,
                     expectedRevision = preview.baseRevision,
                 )
             }
@@ -352,7 +410,7 @@ fun TunerScreen(modifier: Modifier = Modifier) {
             StructuralCard(
                 title = "Selection and preview",
                 modifier = Modifier.fillMaxWidth(),
-                subtitle = "One rectangle · one semantic transaction · one history entry",
+                subtitle = "Shared selection · Rust preview · one history transaction",
             ) {
                 val selected = selection
                 if (selected == null) {
@@ -371,14 +429,14 @@ fun TunerScreen(modifier: Modifier = Modifier) {
                     )
                     if (protectedCount > 0) {
                         Text(
-                            "$protectedCount protected cell${if (protectedCount == 1) "" else "s"} included · Rust will reject the whole edit atomically.",
+                            "$protectedCount protected cell${if (protectedCount == 1) "" else "s"} inside the rectangle. Rectangle transforms reject protected targets; Brush/Pull keeps pinned cells fixed.",
                             color = MaterialTheme.colorScheme.error,
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }
                     pendingPreview?.let { preview ->
                         Text(
-                            "Preview generated by Rust · ${preview.selection.cellCount} cells · " +
+                            "Preview generated by Rust · ${changedCellCount(current, preview.projection)} changed cells · " +
                                 "${operationLabel(preview.operation)} · base revision ${preview.baseRevision}",
                             style = MaterialTheme.typography.bodySmall,
                         )
@@ -487,6 +545,89 @@ fun TunerScreen(modifier: Modifier = Modifier) {
                         Text("Preview smoothing")
                     }
 
+                    Text("Brush / Pull", style = MaterialTheme.typography.labelLarge)
+                    Text(
+                        "Brush sweeps from anchor to focus. Pull is a rubber-sheet deformation centered on focus. Radius and falloff are grid-space edit weights, not ECU lookup weights.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TunerBrushPullMode.entries.forEach { mode ->
+                            AssistChip(
+                                onClick = {
+                                    brushPullMode = mode
+                                    pendingPreview = null
+                                    errorMessage = null
+                                },
+                                label = {
+                                    Text(
+                                        if (brushPullMode == mode) {
+                                            "${brushPullModeLabel(mode)} · active"
+                                        } else {
+                                            brushPullModeLabel(mode)
+                                        },
+                                    )
+                                },
+                            )
+                        }
+                    }
+                    OutlinedTextField(
+                        value = brushPullDelta,
+                        onValueChange = {
+                            brushPullDelta = it
+                            pendingPreview = null
+                            errorMessage = null
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        label = { Text("Value displacement") },
+                        supportingText = { Text("Signed delta; parsed and quantized by Rust.") },
+                    )
+                    OutlinedTextField(
+                        value = brushPullRadius,
+                        onValueChange = {
+                            brushPullRadius = it
+                            pendingPreview = null
+                            errorMessage = null
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        label = { Text("Radius · cells") },
+                        supportingText = { Text("Inclusive Euclidean radius in table index space; 0 affects only the stroke/center.") },
+                    )
+                    OutlinedTextField(
+                        value = brushPullStrength,
+                        onValueChange = {
+                            brushPullStrength = it
+                            pendingPreview = null
+                            errorMessage = null
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        label = { Text("Strength %") },
+                        supportingText = { Text("Rust accepts >0 through 100.") },
+                    )
+                    OutlinedTextField(
+                        value = brushPullFalloff,
+                        onValueChange = {
+                            brushPullFalloff = it
+                            pendingPreview = null
+                            errorMessage = null
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        label = { Text("Falloff exponent") },
+                        supportingText = { Text("0 = hard, 1 = linear, 2 = softer edge; Rust accepts 0 through 8.") },
+                    )
+                    OutlinedButton(
+                        enabled = brushPullDelta.isNotBlank() &&
+                            brushPullRadius.isNotBlank() &&
+                            brushPullStrength.isNotBlank() &&
+                            brushPullFalloff.isNotBlank(),
+                        onClick = ::previewBrushPull,
+                    ) {
+                        Text("Preview ${brushPullModeLabel(brushPullMode)}")
+                    }
+
                     OutlinedButton(
                         onClick = {
                             selection = null
@@ -549,8 +690,10 @@ private fun Table2d(
                 for (col in 0 until projection.cols) {
                     val index = displayRow * projection.cols + col
                     val selected = selection?.contains(displayRow, col) == true
-                    val previewed = preview?.selection?.contains(displayRow, col) == true
                     val displayProjection = preview?.projection ?: projection
+                    val previewed = preview?.let {
+                        it.projection.values[index] != projection.values[index]
+                    } == true
                     TableCell(
                         text = formatValue(
                             displayProjection.values[index],
@@ -652,7 +795,9 @@ private fun Table3d(
                 for (col in 0 until projection.cols) {
                     val index = row * projection.cols + col
                     val isSelected = selection?.contains(row, col) == true
-                    val isPreviewed = preview?.selection?.contains(row, col) == true
+                    val isPreviewed = preview?.let {
+                        it.projection.values[index] != projection.values[index]
+                    } == true
                     val pointColor = when {
                         isPreviewed -> previewColor
                         isSelected -> selectedColor
@@ -668,7 +813,7 @@ private fun Table3d(
             }
         }
         Text(
-            "Same table ${projection.tableId} · draft revision ${projection.draftRevision} · shared rectangular selection · 3D inspection only",
+            "Same table ${projection.tableId} · draft revision ${projection.draftRevision} · shared selection/preview · 3D inspection only",
             color = labelColor,
             style = MaterialTheme.typography.bodySmall,
         )
@@ -690,6 +835,13 @@ private fun countProtectedCells(
     return count
 }
 
+private fun changedCellCount(
+    committed: TunerTableProjection,
+    preview: TunerTableProjection,
+): Int = committed.values.indices.count { index ->
+    committed.values[index] != preview.values[index]
+}
+
 private fun operationLabel(operation: PendingOperation): String = when (operation) {
     is PendingOperation.Step -> when (operation.step) {
         TunerCellStep.DECREMENT -> "Decrement"
@@ -702,6 +854,10 @@ private fun operationLabel(operation: PendingOperation): String = when (operatio
     is PendingOperation.Interpolation -> interpolationModeLabel(operation.mode)
 
     is PendingOperation.Smoothing -> "Smooth ${operation.strengthPercent.trim()}%"
+
+    is PendingOperation.BrushPull ->
+        "${brushPullModeLabel(operation.mode)} Δ${operation.delta.trim()} r${operation.radiusCells.trim()} " +
+            "${operation.strengthPercent.trim()}% f${operation.falloffExponent.trim()}"
 }
 
 private fun numericOperationLabel(operation: TunerNumericOperation): String = when (operation) {
@@ -714,6 +870,11 @@ private fun interpolationModeLabel(mode: TunerInterpolationMode): String = when 
     TunerInterpolationMode.HORIZONTAL -> "Interpolate H"
     TunerInterpolationMode.VERTICAL -> "Interpolate V"
     TunerInterpolationMode.TWO_DIMENSIONAL -> "Interpolate 2D"
+}
+
+private fun brushPullModeLabel(mode: TunerBrushPullMode): String = when (mode) {
+    TunerBrushPullMode.BRUSH_STROKE -> "Brush"
+    TunerBrushPullMode.PULL_DEFORM -> "Pull"
 }
 
 private fun formatValue(value: Double, decimals: Int): String =
