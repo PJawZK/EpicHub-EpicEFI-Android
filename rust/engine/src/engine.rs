@@ -8,16 +8,15 @@ use crate::diagnostics::{
     EngineDiagnostics,
 };
 use crate::runtime_snapshot::{RUNTIME_SNAPSHOT_SIZE, RuntimeSnapshot};
-use crate::table_projection_abi;
-use crate::tuning::TuneDraft;
-use crate::tuning_fixture::{OFFLINE_FIXTURE_PRIMARY_TABLE_ID, offline_fixture_draft};
+use crate::tune_session::TuneSession;
+use crate::tuning_fixture::{OFFLINE_FIXTURE_PRIMARY_TABLE_ID, offline_fixture_snapshot};
 
 struct EngineState {
     started_at: Instant,
     sequence: u64,
     channels: ChannelStore,
     diagnostics: EngineDiagnostics,
-    offline_tune: TuneDraft,
+    tune_session: TuneSession,
 }
 
 impl EngineState {
@@ -27,7 +26,7 @@ impl EngineState {
             sequence: 0,
             channels: ChannelStore::new_synthetic(),
             diagnostics: EngineDiagnostics::new(u64::try_from(handle).unwrap_or(0)),
-            offline_tune: offline_fixture_draft(),
+            tune_session: TuneSession::from_snapshot(offline_fixture_snapshot()),
         }
     }
 
@@ -58,18 +57,6 @@ impl EngineState {
 
     fn drain_diagnostics(&mut self) -> [u8; DIAGNOSTIC_BATCH_SIZE] {
         self.diagnostics.drain_batch()
-    }
-
-    fn offline_table_projection(&self) -> Option<Vec<u8>> {
-        let projection = self
-            .offline_tune
-            .table_projection(OFFLINE_FIXTURE_PRIMARY_TABLE_ID)
-            .ok()?;
-        Some(table_projection_abi::encode(
-            self.offline_tune.profile_generation(),
-            self.offline_tune.origin(),
-            &projection,
-        ))
     }
 }
 
@@ -124,8 +111,14 @@ impl EngineRegistry {
             .map(EngineState::drain_diagnostics)
     }
 
-    fn offline_table_projection(&self, handle: i64) -> Option<Vec<u8>> {
-        self.engines.get(&handle)?.offline_table_projection()
+    fn tune_session<T>(
+        &mut self,
+        handle: i64,
+        operation: impl FnOnce(&mut TuneSession) -> T,
+    ) -> Option<T> {
+        self.engines
+            .get_mut(&handle)
+            .map(|engine| operation(&mut engine.tune_session))
     }
 }
 
@@ -163,8 +156,19 @@ pub fn diagnostic_batch(handle: i64) -> Option<[u8; DIAGNOSTIC_BATCH_SIZE]> {
     with_registry(|registry| registry.diagnostic_batch(handle))
 }
 
+pub(crate) fn with_tune_session<T>(
+    handle: i64,
+    operation: impl FnOnce(&mut TuneSession) -> T,
+) -> Option<T> {
+    with_registry(|registry| registry.tune_session(handle, operation))
+}
+
+pub fn tune_table_projection(handle: i64, table_id: u32) -> Option<Vec<u8>> {
+    with_tune_session(handle, |session| session.projection_bytes(table_id)).and_then(Result::ok)
+}
+
 pub fn offline_table_projection(handle: i64) -> Option<Vec<u8>> {
-    with_registry(|registry| registry.offline_table_projection(handle))
+    tune_table_projection(handle, OFFLINE_FIXTURE_PRIMARY_TABLE_ID)
 }
 
 #[cfg(test)]
@@ -237,10 +241,45 @@ mod tests {
     }
 
     #[test]
-    fn offline_table_projection_is_owned_by_the_engine_generation() {
+    fn tune_session_is_owned_by_engine_and_isolated_per_engine() {
+        let mut registry = EngineRegistry::new();
+        let first_handle = registry.create();
+        let second_handle = registry.create();
+
+        let first_revision = registry
+            .tune_session(first_handle, |session| {
+                session
+                    .apply_rectangle_step(
+                        OFFLINE_FIXTURE_PRIMARY_TABLE_ID,
+                        0,
+                        0,
+                        0,
+                        0,
+                        1,
+                        0,
+                    )
+                    .unwrap()
+            })
+            .unwrap();
+        let second_revision = registry
+            .tune_session(second_handle, |session| session.revision())
+            .unwrap();
+
+        assert_eq!(first_revision, 1);
+        assert_eq!(second_revision, 0);
+    }
+
+    #[test]
+    fn tune_projection_is_owned_by_engine_generation() {
         let mut registry = EngineRegistry::new();
         let handle = registry.create();
-        let projection = registry.offline_table_projection(handle).unwrap();
+        let projection = registry
+            .tune_session(handle, |session| {
+                session
+                    .projection_bytes(OFFLINE_FIXTURE_PRIMARY_TABLE_ID)
+                    .unwrap()
+            })
+            .unwrap();
 
         assert_eq!(read_u32(&projection, 0), TABLE_PROJECTION_ABI_VERSION);
         assert_eq!(read_u32(&projection, 28), OFFLINE_FIXTURE_PRIMARY_TABLE_ID);
@@ -255,9 +294,9 @@ mod tests {
 
         assert!(registry.snapshot(handle).is_none());
         assert!(registry.diagnostic_batch(handle).is_none());
-        assert!(registry.offline_table_projection(handle).is_none());
+        assert!(registry.tune_session(handle, TuneSession::revision).is_none());
         assert!(registry.snapshot(i64::MAX).is_none());
         assert!(registry.diagnostic_batch(i64::MAX).is_none());
-        assert!(registry.offline_table_projection(i64::MAX).is_none());
+        assert!(registry.tune_session(i64::MAX, TuneSession::revision).is_none());
     }
 }
