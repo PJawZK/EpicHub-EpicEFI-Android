@@ -20,7 +20,10 @@ pub fn preview_smoothing(
     }
 
     let projection = draft.table_projection(table_id)?;
-    let (first_row, last_row, first_col, last_col) = rectangle.bounds();
+    let first_row = rectangle.anchor_row.min(rectangle.focus_row);
+    let last_row = rectangle.anchor_row.max(rectangle.focus_row);
+    let first_col = rectangle.anchor_col.min(rectangle.focus_col);
+    let last_col = rectangle.anchor_col.max(rectangle.focus_col);
     if last_row >= projection.descriptor.rows || last_col >= projection.descriptor.cols {
         return Err(TuneError::CellOutOfBounds);
     }
