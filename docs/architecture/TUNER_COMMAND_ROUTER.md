@@ -146,7 +146,7 @@ The registry does not execute tune edits.
 
 ## Input adapters
 
-The architecture now expects future inputs to converge like this:
+The architecture now expects inputs to converge like this:
 
 ```text
 Touch / mouse
@@ -168,7 +168,25 @@ A new input device should normally require an adapter only. It must not gain a p
 
 The router owns one shared selection state for both views. Switching between 2D and 3D therefore does not create a second selection model.
 
-3D remains inspection-only for direct pointer editing in this slice, but keyboard navigation can remain attached to the same table surface and selection state. Later 3D hit-testing should emit `SelectCell`, `MoveSelection`, or semantic edit commands through this router.
+`TUNER_3D_EDITING_CONTRACT.md` now satisfies the D-016 requirement for a separately accepted 3D semantic edit contract. Direct 3D interaction is therefore allowed to become an input adapter, but not an edit owner.
+
+The accepted direction is:
+
+```text
+3D camera / mesh / hit-test state
+             ↓
+      semantic row/column
+             ↓
+        TunerCommand
+             ↓
+     TunerCommandRouter
+             ↓
+ existing Rust semantic edit path
+```
+
+3D hit-testing may emit `SelectCell`, movement/selection commands, Brush stroke commands, or the same semantic preview commands already used by 2D/keyboard controls. It must not calculate calibration values, own a separate preview, or mutate table vertices directly.
+
+Camera orbit/zoom remains presentation state and emits no tuning command. An explicit interaction mode must distinguish camera manipulation from calibration-edit intent before direct 3D editing is implemented.
 
 ## Regression requirements
 
@@ -195,6 +213,8 @@ This slice is expected to prove at least:
 19. text-entry fields remain outside table keyboard interception;
 20. Rust remains the only authority for table-value transformation and history mutation.
 
+The additional regression requirements for direct 3D editing are defined in `TUNER_3D_EDITING_CONTRACT.md`, including hit-test correctness, camera/edit separation, 2D/3D command parity and representation-neutral history.
+
 ## Deliberately deferred
 
 This slice does not yet add:
@@ -204,9 +224,9 @@ This slice does not yet add:
 - direct rotary encoder hardware input;
 - accessibility action publication;
 - command palette UI;
-- continuous pointer Brush strokes;
-- direct 3D hit-test editing;
+- direct 3D hit-test implementation;
+- direct 3D Brush/Pull gestures;
 - ECU RAM write or Burn;
 - project persistence.
 
-Those capabilities should extend the command adapters/registry rather than bypassing it.
+Continuous 2D pointer Brush strokes are implemented by the later pointer-Brush slice. Direct 3D editing is now architecturally accepted but remains implementation work; it must extend this router rather than bypassing it.
