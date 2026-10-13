@@ -107,7 +107,7 @@ fn cell_step_command(
     let operation = match direction {
         1 => TableEditOperation::Increment,
         -1 => TableEditOperation::Decrement,
-        _ => return Err(TuneError::InvalidOperation),
+        _ => return Err(TuneError::EmptySelection),
     };
     Ok(TableEditCommand {
         table_id: OFFLINE_FIXTURE_PRIMARY_TABLE_ID,
@@ -149,7 +149,8 @@ mod tests {
         let projection = draft
             .table_projection(OFFLINE_FIXTURE_PRIMARY_TABLE_ID)
             .unwrap();
-        let bytes = table_projection_abi::encode(draft.profile_generation(), draft.origin(), &projection);
+        let bytes =
+            table_projection_abi::encode(draft.profile_generation(), draft.origin(), &projection);
         assert_eq!(read_u32(&bytes, 0), TABLE_PROJECTION_ABI_VERSION);
         assert_eq!(read_u32(&bytes, 28), OFFLINE_FIXTURE_PRIMARY_TABLE_ID);
     }
@@ -165,16 +166,22 @@ mod tests {
 
         let revision = draft.apply(&command).unwrap();
         assert_eq!(revision, 1);
-        assert_eq!(draft.table_projection(OFFLINE_FIXTURE_PRIMARY_TABLE_ID).unwrap().values[0], 42.5);
+        assert_eq!(
+            draft
+                .table_projection(OFFLINE_FIXTURE_PRIMARY_TABLE_ID)
+                .unwrap()
+                .values[0],
+            42.5
+        );
     }
 
     #[test]
     fn cell_step_rejects_protected_and_invalid_operations() {
-        let mut draft = offline_fixture_draft();
+        let draft = offline_fixture_draft();
         assert_eq!(
             draft.preview(&cell_step_command(3, 4, 1).unwrap()),
             Err(TuneError::ProtectedCell)
         );
-        assert_eq!(cell_step_command(0, 0, 0), Err(TuneError::InvalidOperation));
+        assert_eq!(cell_step_command(0, 0, 0), Err(TuneError::EmptySelection));
     }
 }
