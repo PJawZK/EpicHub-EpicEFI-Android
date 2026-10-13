@@ -7,9 +7,9 @@ use crate::diagnostics::{
     DIAGNOSTIC_BATCH_SIZE, DIAGNOSTIC_CODE_RUNTIME_SNAPSHOT_PUBLISHED, DIAGNOSTIC_SEVERITY_TRACE,
     EngineDiagnostics,
 };
+use crate::offline_tune_source::{OFFLINE_SOURCE_PRIMARY_TABLE_ID, offline_source_snapshot};
 use crate::runtime_snapshot::{RUNTIME_SNAPSHOT_SIZE, RuntimeSnapshot};
 use crate::tune_session::TuneSession;
-use crate::tuning_fixture::{OFFLINE_FIXTURE_PRIMARY_TABLE_ID, offline_fixture_snapshot};
 
 struct EngineState {
     started_at: Instant,
@@ -26,7 +26,7 @@ impl EngineState {
             sequence: 0,
             channels: ChannelStore::new_synthetic(),
             diagnostics: EngineDiagnostics::new(u64::try_from(handle).unwrap_or(0)),
-            tune_session: TuneSession::from_snapshot(offline_fixture_snapshot()),
+            tune_session: TuneSession::from_snapshot(offline_source_snapshot()),
         }
     }
 
@@ -168,7 +168,7 @@ pub fn tune_table_projection(handle: i64, table_id: u32) -> Option<Vec<u8>> {
 }
 
 pub fn offline_table_projection(handle: i64) -> Option<Vec<u8>> {
-    tune_table_projection(handle, OFFLINE_FIXTURE_PRIMARY_TABLE_ID)
+    tune_table_projection(handle, OFFLINE_SOURCE_PRIMARY_TABLE_ID)
 }
 
 #[cfg(test)]
@@ -250,7 +250,7 @@ mod tests {
             .tune_session(first_handle, |session| {
                 session
                     .apply_rectangle_step(
-                        OFFLINE_FIXTURE_PRIMARY_TABLE_ID,
+                        OFFLINE_SOURCE_PRIMARY_TABLE_ID,
                         0,
                         0,
                         0,
@@ -276,13 +276,13 @@ mod tests {
         let projection = registry
             .tune_session(handle, |session| {
                 session
-                    .projection_bytes(OFFLINE_FIXTURE_PRIMARY_TABLE_ID)
+                    .projection_bytes(OFFLINE_SOURCE_PRIMARY_TABLE_ID)
                     .unwrap()
             })
             .unwrap();
 
         assert_eq!(read_u32(&projection, 0), TABLE_PROJECTION_ABI_VERSION);
-        assert_eq!(read_u32(&projection, 28), OFFLINE_FIXTURE_PRIMARY_TABLE_ID);
+        assert_eq!(read_u32(&projection, 28), OFFLINE_SOURCE_PRIMARY_TABLE_ID);
         assert_eq!(read_u64(&projection, 16), 0);
     }
 
