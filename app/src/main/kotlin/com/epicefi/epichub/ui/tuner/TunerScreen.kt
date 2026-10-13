@@ -3,6 +3,7 @@ package com.epicefi.epichub.ui.tuner
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -28,14 +29,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.unit.dp
 import com.epicefi.epichub.engine.OfflineTunerFixture
 import com.epicefi.epichub.engine.TunerBrushPullMode
 import com.epicefi.epichub.engine.TunerCellStep
 import com.epicefi.epichub.engine.TunerInterpolationMode
 import com.epicefi.epichub.engine.TunerNumericOperation
-import com.epicefi.epichub.engine.TunerRectangle
 import com.epicefi.epichub.engine.TunerTableProjection
 import com.epicefi.epichub.ui.components.StructuralCard
 import java.util.Locale
@@ -43,32 +46,6 @@ import kotlin.math.max
 
 private const val CELL_WIDTH_DP = 72
 private const val AXIS_WIDTH_DP = 64
-
-private data class CellSelection(
-    val row: Int,
-    val col: Int,
-)
-
-private data class RectangleSelection(
-    val anchor: CellSelection,
-    val focus: CellSelection,
-) {
-    val firstRow: Int get() = minOf(anchor.row, focus.row)
-    val lastRow: Int get() = maxOf(anchor.row, focus.row)
-    val firstCol: Int get() = minOf(anchor.col, focus.col)
-    val lastCol: Int get() = maxOf(anchor.col, focus.col)
-    val cellCount: Int get() = (lastRow - firstRow + 1) * (lastCol - firstCol + 1)
-
-    fun contains(row: Int, col: Int): Boolean =
-        row in firstRow..lastRow && col in firstCol..lastCol
-
-    fun toNative(): TunerRectangle = TunerRectangle(
-        anchorRow = anchor.row,
-        anchorCol = anchor.col,
-        focusRow = focus.row,
-        focusCol = focus.col,
-    )
-}
 
 private sealed interface PendingOperation {
     data class Step(val step: TunerCellStep) : PendingOperation
@@ -92,7 +69,7 @@ private sealed interface PendingOperation {
 }
 
 private data class PendingPreview(
-    val selection: RectangleSelection,
+    val selection: TunerRectangleSelection,
     val operation: PendingOperation,
     val projection: TunerTableProjection,
     val baseRevision: Long,
@@ -101,11 +78,11 @@ private data class PendingPreview(
 @Composable
 fun TunerScreen(modifier: Modifier = Modifier) {
     val initialProjection = remember { runCatching { OfflineTunerFixture.readProjection() } }
+    val tableFocusRequester = remember { FocusRequester() }
     var projection by remember { mutableStateOf(initialProjection.getOrNull()) }
     var errorMessage by remember { mutableStateOf(initialProjection.exceptionOrNull()?.message) }
     var show3d by remember { mutableStateOf(false) }
-    var extendSelection by remember { mutableStateOf(false) }
-    var selection by remember { mutableStateOf<RectangleSelection?>(null) }
+    var interactionState by remember { mutableStateOf(TunerInteractionState()) }
     var pendingPreview by remember { mutableStateOf<PendingPreview?>(null) }
     var numericOperation by remember { mutableStateOf(TunerNumericOperation.SET) }
     var numericOperand by remember { mutableStateOf("") }
@@ -115,17 +92,6 @@ fun TunerScreen(modifier: Modifier = Modifier) {
     var brushPullRadius by remember { mutableStateOf("1") }
     var brushPullStrength by remember { mutableStateOf("100") }
     var brushPullFalloff by remember { mutableStateOf("1") }
-
-    fun selectCell(row: Int, col: Int) {
-        val cell = CellSelection(row, col)
-        selection = if (extendSelection && selection != null) {
-            selection?.copy(focus = cell)
-        } else {
-            RectangleSelection(anchor = cell, focus = cell)
-        }
-        pendingPreview = null
-        errorMessage = null
-    }
 
     fun validatePreview(
         current: TunerTableProjection,
@@ -138,205 +104,222 @@ fun TunerScreen(modifier: Modifier = Modifier) {
         }
     }
 
-    fun previewStep(step: TunerCellStep) {
-        val selected = selection ?: return
-        val current = projection ?: return
-        runCatching {
-            OfflineTunerFixture.previewRectangleStep(selected.toNative(), step).also { preview ->
-                validatePreview(current, preview)
-            }
-        }.onSuccess { previewProjection ->
-            pendingPreview = PendingPreview(
-                selection = selected,
-                operation = PendingOperation.Step(step),
-                projection = previewProjection,
-                baseRevision = current.draftRevision,
-            )
-            errorMessage = null
-        }.onFailure { error ->
-            pendingPreview = null
-            errorMessage = error.message ?: "Preview rejected."
-        }
-    }
-
-    fun previewNumeric() {
-        val selected = selection ?: return
-        val current = projection ?: return
-        runCatching {
-            OfflineTunerFixture.previewRectangleNumeric(
-                rectangle = selected.toNative(),
-                operation = numericOperation,
-                operand = numericOperand,
-            ).also { preview ->
-                validatePreview(current, preview)
-            }
-        }.onSuccess { previewProjection ->
-            pendingPreview = PendingPreview(
-                selection = selected,
-                operation = PendingOperation.Numeric(numericOperation, numericOperand),
-                projection = previewProjection,
-                baseRevision = current.draftRevision,
-            )
-            errorMessage = null
-        }.onFailure { error ->
-            pendingPreview = null
-            errorMessage = error.message ?: "Numeric preview rejected."
-        }
-    }
-
-    fun previewInterpolation(mode: TunerInterpolationMode) {
-        val selected = selection ?: return
-        val current = projection ?: return
-        runCatching {
-            OfflineTunerFixture.previewInterpolation(
-                rectangle = selected.toNative(),
-                mode = mode,
-            ).also { preview ->
-                validatePreview(current, preview)
-            }
-        }.onSuccess { previewProjection ->
-            pendingPreview = PendingPreview(
-                selection = selected,
-                operation = PendingOperation.Interpolation(mode),
-                projection = previewProjection,
-                baseRevision = current.draftRevision,
-            )
-            errorMessage = null
-        }.onFailure { error ->
-            pendingPreview = null
-            errorMessage = error.message ?: "Interpolation preview rejected."
-        }
-    }
-
-    fun previewSmoothing() {
-        val selected = selection ?: return
-        val current = projection ?: return
-        runCatching {
-            OfflineTunerFixture.previewSmoothing(
-                rectangle = selected.toNative(),
-                strengthPercent = smoothingStrength,
-            ).also { preview ->
-                validatePreview(current, preview)
-            }
-        }.onSuccess { previewProjection ->
-            pendingPreview = PendingPreview(
-                selection = selected,
-                operation = PendingOperation.Smoothing(smoothingStrength),
-                projection = previewProjection,
-                baseRevision = current.draftRevision,
-            )
-            errorMessage = null
-        }.onFailure { error ->
-            pendingPreview = null
-            errorMessage = error.message ?: "Smoothing preview rejected."
-        }
-    }
-
-    fun previewBrushPull() {
-        val selected = selection ?: return
-        val current = projection ?: return
-        runCatching {
-            OfflineTunerFixture.previewBrushPull(
-                rectangle = selected.toNative(),
-                mode = brushPullMode,
-                delta = brushPullDelta,
-                radiusCells = brushPullRadius,
-                strengthPercent = brushPullStrength,
-                falloffExponent = brushPullFalloff,
-            ).also { preview ->
-                validatePreview(current, preview)
-            }
-        }.onSuccess { previewProjection ->
-            pendingPreview = PendingPreview(
-                selection = selected,
-                operation = PendingOperation.BrushPull(
-                    mode = brushPullMode,
-                    delta = brushPullDelta,
-                    radiusCells = brushPullRadius,
-                    strengthPercent = brushPullStrength,
-                    falloffExponent = brushPullFalloff,
-                ),
-                projection = previewProjection,
-                baseRevision = current.draftRevision,
-            )
-            errorMessage = null
-        }.onFailure { error ->
-            pendingPreview = null
-            errorMessage = error.message ?: "Brush/Pull preview rejected."
-        }
-    }
-
-    fun applyPreview() {
-        val preview = pendingPreview ?: return
-        runCatching {
-            when (val operation = preview.operation) {
-                is PendingOperation.Step -> OfflineTunerFixture.applyRectangleStep(
-                    rectangle = preview.selection.toNative(),
-                    step = operation.step,
-                    expectedRevision = preview.baseRevision,
-                )
-
-                is PendingOperation.Numeric -> OfflineTunerFixture.applyRectangleNumeric(
-                    rectangle = preview.selection.toNative(),
-                    operation = operation.operation,
-                    operand = operation.operand,
-                    expectedRevision = preview.baseRevision,
-                )
-
-                is PendingOperation.Interpolation -> OfflineTunerFixture.applyInterpolation(
-                    rectangle = preview.selection.toNative(),
-                    mode = operation.mode,
-                    expectedRevision = preview.baseRevision,
-                )
-
-                is PendingOperation.Smoothing -> OfflineTunerFixture.applySmoothing(
-                    rectangle = preview.selection.toNative(),
-                    strengthPercent = operation.strengthPercent,
-                    expectedRevision = preview.baseRevision,
-                )
-
-                is PendingOperation.BrushPull -> OfflineTunerFixture.applyBrushPull(
-                    rectangle = preview.selection.toNative(),
-                    mode = operation.mode,
-                    delta = operation.delta,
-                    radiusCells = operation.radiusCells,
-                    strengthPercent = operation.strengthPercent,
-                    falloffExponent = operation.falloffExponent,
-                    expectedRevision = preview.baseRevision,
-                )
-            }
-        }.onSuccess { next ->
-            projection = next
-            pendingPreview = null
-            errorMessage = null
-        }.onFailure { error ->
-            pendingPreview = null
-            errorMessage = error.message ?: "Apply rejected."
-        }
-    }
-
-    fun undo() {
-        runCatching { OfflineTunerFixture.undoProjection() }
-            .onSuccess { next ->
-                projection = next
+    fun executeEffect(effect: TunerCommandEffect) {
+        when (effect) {
+            TunerCommandEffect.None -> Unit
+            TunerCommandEffect.CancelPreview -> {
                 pendingPreview = null
                 errorMessage = null
             }
-            .onFailure { error ->
-                errorMessage = error.message ?: "Nothing to undo."
+
+            is TunerCommandEffect.PreviewStep -> {
+                val selected = interactionState.selection ?: return
+                val current = projection ?: return
+                runCatching {
+                    OfflineTunerFixture.previewRectangleStep(
+                        selected.toNative(),
+                        effect.step,
+                    ).also { preview -> validatePreview(current, preview) }
+                }.onSuccess { previewProjection ->
+                    pendingPreview = PendingPreview(
+                        selection = selected,
+                        operation = PendingOperation.Step(effect.step),
+                        projection = previewProjection,
+                        baseRevision = current.draftRevision,
+                    )
+                    errorMessage = null
+                }.onFailure { error ->
+                    pendingPreview = null
+                    errorMessage = error.message ?: "Preview rejected."
+                }
             }
+
+            is TunerCommandEffect.PreviewNumeric -> {
+                val selected = interactionState.selection ?: return
+                val current = projection ?: return
+                runCatching {
+                    OfflineTunerFixture.previewRectangleNumeric(
+                        rectangle = selected.toNative(),
+                        operation = effect.operation,
+                        operand = effect.operand,
+                    ).also { preview -> validatePreview(current, preview) }
+                }.onSuccess { previewProjection ->
+                    pendingPreview = PendingPreview(
+                        selection = selected,
+                        operation = PendingOperation.Numeric(effect.operation, effect.operand),
+                        projection = previewProjection,
+                        baseRevision = current.draftRevision,
+                    )
+                    errorMessage = null
+                }.onFailure { error ->
+                    pendingPreview = null
+                    errorMessage = error.message ?: "Numeric preview rejected."
+                }
+            }
+
+            is TunerCommandEffect.PreviewInterpolation -> {
+                val selected = interactionState.selection ?: return
+                val current = projection ?: return
+                runCatching {
+                    OfflineTunerFixture.previewInterpolation(
+                        rectangle = selected.toNative(),
+                        mode = effect.mode,
+                    ).also { preview -> validatePreview(current, preview) }
+                }.onSuccess { previewProjection ->
+                    pendingPreview = PendingPreview(
+                        selection = selected,
+                        operation = PendingOperation.Interpolation(effect.mode),
+                        projection = previewProjection,
+                        baseRevision = current.draftRevision,
+                    )
+                    errorMessage = null
+                }.onFailure { error ->
+                    pendingPreview = null
+                    errorMessage = error.message ?: "Interpolation preview rejected."
+                }
+            }
+
+            is TunerCommandEffect.PreviewSmoothing -> {
+                val selected = interactionState.selection ?: return
+                val current = projection ?: return
+                runCatching {
+                    OfflineTunerFixture.previewSmoothing(
+                        rectangle = selected.toNative(),
+                        strengthPercent = effect.strengthPercent,
+                    ).also { preview -> validatePreview(current, preview) }
+                }.onSuccess { previewProjection ->
+                    pendingPreview = PendingPreview(
+                        selection = selected,
+                        operation = PendingOperation.Smoothing(effect.strengthPercent),
+                        projection = previewProjection,
+                        baseRevision = current.draftRevision,
+                    )
+                    errorMessage = null
+                }.onFailure { error ->
+                    pendingPreview = null
+                    errorMessage = error.message ?: "Smoothing preview rejected."
+                }
+            }
+
+            is TunerCommandEffect.PreviewBrushPull -> {
+                val selected = interactionState.selection ?: return
+                val current = projection ?: return
+                runCatching {
+                    OfflineTunerFixture.previewBrushPull(
+                        rectangle = selected.toNative(),
+                        mode = effect.mode,
+                        delta = effect.delta,
+                        radiusCells = effect.radiusCells,
+                        strengthPercent = effect.strengthPercent,
+                        falloffExponent = effect.falloffExponent,
+                    ).also { preview -> validatePreview(current, preview) }
+                }.onSuccess { previewProjection ->
+                    pendingPreview = PendingPreview(
+                        selection = selected,
+                        operation = PendingOperation.BrushPull(
+                            mode = effect.mode,
+                            delta = effect.delta,
+                            radiusCells = effect.radiusCells,
+                            strengthPercent = effect.strengthPercent,
+                            falloffExponent = effect.falloffExponent,
+                        ),
+                        projection = previewProjection,
+                        baseRevision = current.draftRevision,
+                    )
+                    errorMessage = null
+                }.onFailure { error ->
+                    pendingPreview = null
+                    errorMessage = error.message ?: "Brush/Pull preview rejected."
+                }
+            }
+
+            TunerCommandEffect.ApplyPreview -> {
+                val preview = pendingPreview ?: return
+                runCatching {
+                    when (val operation = preview.operation) {
+                        is PendingOperation.Step -> OfflineTunerFixture.applyRectangleStep(
+                            rectangle = preview.selection.toNative(),
+                            step = operation.step,
+                            expectedRevision = preview.baseRevision,
+                        )
+
+                        is PendingOperation.Numeric -> OfflineTunerFixture.applyRectangleNumeric(
+                            rectangle = preview.selection.toNative(),
+                            operation = operation.operation,
+                            operand = operation.operand,
+                            expectedRevision = preview.baseRevision,
+                        )
+
+                        is PendingOperation.Interpolation -> OfflineTunerFixture.applyInterpolation(
+                            rectangle = preview.selection.toNative(),
+                            mode = operation.mode,
+                            expectedRevision = preview.baseRevision,
+                        )
+
+                        is PendingOperation.Smoothing -> OfflineTunerFixture.applySmoothing(
+                            rectangle = preview.selection.toNative(),
+                            strengthPercent = operation.strengthPercent,
+                            expectedRevision = preview.baseRevision,
+                        )
+
+                        is PendingOperation.BrushPull -> OfflineTunerFixture.applyBrushPull(
+                            rectangle = preview.selection.toNative(),
+                            mode = operation.mode,
+                            delta = operation.delta,
+                            radiusCells = operation.radiusCells,
+                            strengthPercent = operation.strengthPercent,
+                            falloffExponent = operation.falloffExponent,
+                            expectedRevision = preview.baseRevision,
+                        )
+                    }
+                }.onSuccess { next ->
+                    projection = next
+                    pendingPreview = null
+                    errorMessage = null
+                }.onFailure { error ->
+                    pendingPreview = null
+                    errorMessage = error.message ?: "Apply rejected."
+                }
+            }
+
+            TunerCommandEffect.Undo -> {
+                runCatching { OfflineTunerFixture.undoProjection() }
+                    .onSuccess { next ->
+                        projection = next
+                        pendingPreview = null
+                        errorMessage = null
+                    }
+                    .onFailure { error ->
+                        errorMessage = error.message ?: "Nothing to undo."
+                    }
+            }
+
+            TunerCommandEffect.Redo -> {
+                runCatching { OfflineTunerFixture.redoProjection() }
+                    .onSuccess { next ->
+                        projection = next
+                        pendingPreview = null
+                        errorMessage = null
+                    }
+                    .onFailure { error ->
+                        errorMessage = error.message ?: "Nothing to redo."
+                    }
+            }
+        }
     }
 
-    fun redo() {
-        runCatching { OfflineTunerFixture.redoProjection() }
-            .onSuccess { next ->
-                projection = next
-                pendingPreview = null
-                errorMessage = null
-            }
-            .onFailure { error ->
-                errorMessage = error.message ?: "Nothing to redo."
-            }
+    fun dispatch(command: TunerCommand): Boolean {
+        val current = projection ?: return false
+        val routed = TunerCommandRouter.route(
+            command = command,
+            state = interactionState,
+            rows = current.rows,
+            cols = current.cols,
+        )
+        if (!routed.consumed) return false
+        interactionState = routed.state
+        executeEffect(routed.effect)
+        return true
     }
 
     Column(
@@ -366,6 +349,7 @@ fun TunerScreen(modifier: Modifier = Modifier) {
         }
 
         projection?.let { current ->
+            val selection = interactionState.selection
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 AssistChip(
                     onClick = { show3d = false },
@@ -376,19 +360,28 @@ fun TunerScreen(modifier: Modifier = Modifier) {
                     label = { Text(if (show3d) "3D · active" else "3D") },
                 )
                 AssistChip(
-                    onClick = {
-                        extendSelection = !extendSelection
-                        pendingPreview = null
-                    },
+                    onClick = { dispatch(TunerCommand.ToggleExtendSelection) },
                     label = {
-                        Text(if (extendSelection) "Extend · active" else "Extend selection")
+                        Text(
+                            if (interactionState.persistentExtendSelection) {
+                                "Extend · active"
+                            } else {
+                                "Extend selection"
+                            },
+                        )
                     },
                 )
             }
 
             StructuralCard(
                 title = current.name,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(tableFocusRequester)
+                    .focusable()
+                    .onKeyEvent { event ->
+                        event.toTunerCommand()?.let(::dispatch) ?: false
+                    },
                 subtitle = "Table ${current.tableId} · ${current.rows}×${current.cols} · offline draft",
             ) {
                 if (show3d) {
@@ -402,19 +395,26 @@ fun TunerScreen(modifier: Modifier = Modifier) {
                         projection = current,
                         selection = selection,
                         preview = pendingPreview,
-                        onCellSelected = ::selectCell,
+                        onCellSelected = { row, col ->
+                            tableFocusRequester.requestFocus()
+                            dispatch(TunerCommand.SelectCell(row, col))
+                        },
                     )
                 }
+                Text(
+                    "Keyboard: arrows move · Shift+arrows extend · +/− preview step · Enter apply · Esc cancel · Ctrl+Z undo · Ctrl+Y or Ctrl+Shift+Z redo",
+                    style = MaterialTheme.typography.bodySmall,
+                )
             }
 
             StructuralCard(
                 title = "Selection and preview",
                 modifier = Modifier.fillMaxWidth(),
-                subtitle = "Shared selection · Rust preview · one history transaction",
+                subtitle = "One command router · shared selection · Rust preview/history",
             ) {
                 val selected = selection
                 if (selected == null) {
-                    Text("Tap a cell to start a selection. Enable Extend selection, then tap another cell to move the focus corner.")
+                    Text("Tap a cell to start a selection. Arrow keys also create a deterministic starting selection. Enable Extend selection, Shift+Arrow, or later another input adapter to move the focus corner.")
                 } else {
                     val protectedCount = countProtectedCells(current, selected)
                     Text(
@@ -442,15 +442,23 @@ fun TunerScreen(modifier: Modifier = Modifier) {
                         )
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = { previewStep(TunerCellStep.DECREMENT) }) {
+                        OutlinedButton(
+                            onClick = {
+                                dispatch(TunerCommand.PreviewStep(TunerCellStep.DECREMENT))
+                            },
+                        ) {
                             Text("−${formatValue(current.editIncrement, current.displayDecimals)}")
                         }
-                        OutlinedButton(onClick = { previewStep(TunerCellStep.INCREMENT) }) {
+                        OutlinedButton(
+                            onClick = {
+                                dispatch(TunerCommand.PreviewStep(TunerCellStep.INCREMENT))
+                            },
+                        ) {
                             Text("+${formatValue(current.editIncrement, current.displayDecimals)}")
                         }
                         Button(
                             enabled = pendingPreview != null,
-                            onClick = ::applyPreview,
+                            onClick = { dispatch(TunerCommand.ApplyPreview) },
                         ) {
                             Text("Apply preview")
                         }
@@ -462,8 +470,7 @@ fun TunerScreen(modifier: Modifier = Modifier) {
                             AssistChip(
                                 onClick = {
                                     numericOperation = operation
-                                    pendingPreview = null
-                                    errorMessage = null
+                                    dispatch(TunerCommand.CancelPreview)
                                 },
                                 label = {
                                     Text(
@@ -481,8 +488,7 @@ fun TunerScreen(modifier: Modifier = Modifier) {
                         value = numericOperand,
                         onValueChange = {
                             numericOperand = it
-                            pendingPreview = null
-                            errorMessage = null
+                            dispatch(TunerCommand.CancelPreview)
                         },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
@@ -501,7 +507,14 @@ fun TunerScreen(modifier: Modifier = Modifier) {
                     )
                     OutlinedButton(
                         enabled = numericOperand.isNotBlank(),
-                        onClick = ::previewNumeric,
+                        onClick = {
+                            dispatch(
+                                TunerCommand.PreviewNumeric(
+                                    operation = numericOperation,
+                                    operand = numericOperand,
+                                ),
+                            )
+                        },
                     ) {
                         Text("Preview ${numericOperationLabel(numericOperation)}")
                     }
@@ -513,7 +526,11 @@ fun TunerScreen(modifier: Modifier = Modifier) {
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         TunerInterpolationMode.entries.forEach { mode ->
-                            OutlinedButton(onClick = { previewInterpolation(mode) }) {
+                            OutlinedButton(
+                                onClick = {
+                                    dispatch(TunerCommand.PreviewInterpolation(mode))
+                                },
+                            ) {
                                 Text(interpolationModeLabel(mode))
                             }
                         }
@@ -528,8 +545,7 @@ fun TunerScreen(modifier: Modifier = Modifier) {
                         value = smoothingStrength,
                         onValueChange = {
                             smoothingStrength = it
-                            pendingPreview = null
-                            errorMessage = null
+                            dispatch(TunerCommand.CancelPreview)
                         },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
@@ -540,7 +556,9 @@ fun TunerScreen(modifier: Modifier = Modifier) {
                     )
                     OutlinedButton(
                         enabled = smoothingStrength.isNotBlank(),
-                        onClick = ::previewSmoothing,
+                        onClick = {
+                            dispatch(TunerCommand.PreviewSmoothing(smoothingStrength))
+                        },
                     ) {
                         Text("Preview smoothing")
                     }
@@ -555,8 +573,7 @@ fun TunerScreen(modifier: Modifier = Modifier) {
                             AssistChip(
                                 onClick = {
                                     brushPullMode = mode
-                                    pendingPreview = null
-                                    errorMessage = null
+                                    dispatch(TunerCommand.CancelPreview)
                                 },
                                 label = {
                                     Text(
@@ -574,8 +591,7 @@ fun TunerScreen(modifier: Modifier = Modifier) {
                         value = brushPullDelta,
                         onValueChange = {
                             brushPullDelta = it
-                            pendingPreview = null
-                            errorMessage = null
+                            dispatch(TunerCommand.CancelPreview)
                         },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
@@ -586,8 +602,7 @@ fun TunerScreen(modifier: Modifier = Modifier) {
                         value = brushPullRadius,
                         onValueChange = {
                             brushPullRadius = it
-                            pendingPreview = null
-                            errorMessage = null
+                            dispatch(TunerCommand.CancelPreview)
                         },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
@@ -598,8 +613,7 @@ fun TunerScreen(modifier: Modifier = Modifier) {
                         value = brushPullStrength,
                         onValueChange = {
                             brushPullStrength = it
-                            pendingPreview = null
-                            errorMessage = null
+                            dispatch(TunerCommand.CancelPreview)
                         },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
@@ -610,8 +624,7 @@ fun TunerScreen(modifier: Modifier = Modifier) {
                         value = brushPullFalloff,
                         onValueChange = {
                             brushPullFalloff = it
-                            pendingPreview = null
-                            errorMessage = null
+                            dispatch(TunerCommand.CancelPreview)
                         },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
@@ -623,25 +636,35 @@ fun TunerScreen(modifier: Modifier = Modifier) {
                             brushPullRadius.isNotBlank() &&
                             brushPullStrength.isNotBlank() &&
                             brushPullFalloff.isNotBlank(),
-                        onClick = ::previewBrushPull,
+                        onClick = {
+                            dispatch(
+                                TunerCommand.PreviewBrushPull(
+                                    mode = brushPullMode,
+                                    delta = brushPullDelta,
+                                    radiusCells = brushPullRadius,
+                                    strengthPercent = brushPullStrength,
+                                    falloffExponent = brushPullFalloff,
+                                ),
+                            )
+                        },
                     ) {
                         Text("Preview ${brushPullModeLabel(brushPullMode)}")
                     }
 
                     OutlinedButton(
-                        onClick = {
-                            selection = null
-                            pendingPreview = null
-                            extendSelection = false
-                            errorMessage = null
-                        },
+                        onClick = { dispatch(TunerCommand.ClearSelection) },
                     ) {
                         Text("Clear selection")
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = ::undo) { Text("Undo") }
-                    OutlinedButton(onClick = ::redo) { Text("Redo") }
+                    OutlinedButton(onClick = { dispatch(TunerCommand.Undo) }) { Text("Undo") }
+                    OutlinedButton(onClick = { dispatch(TunerCommand.Redo) }) { Text("Redo") }
+                    if (pendingPreview != null) {
+                        OutlinedButton(onClick = { dispatch(TunerCommand.CancelPreview) }) {
+                            Text("Cancel preview")
+                        }
+                    }
                 }
                 errorMessage?.let { message ->
                     Text(message, color = MaterialTheme.colorScheme.error)
@@ -667,7 +690,7 @@ fun TunerScreen(modifier: Modifier = Modifier) {
 @Composable
 private fun Table2d(
     projection: TunerTableProjection,
-    selection: RectangleSelection?,
+    selection: TunerRectangleSelection?,
     preview: PendingPreview?,
     onCellSelected: (Int, Int) -> Unit,
 ) {
@@ -748,7 +771,7 @@ private fun TableCell(
 @Composable
 private fun Table3d(
     projection: TunerTableProjection,
-    selection: RectangleSelection?,
+    selection: TunerRectangleSelection?,
     preview: PendingPreview?,
 ) {
     val lineColor = MaterialTheme.colorScheme.primary
@@ -822,7 +845,7 @@ private fun Table3d(
 
 private fun countProtectedCells(
     projection: TunerTableProjection,
-    selection: RectangleSelection,
+    selection: TunerRectangleSelection,
 ): Int {
     var count = 0
     for (row in selection.firstRow..selection.lastRow) {
