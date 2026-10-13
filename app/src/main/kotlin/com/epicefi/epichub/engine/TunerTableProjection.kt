@@ -1,8 +1,8 @@
 package com.epicefi.epichub.engine
 
+import java.lang.Math.multiplyExact
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import kotlin.math.multiplyExact
 
 private const val TABLE_PROJECTION_ABI_VERSION = 1
 private const val TABLE_PROJECTION_HEADER_SIZE = 112
