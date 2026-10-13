@@ -67,7 +67,9 @@ fn path_arg(env: &JNIEnv, path: &JIntArray) -> Option<Vec<CellCoord>> {
     }
     let mut raw = vec![0; length];
     env.get_int_array_region(path, 0, &mut raw).ok()?;
-    raw.chunks_exact(2)
+    raw.as_chunks::<2>()
+        .0
+        .iter()
         .map(|pair| {
             Some(CellCoord {
                 row: usize::try_from(pair[0]).ok()?,
