@@ -88,7 +88,7 @@ Current order:
 2. tune read/write state, difference handling, Burn/persistence safeguards;
 3. table/curve/3D editing and keyboard/mouse workflows;
 4. runtime dashboards, channel subscription, calculated channels, and layout persistence;
-5. logging and recorded-log behavior;
+5. live logging and recorded-log behavior;
 6. tune compare/diff and restore history;
 7. project migration/compatibility and firmware upgrades;
 8. large-project/table/log performance and cache behavior.
@@ -131,28 +131,47 @@ Important conclusions include:
 - dashboard layouts are independent project/UI state, not tune calibration state;
 - acquisition, derived publication, and Compose rendering rates should remain independent.
 
+### 5. Live logging / recorded logs
+
+`LIVE_LOGGING_RECORDED_LOGS.md`
+
+Covers manual and automatic logging, named Data Log Profiles, definition-driven log schemas, the distinction between ECU acquisition and retained log fields, calculated/stateful channels in logs, specialized/high-speed logger definitions, multiple recorded-log representations, project-local log storage, failure/reconnect requirements, buffering/backpressure, crash recovery, and long/high-rate regression cases.
+
+Important conclusions include:
+
+- logging is a stateful project workflow rather than a file-writer call;
+- automatic start/stop conditions should use validated channel/expression semantics;
+- log schemas and ECU acquisition plans are separate layers;
+- logger consumes the shared ChannelStore/derived-channel graph rather than owning a second formula engine;
+- specialized trigger/tooth/composite/high-speed loggers need acquisition semantics separate from ordinary RuntimeSnapshot logging;
+- the logging domain must remain format-neutral so MLG, MDF4 and CSV/export are persistence adapters rather than architecture;
+- disk I/O/backpressure must never block the ECU session owner;
+- disconnects and dropped samples need explicit gaps/events rather than fabricated continuity;
+- exact TunerStudio disconnect, flush, crash-repair and bookmark behavior remains intentionally unclaimed until dynamic validation.
+
 ## Running backlog
 
 `EPICHUB_BACKLOG.md`
 
 This is a review backlog rather than an implementation queue. Findings remain proposals until explicitly accepted into EpicHub architecture/runtime work.
 
-The backlog currently runs through **EH-TS-051**.
+The main backlog currently runs through **EH-TS-051**; the logging slice's detailed requirements and regression set are captured in `LIVE_LOGGING_RECORDED_LOGS.md` and should be promoted into numbered backlog items when the logging architecture enters acceptance/implementation planning.
 
 ## Next research slice
 
-Proceed to **live logging and recorded logs**.
+Proceed to **tune compare/diff and restore history**.
 
 High-value questions include:
 
-- start/stop and auto-start/stop expression behavior;
-- log field/channel selection and metadata;
-- logger demand on runtime channels independent of dashboards;
-- connection-loss/reconnect handling during an active log;
-- buffering, backpressure, disk-write and recovery behavior;
-- markers/events and timestamps;
-- file naming, rotation and project persistence;
-- whether calculated channels are shared with dashboard/runtime evaluation;
-- performance with long/high-rate logs and failure recovery.
+- comparison granularity and presentation;
+- local tune vs ECU vs saved tune authority labels;
+- ignored/non-comparable settings;
+- table/curve difference visualization;
+- whether comparisons operate offline;
+- restore-point creation/retention and naming;
+- firmware/profile compatibility across comparisons;
+- rollback after bulk tuning or migration;
+- performance on large tunes;
+- how compare/history should integrate with the semantic `TuneDraft` history already planned for EpicHub.
 
 The research branch intentionally contains documentation/specification only until a reviewed finding is explicitly accepted for implementation.
