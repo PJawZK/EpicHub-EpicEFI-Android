@@ -5,6 +5,9 @@ use crate::tuning::{
     CellCoord, TableDescriptor, TableEditCommand, TableEditOperation, TableProjection,
     TableSnapshot, TuneDraft, TuneError, TuneSnapshot, TuneSnapshotOrigin,
 };
+use crate::tuning_interpolation::{
+    TableInterpolationMode, TableRectangle, preview_interpolation,
+};
 
 pub const OFFLINE_FIXTURE_PROFILE_GENERATION: u64 = 42;
 pub const OFFLINE_FIXTURE_PRIMARY_TABLE_ID: u32 = 7;
@@ -136,6 +139,46 @@ pub fn apply_offline_fixture_rectangle_numeric(
     })
 }
 
+pub fn preview_offline_fixture_interpolation_bytes(
+    anchor_row: usize,
+    anchor_col: usize,
+    focus_row: usize,
+    focus_col: usize,
+    mode_code: i32,
+) -> Result<Vec<u8>, TuneError> {
+    with_offline_fixture(|draft| {
+        let preview = preview_interpolation(
+            draft,
+            OFFLINE_FIXTURE_PRIMARY_TABLE_ID,
+            interpolation_rectangle(anchor_row, anchor_col, focus_row, focus_col),
+            interpolation_mode(mode_code)?,
+        )?;
+        Ok(encode_primary_projection(draft, Some(&preview.changes)))
+    })
+}
+
+pub fn apply_offline_fixture_interpolation(
+    anchor_row: usize,
+    anchor_col: usize,
+    focus_row: usize,
+    focus_col: usize,
+    mode_code: i32,
+    expected_revision: u64,
+) -> Result<u64, TuneError> {
+    with_offline_fixture(|draft| {
+        if draft.revision() != expected_revision {
+            return Err(TuneError::StalePreview);
+        }
+        let preview = preview_interpolation(
+            draft,
+            OFFLINE_FIXTURE_PRIMARY_TABLE_ID,
+            interpolation_rectangle(anchor_row, anchor_col, focus_row, focus_col),
+            interpolation_mode(mode_code)?,
+        )?;
+        draft.commit_preview(preview)
+    })
+}
+
 pub fn undo_offline_fixture() -> Result<u64, TuneError> {
     with_offline_fixture(TuneDraft::undo)
 }
@@ -181,6 +224,29 @@ fn rectangle_cells(
         }
     }
     cells
+}
+
+fn interpolation_rectangle(
+    anchor_row: usize,
+    anchor_col: usize,
+    focus_row: usize,
+    focus_col: usize,
+) -> TableRectangle {
+    TableRectangle {
+        anchor_row,
+        anchor_col,
+        focus_row,
+        focus_col,
+    }
+}
+
+fn interpolation_mode(code: i32) -> Result<TableInterpolationMode, TuneError> {
+    match code {
+        0 => Ok(TableInterpolationMode::Horizontal),
+        1 => Ok(TableInterpolationMode::Vertical),
+        2 => Ok(TableInterpolationMode::TwoDimensional),
+        _ => Err(TuneError::EmptySelection),
+    }
 }
 
 fn rectangle_step_command(
@@ -393,5 +459,16 @@ mod tests {
                 .unwrap(),
             before
         );
+    }
+
+    #[test]
+    fn interpolation_mode_codes_are_typed_in_rust() {
+        assert_eq!(interpolation_mode(0), Ok(TableInterpolationMode::Horizontal));
+        assert_eq!(interpolation_mode(1), Ok(TableInterpolationMode::Vertical));
+        assert_eq!(
+            interpolation_mode(2),
+            Ok(TableInterpolationMode::TwoDimensional)
+        );
+        assert_eq!(interpolation_mode(3), Err(TuneError::EmptySelection));
     }
 }
