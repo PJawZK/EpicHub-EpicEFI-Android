@@ -8,6 +8,12 @@ enum class TunerCellStep(val nativeCode: Int) {
     INCREMENT(1),
 }
 
+enum class TunerNumericOperation(val nativeCode: Int) {
+    SET(0),
+    ADD(1),
+    SCALE(2),
+}
+
 data class TunerRectangle(
     val anchorRow: Int,
     val anchorCol: Int,
@@ -69,6 +75,50 @@ object OfflineTunerFixture {
         }
     }
 
+    fun previewRectangleNumeric(
+        rectangle: TunerRectangle,
+        operation: TunerNumericOperation,
+        operand: String,
+    ): TunerTableProjection {
+        val buffer = projectionBuffer()
+        val status = fillRectangleNumericPreviewNative(
+            rectangle.anchorRow,
+            rectangle.anchorCol,
+            rectangle.focusRow,
+            rectangle.focusCol,
+            operation.nativeCode,
+            operand,
+            buffer,
+        )
+        check(status == NATIVE_BUFFER_STATUS_OK) {
+            "Offline Tuner numeric preview was rejected with status $status."
+        }
+        return TunerTableProjectionDecoder.decode(buffer)
+    }
+
+    fun applyRectangleNumeric(
+        rectangle: TunerRectangle,
+        operation: TunerNumericOperation,
+        operand: String,
+        expectedRevision: Long,
+    ): TunerTableProjection {
+        val revision = applyRectangleNumericNative(
+            rectangle.anchorRow,
+            rectangle.anchorCol,
+            rectangle.focusRow,
+            rectangle.focusCol,
+            operation.nativeCode,
+            operand,
+            expectedRevision,
+        )
+        check(revision >= 0L) { "Offline Tuner numeric edit was rejected or stale." }
+        return readProjection().also { projection ->
+            check(projection.draftRevision == revision) {
+                "Offline Tuner projection revision did not match the applied numeric edit."
+            }
+        }
+    }
+
     fun undoProjection(): TunerTableProjection {
         val revision = undoNative()
         check(revision >= 0L) { "Offline Tuner undo is unavailable." }
@@ -107,6 +157,24 @@ object OfflineTunerFixture {
         focusRow: Int,
         focusCol: Int,
         direction: Int,
+        expectedRevision: Long,
+    ): Long
+    private external fun fillRectangleNumericPreviewNative(
+        anchorRow: Int,
+        anchorCol: Int,
+        focusRow: Int,
+        focusCol: Int,
+        operationCode: Int,
+        operand: String,
+        buffer: ByteBuffer,
+    ): Int
+    private external fun applyRectangleNumericNative(
+        anchorRow: Int,
+        anchorCol: Int,
+        focusRow: Int,
+        focusCol: Int,
+        operationCode: Int,
+        operand: String,
         expectedRevision: Long,
     ): Long
     private external fun undoNative(): Long
