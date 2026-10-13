@@ -113,7 +113,23 @@ Covers local working tune vs ECU RAM/live state vs ECU nonvolatile state, page/r
 
 Covers shared 2D/3D tune-object semantics, definition-driven table/curve capabilities, selected vs live-active position, weighted lookup overlays, keyboard-first editing, multi-cell transforms, interpolation, smoothing, re-binning, undo/redo, Apply/Cancel baselines, clipboard/import/export, 3D preference persistence, performance implications, and regression-test ideas.
 
-This slice is now explicitly reconciled with the earlier Table Interaction Lab. The prior Lab remains stronger EpicHub-specific design evidence for several interaction/3D decisions, while TunerStudio supplies maturity validation and additional edge cases.
+This slice is explicitly reconciled with the earlier Table Interaction Lab. The prior Lab remains stronger EpicHub-specific design evidence for several interaction/3D decisions, while TunerStudio supplies maturity validation and additional edge cases.
+
+### 4. Dashboards / runtime channels / calculated channels / persistence
+
+`DASHBOARDS_RUNTIME_CHANNELS_CALCULATED_CHANNELS.md`
+
+Covers semantic output-channel binding, hidden-dashboard subscription release, raw/bitfield/alias/expression channels, calculated-channel dependency graphs, persisted accumulators, dashboard project persistence, compatibility metadata, gauge limits/history, responsive geometry, stale/invalid data requirements, and separation of acquisition/calculation/render rates.
+
+Important conclusions include:
+
+- dashboard widgets consume semantic channels, not ECU memory geometry;
+- hidden presentation should release unnecessary channel demand without implicitly stopping ECU acquisition;
+- derived channels should be compiled into a validated dependency graph and shared across consumers;
+- runtime samples need explicit validity and session-generation state;
+- stateful and durable accumulators require explicit lifecycle/persistence semantics;
+- dashboard layouts are independent project/UI state, not tune calibration state;
+- acquisition, derived publication, and Compose rendering rates should remain independent.
 
 ## Running backlog
 
@@ -121,19 +137,22 @@ This slice is now explicitly reconciled with the earlier Table Interaction Lab. 
 
 This is a review backlog rather than an implementation queue. Findings remain proposals until explicitly accepted into EpicHub architecture/runtime work.
 
+The backlog currently runs through **EH-TS-051**.
+
 ## Next research slice
 
-Proceed to **runtime dashboards, channel subscription, calculated channels, and dashboard/layout persistence**.
+Proceed to **live logging and recorded logs**.
 
 High-value questions include:
 
-- what a gauge subscribes to and when subscription is released;
-- stale/invalid runtime behavior across disconnect/reconnect;
-- calculated-channel dependency and failure propagation;
-- dashboard layout persistence and compatibility;
-- runtime update throttling/caching;
-- per-gauge warning/limit behavior;
-- whether hidden dashboards stop consuming update work;
-- how user-defined dashboards survive profile/project upgrades.
+- start/stop and auto-start/stop expression behavior;
+- log field/channel selection and metadata;
+- logger demand on runtime channels independent of dashboards;
+- connection-loss/reconnect handling during an active log;
+- buffering, backpressure, disk-write and recovery behavior;
+- markers/events and timestamps;
+- file naming, rotation and project persistence;
+- whether calculated channels are shared with dashboard/runtime evaluation;
+- performance with long/high-rate logs and failure recovery.
 
 The research branch intentionally contains documentation/specification only until a reviewed finding is explicitly accepted for implementation.
