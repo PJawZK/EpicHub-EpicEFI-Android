@@ -3,7 +3,7 @@ name: Foundation quality
 on:
   push:
     branches:
-      - phase2/foundation-bootstrap
+      - 'phase2/**'
   pull_request:
     branches:
       - main
