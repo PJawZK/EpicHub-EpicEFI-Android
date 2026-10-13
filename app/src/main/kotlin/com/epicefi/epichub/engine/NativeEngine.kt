@@ -32,14 +32,27 @@ class NativeEngine private constructor(initialHandle: Long) : Closeable {
         val current = handle.getAndSet(0L)
         if (current != 0L) {
             NativeEngineBridge.close(current)
+            currentEngineHandle.compareAndSet(current, 0L)
         }
     }
 
     companion object {
+        private val currentEngineHandle = AtomicLong(0L)
+
         fun create(): NativeEngine {
-            val handle = NativeEngineBridge.create()
-            check(handle != 0L) { "Native engine creation failed." }
-            return NativeEngine(handle)
+            val nativeHandle = NativeEngineBridge.create()
+            check(nativeHandle != 0L) { "Native engine creation failed." }
+            if (!currentEngineHandle.compareAndSet(0L, nativeHandle)) {
+                NativeEngineBridge.close(nativeHandle)
+                error("EpicHub supports one app-level NativeEngine session.")
+            }
+            return NativeEngine(nativeHandle)
+        }
+
+        internal fun requireCurrentHandle(): Long {
+            val current = currentEngineHandle.get()
+            check(current != 0L) { "No active NativeEngine session." }
+            return current
         }
 
         fun activeCount(): Int = NativeEngineBridge.activeCount()
