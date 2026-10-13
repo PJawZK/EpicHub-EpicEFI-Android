@@ -90,6 +90,52 @@ pub fn apply_offline_fixture_rectangle_step(
     })
 }
 
+pub fn preview_offline_fixture_rectangle_numeric_bytes(
+    anchor_row: usize,
+    anchor_col: usize,
+    focus_row: usize,
+    focus_col: usize,
+    operation_code: i32,
+    operand_text: &str,
+) -> Result<Vec<u8>, TuneError> {
+    with_offline_fixture(|draft| {
+        let command = rectangle_numeric_command(
+            anchor_row,
+            anchor_col,
+            focus_row,
+            focus_col,
+            operation_code,
+            operand_text,
+        )?;
+        let preview = draft.preview(&command)?;
+        Ok(encode_primary_projection(draft, Some(&preview.changes)))
+    })
+}
+
+pub fn apply_offline_fixture_rectangle_numeric(
+    anchor_row: usize,
+    anchor_col: usize,
+    focus_row: usize,
+    focus_col: usize,
+    operation_code: i32,
+    operand_text: &str,
+    expected_revision: u64,
+) -> Result<u64, TuneError> {
+    with_offline_fixture(|draft| {
+        if draft.revision() != expected_revision {
+            return Err(TuneError::StalePreview);
+        }
+        draft.apply(&rectangle_numeric_command(
+            anchor_row,
+            anchor_col,
+            focus_row,
+            focus_col,
+            operation_code,
+            operand_text,
+        )?)
+    })
+}
+
 pub fn undo_offline_fixture() -> Result<u64, TuneError> {
     with_offline_fixture(TuneDraft::undo)
 }
@@ -118,6 +164,25 @@ fn apply_preview_changes(projection: &mut TableProjection, changes: &[crate::tun
     }
 }
 
+fn rectangle_cells(
+    anchor_row: usize,
+    anchor_col: usize,
+    focus_row: usize,
+    focus_col: usize,
+) -> Vec<CellCoord> {
+    let first_row = anchor_row.min(focus_row);
+    let last_row = anchor_row.max(focus_row);
+    let first_col = anchor_col.min(focus_col);
+    let last_col = anchor_col.max(focus_col);
+    let mut cells = Vec::new();
+    for row in first_row..=last_row {
+        for col in first_col..=last_col {
+            cells.push(CellCoord { row, col });
+        }
+    }
+    cells
+}
+
 fn rectangle_step_command(
     anchor_row: usize,
     anchor_col: usize,
@@ -131,20 +196,38 @@ fn rectangle_step_command(
         _ => return Err(TuneError::EmptySelection),
     };
 
-    let first_row = anchor_row.min(focus_row);
-    let last_row = anchor_row.max(focus_row);
-    let first_col = anchor_col.min(focus_col);
-    let last_col = anchor_col.max(focus_col);
-    let mut cells = Vec::new();
-    for row in first_row..=last_row {
-        for col in first_col..=last_col {
-            cells.push(CellCoord { row, col });
-        }
+    Ok(TableEditCommand {
+        table_id: OFFLINE_FIXTURE_PRIMARY_TABLE_ID,
+        cells: rectangle_cells(anchor_row, anchor_col, focus_row, focus_col),
+        operation,
+    })
+}
+
+fn rectangle_numeric_command(
+    anchor_row: usize,
+    anchor_col: usize,
+    focus_row: usize,
+    focus_col: usize,
+    operation_code: i32,
+    operand_text: &str,
+) -> Result<TableEditCommand, TuneError> {
+    let operand = operand_text
+        .trim()
+        .parse::<f64>()
+        .map_err(|_| TuneError::NonFiniteValue)?;
+    if !operand.is_finite() {
+        return Err(TuneError::NonFiniteValue);
     }
+    let operation = match operation_code {
+        0 => TableEditOperation::Set(operand),
+        1 => TableEditOperation::Add(operand),
+        2 => TableEditOperation::Scale(operand),
+        _ => return Err(TuneError::EmptySelection),
+    };
 
     Ok(TableEditCommand {
         table_id: OFFLINE_FIXTURE_PRIMARY_TABLE_ID,
-        cells,
+        cells: rectangle_cells(anchor_row, anchor_col, focus_row, focus_col),
         operation,
     })
 }
@@ -266,6 +349,49 @@ mod tests {
         assert_eq!(
             rectangle_step_command(0, 0, 1, 1, 0),
             Err(TuneError::EmptySelection)
+        );
+    }
+
+    #[test]
+    fn numeric_operations_are_parsed_and_quantized_in_rust() {
+        let mut draft = offline_fixture_draft();
+
+        let set = rectangle_numeric_command(0, 0, 0, 1, 0, " 51.13 ").unwrap();
+        let preview = draft.preview(&set).unwrap();
+        assert_eq!(preview.changes[0].after, 51.25);
+        assert_eq!(preview.changes[1].after, 51.25);
+        assert_eq!(draft.apply(&set).unwrap(), 1);
+
+        let add = rectangle_numeric_command(0, 0, 0, 1, 1, "0.26").unwrap();
+        let preview = draft.preview(&add).unwrap();
+        assert_eq!(preview.changes[0].after, 51.5);
+        assert_eq!(preview.changes[1].after, 51.5);
+        assert_eq!(draft.apply(&add).unwrap(), 2);
+
+        let scale = rectangle_numeric_command(0, 0, 0, 1, 2, "1.1").unwrap();
+        let preview = draft.preview(&scale).unwrap();
+        assert_eq!(preview.changes[0].after, 56.75);
+        assert_eq!(preview.changes[1].after, 56.75);
+    }
+
+    #[test]
+    fn numeric_operation_rejects_bad_text_and_out_of_range_atomically() {
+        let draft = offline_fixture_draft();
+        assert_eq!(
+            rectangle_numeric_command(0, 0, 0, 1, 0, "not-a-number"),
+            Err(TuneError::NonFiniteValue)
+        );
+
+        let before = draft
+            .table_projection(OFFLINE_FIXTURE_PRIMARY_TABLE_ID)
+            .unwrap();
+        let command = rectangle_numeric_command(0, 0, 0, 1, 0, "999").unwrap();
+        assert_eq!(draft.preview(&command), Err(TuneError::ValueOutOfRange));
+        assert_eq!(
+            draft
+                .table_projection(OFFLINE_FIXTURE_PRIMARY_TABLE_ID)
+                .unwrap(),
+            before
         );
     }
 }
