@@ -1,16 +1,21 @@
 mod channel_store;
 mod diagnostics;
 mod engine;
-mod jni_api;
-mod jni_brush_pull;
-mod jni_smoothing;
+mod jni_engine;
+mod jni_tune_session;
 mod offline_tune_source;
 mod runtime_snapshot;
 mod table_projection_abi;
 mod tune_session;
 pub mod tuning;
 mod tuning_brush_pull;
-mod tuning_brush_pull_fixture;
-mod tuning_fixture;
 mod tuning_interpolation;
 mod tuning_smoothing;
+
+#[cfg(test)]
+mod tuning_fixture {
+    pub use crate::offline_tune_source::{
+        OFFLINE_SOURCE_PRIMARY_TABLE_ID as OFFLINE_FIXTURE_PRIMARY_TABLE_ID,
+        offline_source_snapshot as offline_fixture_snapshot,
+    };
+}
