@@ -1,15 +1,19 @@
 package com.epicefi.epichub.ui.tuner
 
+import kotlin.math.abs
+import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.sin
 
-private const val THREE_D_X_WIDTH_FRACTION = 0.68
-private const val THREE_D_Y_HEIGHT_FRACTION = 0.34
-private const val THREE_D_Z_HEIGHT_FRACTION = 0.34
-private const val THREE_D_ORIGIN_X_FRACTION = 0.12
-private const val THREE_D_ORIGIN_Y_FRACTION = 0.76
-private const val THREE_D_ROW_X_SKEW = 0.22
 private const val DISTANCE_EPSILON = 1e-9
+private const val VIEWPORT_WIDTH_FRACTION = 0.78
+private const val VIEWPORT_HEIGHT_FRACTION = 0.68
+private const val VIEWPORT_CENTER_Y_FRACTION = 0.52
+private const val GRID_X_SCALE = 1.2
+private const val GRID_DEPTH_SCALE = 1.0
+private const val VALUE_Z_SCALE = 0.95
 
 enum class Tuner3dInteractionMode {
     INSPECT,
@@ -30,34 +34,68 @@ object Tuner3dGeometry {
         values: DoubleArray,
         width: Double,
         height: Double,
+        camera: Tuner3dCameraState = Tuner3dCameraState.DEFAULT,
     ): List<Tuner3dProjectedCell> {
         if (rows <= 0 || cols <= 0 || width <= 0.0 || height <= 0.0) return emptyList()
-        if (values.size != rows * cols) return emptyList()
+        if (!width.isFinite() || !height.isFinite() || values.size != rows * cols) return emptyList()
+        if (values.any { !it.isFinite() }) return emptyList()
 
+        val normalizedCamera = camera.normalized()
         val minValue = values.minOrNull() ?: return emptyList()
         val maxValue = values.maxOrNull() ?: minValue
-        val span = max(maxValue - minValue, DISTANCE_EPSILON)
-        val xStep = width * THREE_D_X_WIDTH_FRACTION / max(cols - 1, 1)
-        val yStep = height * THREE_D_Y_HEIGHT_FRACTION / max(rows - 1, 1)
-        val zScale = height * THREE_D_Z_HEIGHT_FRACTION
-        val originX = width * THREE_D_ORIGIN_X_FRACTION
-        val originY = height * THREE_D_ORIGIN_Y_FRACTION
+        val valueSpan = max(maxValue - minValue, DISTANCE_EPSILON)
+        val yaw = Math.toRadians(normalizedCamera.yawDegrees)
+        val pitch = Math.toRadians(normalizedCamera.pitchDegrees)
+        val cosYaw = cos(yaw)
+        val sinYaw = sin(yaw)
+        val cosPitch = cos(pitch)
+        val sinPitch = sin(pitch)
 
-        return buildList(rows * cols) {
+        data class RawPoint(
+            val row: Int,
+            val col: Int,
+            val x: Double,
+            val y: Double,
+        )
+
+        val raw = buildList(rows * cols) {
             for (row in 0 until rows) {
                 for (col in 0 until cols) {
                     val index = row * cols + col
-                    val normalized = (values[index] - minValue) / span
-                    add(
-                        Tuner3dProjectedCell(
-                            row = row,
-                            col = col,
-                            x = originX + col * xStep + row * xStep * THREE_D_ROW_X_SKEW,
-                            y = originY - row * yStep - normalized * zScale,
-                        ),
-                    )
+                    val gridX = centeredCoordinate(col, cols) * GRID_X_SCALE
+                    val depth = centeredCoordinate(row, rows) * GRID_DEPTH_SCALE
+                    val z = ((values[index] - minValue) / valueSpan - 0.5) * VALUE_Z_SCALE
+
+                    val yawX = gridX * cosYaw - depth * sinYaw
+                    val yawDepth = gridX * sinYaw + depth * cosYaw
+                    val projectedVertical = z * cosPitch + yawDepth * sinPitch
+                    add(RawPoint(row, col, yawX, -projectedVertical))
                 }
             }
+        }
+
+        val minX = raw.minOf { it.x }
+        val maxX = raw.maxOf { it.x }
+        val minY = raw.minOf { it.y }
+        val maxY = raw.maxOf { it.y }
+        val spanX = max(maxX - minX, DISTANCE_EPSILON)
+        val spanY = max(maxY - minY, DISTANCE_EPSILON)
+        val fitScale = min(
+            width * VIEWPORT_WIDTH_FRACTION / spanX,
+            height * VIEWPORT_HEIGHT_FRACTION / spanY,
+        ) * normalizedCamera.zoom
+        val rawCenterX = (minX + maxX) * 0.5
+        val rawCenterY = (minY + maxY) * 0.5
+        val screenCenterX = width * 0.5
+        val screenCenterY = height * VIEWPORT_CENTER_Y_FRACTION
+
+        return raw.map { point ->
+            Tuner3dProjectedCell(
+                row = point.row,
+                col = point.col,
+                x = screenCenterX + (point.x - rawCenterX) * fitScale,
+                y = screenCenterY + (point.y - rawCenterY) * fitScale,
+            )
         }
     }
 
@@ -81,7 +119,7 @@ object Tuner3dGeometry {
             val isCloser = distance < bestDistance - DISTANCE_EPSILON
             val isDeterministicTie =
                 currentBest != null &&
-                    kotlin.math.abs(distance - bestDistance) <= DISTANCE_EPSILON &&
+                    abs(distance - bestDistance) <= DISTANCE_EPSILON &&
                     (cell.row < currentBest.row ||
                         (cell.row == currentBest.row && cell.col < currentBest.col))
             if (currentBest == null || isCloser || isDeterministicTie) {
@@ -92,4 +130,7 @@ object Tuner3dGeometry {
 
         return best?.let { TunerCellPosition(row = it.row, col = it.col) }
     }
+
+    private fun centeredCoordinate(index: Int, count: Int): Double =
+        if (count <= 1) 0.0 else index.toDouble() / (count - 1).toDouble() - 0.5
 }
