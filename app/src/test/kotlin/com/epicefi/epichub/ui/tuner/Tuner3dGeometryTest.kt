@@ -88,6 +88,35 @@ class Tuner3dGeometryTest {
     }
 
     @Test
+    fun hitResultRoutesThroughTheSameSelectionReducerAs2d() {
+        val cells = projectedCells()
+        val target = cells.first { it.row == 1 && it.col == 1 }
+        val hit = Tuner3dGeometry.hitTest(
+            cells = cells,
+            x = target.x,
+            y = target.y,
+            maxDistance = 20.0,
+        ) ?: error("Expected exact 3D vertex hit")
+
+        val routed = TunerCommandRouter.route(
+            command = TunerCommand.SelectCell(hit.row, hit.col),
+            state = TunerInteractionState(),
+            rows = 2,
+            cols = 3,
+        )
+
+        assertTrue(routed.consumed)
+        assertEquals(
+            TunerRectangleSelection(
+                anchor = TunerCellPosition(row = 1, col = 1),
+                focus = TunerCellPosition(row = 1, col = 1),
+            ),
+            routed.state.selection,
+        )
+        assertEquals(TunerCommandEffect.CancelPreview, routed.effect)
+    }
+
+    @Test
     fun invalidGeometryCannotProduceHitAuthority() {
         assertTrue(
             Tuner3dGeometry.projectCells(
