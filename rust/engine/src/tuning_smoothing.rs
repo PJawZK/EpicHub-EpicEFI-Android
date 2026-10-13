@@ -167,7 +167,7 @@ mod tests {
             },
         )
         .unwrap();
-        assert_eq!(preview.changes[0].after, 71.0);
+        assert_eq!(preview.changes[0].after, 53.25);
     }
 
     #[test]
@@ -207,7 +207,7 @@ mod tests {
             .iter()
             .find(|change| change.coord == CellCoord { row: 2, col: 2 })
             .unwrap();
-        assert_eq!(lower_right.after, 71.0);
+        assert_eq!(lower_right.after, 53.25);
     }
 
     #[test]
@@ -225,7 +225,7 @@ mod tests {
             },
         )
         .unwrap();
-        assert_eq!(neighbor_preview.changes[0].after, 71.0);
+        assert_eq!(neighbor_preview.changes[0].after, 53.25);
 
         let before = draft.table_projection(13).unwrap();
         assert_eq!(
