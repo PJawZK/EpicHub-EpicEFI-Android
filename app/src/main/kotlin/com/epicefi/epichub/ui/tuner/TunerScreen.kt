@@ -32,6 +32,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.dp
 import com.epicefi.epichub.engine.OfflineTunerFixture
 import com.epicefi.epichub.engine.TunerCellStep
+import com.epicefi.epichub.engine.TunerInterpolationMode
 import com.epicefi.epichub.engine.TunerNumericOperation
 import com.epicefi.epichub.engine.TunerRectangle
 import com.epicefi.epichub.engine.TunerTableProjection
@@ -75,6 +76,8 @@ private sealed interface PendingOperation {
         val operation: TunerNumericOperation,
         val operand: String,
     ) : PendingOperation
+
+    data class Interpolation(val mode: TunerInterpolationMode) : PendingOperation
 }
 
 private data class PendingPreview(
@@ -164,6 +167,30 @@ fun TunerScreen(modifier: Modifier = Modifier) {
         }
     }
 
+    fun previewInterpolation(mode: TunerInterpolationMode) {
+        val selected = selection ?: return
+        val current = projection ?: return
+        runCatching {
+            OfflineTunerFixture.previewInterpolation(
+                rectangle = selected.toNative(),
+                mode = mode,
+            ).also { preview ->
+                validatePreview(current, preview)
+            }
+        }.onSuccess { previewProjection ->
+            pendingPreview = PendingPreview(
+                selection = selected,
+                operation = PendingOperation.Interpolation(mode),
+                projection = previewProjection,
+                baseRevision = current.draftRevision,
+            )
+            errorMessage = null
+        }.onFailure { error ->
+            pendingPreview = null
+            errorMessage = error.message ?: "Interpolation preview rejected."
+        }
+    }
+
     fun applyPreview() {
         val preview = pendingPreview ?: return
         runCatching {
@@ -178,6 +205,12 @@ fun TunerScreen(modifier: Modifier = Modifier) {
                     rectangle = preview.selection.toNative(),
                     operation = operation.operation,
                     operand = operation.operand,
+                    expectedRevision = preview.baseRevision,
+                )
+
+                is PendingOperation.Interpolation -> OfflineTunerFixture.applyInterpolation(
+                    rectangle = preview.selection.toNative(),
+                    mode = operation.mode,
                     expectedRevision = preview.baseRevision,
                 )
             }
@@ -380,6 +413,19 @@ fun TunerScreen(modifier: Modifier = Modifier) {
                         onClick = ::previewNumeric,
                     ) {
                         Text("Preview ${numericOperationLabel(numericOperation)}")
+                    }
+
+                    Text("Interpolation", style = MaterialTheme.typography.labelLarge)
+                    Text(
+                        "Uses actual X/Y bin coordinates; the selected boundary cells define the interpolation endpoints/corners.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TunerInterpolationMode.entries.forEach { mode ->
+                            OutlinedButton(onClick = { previewInterpolation(mode) }) {
+                                Text(interpolationModeLabel(mode))
+                            }
+                        }
                     }
 
                     OutlinedButton(
@@ -593,12 +639,20 @@ private fun operationLabel(operation: PendingOperation): String = when (operatio
 
     is PendingOperation.Numeric ->
         "${numericOperationLabel(operation.operation)} ${operation.operand.trim()}"
+
+    is PendingOperation.Interpolation -> interpolationModeLabel(operation.mode)
 }
 
 private fun numericOperationLabel(operation: TunerNumericOperation): String = when (operation) {
     TunerNumericOperation.SET -> "Set"
     TunerNumericOperation.ADD -> "Add"
     TunerNumericOperation.SCALE -> "Scale"
+}
+
+private fun interpolationModeLabel(mode: TunerInterpolationMode): String = when (mode) {
+    TunerInterpolationMode.HORIZONTAL -> "Interpolate H"
+    TunerInterpolationMode.VERTICAL -> "Interpolate V"
+    TunerInterpolationMode.TWO_DIMENSIONAL -> "Interpolate 2D"
 }
 
 private fun formatValue(value: Double, decimals: Int): String =
