@@ -48,7 +48,11 @@ pub fn encode(
     write_u32(&mut bytes, 28, projection.descriptor.id);
     write_u32(&mut bytes, 32, projection.descriptor.rows as u32);
     write_u32(&mut bytes, 36, projection.descriptor.cols as u32);
-    write_u32(&mut bytes, 40, projection.descriptor.display_decimals as u32);
+    write_u32(
+        &mut bytes,
+        40,
+        projection.descriptor.display_decimals as u32,
+    );
     write_u32(&mut bytes, 44, flags);
     write_f64(&mut bytes, 48, projection.descriptor.minimum);
     write_f64(&mut bytes, 56, projection.descriptor.maximum);
@@ -136,7 +140,10 @@ mod tests {
         assert_eq!(read_u32(&bytes, 28), OFFLINE_FIXTURE_PRIMARY_TABLE_ID);
         assert_eq!(read_u32(&bytes, 32), 4);
         assert_eq!(read_u32(&bytes, 36), 5);
-        assert_eq!(read_u32(&bytes, 44), TABLE_PROJECTION_FLAG_OFFLINE | TABLE_PROJECTION_FLAG_FIXTURE);
+        assert_eq!(
+            read_u32(&bytes, 44),
+            TABLE_PROJECTION_FLAG_OFFLINE | TABLE_PROJECTION_FLAG_FIXTURE
+        );
 
         let x_offset = read_u32(&bytes, 96) as usize;
         let values_offset = read_u32(&bytes, 104) as usize;
