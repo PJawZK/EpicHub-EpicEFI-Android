@@ -42,7 +42,10 @@ pub struct TableDescriptor {
     pub cols: usize,
     pub minimum: f64,
     pub maximum: f64,
-    pub decimals: u8,
+    pub quantum: f64,
+    pub quantum_origin: f64,
+    pub edit_increment: f64,
+    pub display_decimals: u8,
 }
 
 impl TableDescriptor {
@@ -52,8 +55,16 @@ impl TableDescriptor {
         }
         if !self.minimum.is_finite()
             || !self.maximum.is_finite()
+            || !self.quantum.is_finite()
+            || !self.quantum_origin.is_finite()
+            || !self.edit_increment.is_finite()
             || self.minimum > self.maximum
-            || self.decimals > 9
+            || self.quantum <= 0.0
+            || self.edit_increment <= 0.0
+            || self.display_decimals > 9
+            || !is_quantized(self.minimum, self.quantum_origin, self.quantum)
+            || !is_quantized(self.maximum, self.quantum_origin, self.quantum)
+            || !is_multiple(self.edit_increment, self.quantum)
         {
             return Err(TuneError::InvalidDescriptor);
         }
@@ -94,12 +105,8 @@ impl TableSnapshot {
         {
             return Err(TuneError::NonFiniteValue);
         }
-        if self
-            .values
-            .iter()
-            .any(|value| *value < self.descriptor.minimum || *value > self.descriptor.maximum)
-        {
-            return Err(TuneError::ValueOutOfRange);
+        for value in &self.values {
+            self.validate_canonical_value(*value)?;
         }
         Ok(())
     }
@@ -273,7 +280,7 @@ impl TuneDraft {
             if table.values[index] != change.before {
                 return Err(TuneError::StalePreview);
             }
-            table.validate_value(change.after)?;
+            table.validate_canonical_value(change.after)?;
         }
 
         let table = self
@@ -295,16 +302,26 @@ impl TuneDraft {
     }
 
     pub fn undo(&mut self) -> Result<u64, TuneError> {
-        let entry = self.undo.pop().ok_or(TuneError::NothingToUndo)?;
+        let entry = self
+            .undo
+            .last()
+            .cloned()
+            .ok_or(TuneError::NothingToUndo)?;
         self.apply_history(&entry, false)?;
+        self.undo.pop();
         self.redo.push(entry);
         self.advance_revision();
         Ok(self.revision)
     }
 
     pub fn redo(&mut self) -> Result<u64, TuneError> {
-        let entry = self.redo.pop().ok_or(TuneError::NothingToRedo)?;
+        let entry = self
+            .redo
+            .last()
+            .cloned()
+            .ok_or(TuneError::NothingToRedo)?;
         self.apply_history(&entry, true)?;
+        self.redo.pop();
         self.undo.push(entry);
         self.advance_revision();
         Ok(self.revision)
@@ -351,14 +368,31 @@ impl TableSnapshot {
             .ok_or(TuneError::CellOutOfBounds)
     }
 
-    fn validate_value(&self, value: f64) -> Result<(), TuneError> {
+    fn validate_canonical_value(&self, value: f64) -> Result<(), TuneError> {
         if !value.is_finite() {
             return Err(TuneError::NonFiniteValue);
         }
         if value < self.descriptor.minimum || value > self.descriptor.maximum {
             return Err(TuneError::ValueOutOfRange);
         }
+        if !is_quantized(
+            value,
+            self.descriptor.quantum_origin,
+            self.descriptor.quantum,
+        ) {
+            return Err(TuneError::UnrepresentableValue);
+        }
         Ok(())
+    }
+
+    fn normalize_edit_value(&self, value: f64) -> Result<f64, TuneError> {
+        if !value.is_finite() {
+            return Err(TuneError::NonFiniteValue);
+        }
+        let steps = ((value - self.descriptor.quantum_origin) / self.descriptor.quantum).round();
+        let normalized = self.descriptor.quantum_origin + steps * self.descriptor.quantum;
+        self.validate_canonical_value(normalized)?;
+        Ok(normalized)
     }
 
     fn apply_operation(
@@ -366,17 +400,14 @@ impl TableSnapshot {
         current: f64,
         operation: TableEditOperation,
     ) -> Result<f64, TuneError> {
-        let step = 10_f64.powi(-(self.descriptor.decimals as i32));
         let raw = match operation {
             TableEditOperation::Set(value) => value,
             TableEditOperation::Add(value) => current + value,
             TableEditOperation::Scale(value) => current * value,
-            TableEditOperation::Increment => current + step,
-            TableEditOperation::Decrement => current - step,
+            TableEditOperation::Increment => current + self.descriptor.edit_increment,
+            TableEditOperation::Decrement => current - self.descriptor.edit_increment,
         };
-        let rounded = round_to_decimals(raw, self.descriptor.decimals);
-        self.validate_value(rounded)?;
-        Ok(rounded)
+        self.normalize_edit_value(raw)
     }
 }
 
@@ -392,9 +423,14 @@ fn unique_cells(cells: &[CellCoord]) -> Result<Vec<CellCoord>, TuneError> {
     Ok(unique)
 }
 
-fn round_to_decimals(value: f64, decimals: u8) -> f64 {
-    let factor = 10_f64.powi(decimals as i32);
-    (value * factor).round() / factor
+fn is_quantized(value: f64, origin: f64, quantum: f64) -> bool {
+    let steps = (value - origin) / quantum;
+    (steps - steps.round()).abs() <= 1e-9
+}
+
+fn is_multiple(value: f64, quantum: f64) -> bool {
+    let steps = value / quantum;
+    (steps - steps.round()).abs() <= 1e-9
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -409,6 +445,7 @@ pub enum TuneError {
     ProtectedCell,
     NonFiniteValue,
     ValueOutOfRange,
+    UnrepresentableValue,
     StalePreview,
     NothingToUndo,
     NothingToRedo,
@@ -431,7 +468,10 @@ mod tests {
                     cols: 3,
                     minimum: 0.0,
                     maximum: 200.0,
-                    decimals: 1,
+                    quantum: 0.25,
+                    quantum_origin: 0.0,
+                    edit_increment: 0.5,
+                    display_decimals: 2,
                 },
                 x_axis: vec![1000.0, 2000.0, 3000.0],
                 y_axis: vec![40.0, 100.0],
@@ -451,12 +491,12 @@ mod tests {
             .apply(&TableEditCommand {
                 table_id: 7,
                 cells: vec![CellCoord { row: 0, col: 0 }],
-                operation: TableEditOperation::Set(99.9),
+                operation: TableEditOperation::Set(99.75),
             })
             .unwrap();
 
         assert_eq!(baseline.tables[&7].values[0], 50.0);
-        assert_eq!(draft.table_projection(7).unwrap().values[0], 99.9);
+        assert_eq!(draft.table_projection(7).unwrap().values[0], 99.75);
         assert_eq!(draft.origin(), TuneSnapshotOrigin::OfflineFixture);
         assert_eq!(draft.profile_generation(), 42);
     }
@@ -468,10 +508,7 @@ mod tests {
 
         let result = draft.apply(&TableEditCommand {
             table_id: 7,
-            cells: vec![
-                CellCoord { row: 0, col: 0 },
-                CellCoord { row: 1, col: 1 },
-            ],
+            cells: vec![CellCoord { row: 0, col: 0 }, CellCoord { row: 1, col: 1 }],
             operation: TableEditOperation::Add(5.0),
         });
 
@@ -487,25 +524,31 @@ mod tests {
         let revision = draft
             .apply(&TableEditCommand {
                 table_id: 7,
-                cells: vec![
-                    CellCoord { row: 0, col: 0 },
-                    CellCoord { row: 0, col: 1 },
-                ],
+                cells: vec![CellCoord { row: 0, col: 0 }, CellCoord { row: 0, col: 1 }],
                 operation: TableEditOperation::Scale(1.1),
             })
             .unwrap();
 
         assert_eq!(revision, 1);
-        assert_eq!(&draft.table_projection(7).unwrap().values[..2], &[55.0, 60.5]);
+        assert_eq!(
+            &draft.table_projection(7).unwrap().values[..2],
+            &[55.0, 60.5]
+        );
         assert!(draft.can_undo());
 
         draft.undo().unwrap();
-        assert_eq!(&draft.table_projection(7).unwrap().values[..2], &[50.0, 55.0]);
+        assert_eq!(
+            &draft.table_projection(7).unwrap().values[..2],
+            &[50.0, 55.0]
+        );
         assert!(!draft.can_undo());
         assert!(draft.can_redo());
 
         draft.redo().unwrap();
-        assert_eq!(&draft.table_projection(7).unwrap().values[..2], &[55.0, 60.5]);
+        assert_eq!(
+            &draft.table_projection(7).unwrap().values[..2],
+            &[55.0, 60.5]
+        );
     }
 
     #[test]
@@ -515,10 +558,7 @@ mod tests {
 
         let result = draft.apply(&TableEditCommand {
             table_id: 7,
-            cells: vec![
-                CellCoord { row: 0, col: 0 },
-                CellCoord { row: 1, col: 2 },
-            ],
+            cells: vec![CellCoord { row: 0, col: 0 }, CellCoord { row: 1, col: 2 }],
             operation: TableEditOperation::Add(150.0),
         });
 
@@ -527,7 +567,7 @@ mod tests {
     }
 
     #[test]
-    fn increment_and_decrement_use_descriptor_precision() {
+    fn increment_is_independent_from_display_precision() {
         let mut draft = TuneDraft::from_snapshot(&fixture_snapshot());
         let cell = CellCoord { row: 0, col: 0 };
 
@@ -538,7 +578,7 @@ mod tests {
                 operation: TableEditOperation::Increment,
             })
             .unwrap();
-        assert_eq!(draft.table_projection(7).unwrap().values[0], 50.1);
+        assert_eq!(draft.table_projection(7).unwrap().values[0], 50.5);
 
         draft
             .apply(&TableEditCommand {
@@ -548,6 +588,22 @@ mod tests {
             })
             .unwrap();
         assert_eq!(draft.table_projection(7).unwrap().values[0], 50.0);
+        assert_eq!(draft.table_projection(7).unwrap().descriptor.display_decimals, 2);
+    }
+
+    #[test]
+    fn arbitrary_edit_is_quantized_to_profile_value_domain() {
+        let mut draft = TuneDraft::from_snapshot(&fixture_snapshot());
+
+        draft
+            .apply(&TableEditCommand {
+                table_id: 7,
+                cells: vec![CellCoord { row: 0, col: 0 }],
+                operation: TableEditOperation::Set(50.37),
+            })
+            .unwrap();
+
+        assert_eq!(draft.table_projection(7).unwrap().values[0], 50.25);
     }
 
     #[test]
@@ -557,13 +613,13 @@ mod tests {
             .preview(&TableEditCommand {
                 table_id: 7,
                 cells: vec![CellCoord { row: 0, col: 0 }],
-                operation: TableEditOperation::Set(66.6),
+                operation: TableEditOperation::Set(66.75),
             })
             .unwrap();
 
         assert_eq!(draft.table_projection(7).unwrap().values[0], 50.0);
         assert_eq!(preview.base_revision, 0);
-        assert_eq!(preview.changes[0].after, 66.6);
+        assert_eq!(preview.changes[0].after, 66.75);
 
         draft
             .apply(&TableEditCommand {
@@ -575,6 +631,22 @@ mod tests {
 
         assert_eq!(draft.commit_preview(preview), Err(TuneError::StalePreview));
         assert_eq!(draft.table_projection(7).unwrap().values[0], 50.0);
+    }
+
+    #[test]
+    fn history_conflict_does_not_drop_the_undo_entry() {
+        let mut draft = TuneDraft::from_snapshot(&fixture_snapshot());
+        draft
+            .apply(&TableEditCommand {
+                table_id: 7,
+                cells: vec![CellCoord { row: 0, col: 0 }],
+                operation: TableEditOperation::Set(60.0),
+            })
+            .unwrap();
+
+        draft.tables.get_mut(&7).unwrap().values[0] = 61.0;
+        assert_eq!(draft.undo(), Err(TuneError::HistoryConflict));
+        assert!(draft.can_undo());
     }
 
     #[test]
