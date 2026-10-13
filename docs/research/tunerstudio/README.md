@@ -52,7 +52,7 @@ TunerStudio findings must be mapped onto those existing ownership boundaries ins
 
 ## Prior EpicHub table-interaction evidence
 
-The TunerStudio table/editor research must also be reconciled with the pre-existing **EpicEFI Table Interaction Lab** work now preserved under:
+The TunerStudio table/editor research is reconciled with the pre-existing **EpicEFI Table Interaction Lab** work preserved under:
 
 `docs/research/table-interaction-lab/`
 
@@ -66,7 +66,7 @@ That prior work already establishes/project-prototypes several important EpicHub
 - rich 3D inspection layers;
 - explicit separation between table editing and ECU RAM-write/Burn ownership.
 
-Therefore TunerStudio findings must distinguish:
+Therefore TunerStudio findings distinguish:
 
 1. **new mature behavior EpicHub had not yet modeled**;
 2. **independent validation of an existing EpicHub design/prototype decision**;
@@ -74,7 +74,9 @@ Therefore TunerStudio findings must distinguish:
 
 See `../table-interaction-lab/TUNERSTUDIO_RECONCILIATION.md` for the explicit crosswalk.
 
-## Research order
+## Research order and status
+
+All eight planned slices are now complete:
 
 1. project/INI authority, ECU identity, connection/session, reconnect/recovery;
 2. tune read/write state, difference handling, Burn/persistence safeguards;
@@ -131,42 +133,48 @@ Covers reusable semantic comparison between working tune, ECU, saved tune and hi
 
 Covers project-local profile authority across firmware changes, explicit separation of flashing from project migration, project-local overrides, pre-upgrade archives and firmware-provenance boundaries, compatibility-aware tune restoration, migration/validation provenance, separate sensor-calibration handling, partial/object-level migration, non-tune project-state migration, atomic source/destination project generations, and ordered rollback requirements.
 
+### 8. Performance / cache / scaling
+
+`PERFORMANCE_CACHE_SCALING.md`
+
+Covers configurable runtime rates, partial runtime reads, hidden-presentation demand release, layered acquisition/derivation/retention/rendering, generation-scoped derived caches, bounded transport diagnostics and visual histories, block/chunk write planning, revisioned table publication, compile-once resolved profiles, long-log query/downsampling, cache-lifetime rules, observability budgets, and workload-specific production performance qualification.
+
 Important conclusions include:
 
-- flashing firmware does not itself migrate the project or prove tune compatibility;
-- a project must retain its own profile generation until an explicit migration succeeds;
-- project archives preserve broad application/project state but must not be represented as firmware-image backups unless the binary is actually included;
-- migration needs per-setting/object classification and provenance for all automatic transforms;
-- sensor/controller calibration assets can have lifecycle semantics distinct from ordinary tune settings;
-- dashboards, log profiles, calculated channels and history need independent schema migration and may be partially compatible even when the tune itself migrates successfully;
-- the source project/profile generation must remain available for rollback and comparison.
+- optimize by avoiding unnecessary work near its source rather than merely accelerating downstream UI;
+- reduced retained/logged fields and reduced ECU transport bandwidth are separate concepts;
+- high-rate transport, derived computation, logger retention and Compose rendering need independent rate budgets;
+- inactive presentation should release its demand without defeating active Logger/Analyzer/warning consumers;
+- large tune edits stay semantic transactions while lower layers batch transport writes;
+- large definitions should resolve once into immutable typed profile generations rather than be reparsed in hot paths;
+- high-rate live table overlays remain separate from slow table/tune state;
+- long logs should be queried/downsampled below the UI/JNI boundary instead of fully materialized as Kotlin objects;
+- caches must have explicit semantic lifetime/generation keys;
+- the current EpicHub physical performance foundation should remain a regression/profiling tool, not restart as a placeholder-UI optimization phase.
 
 ## Running backlog
 
-`EPICHUB_BACKLOG.md` contains EH-TS-001 through EH-TS-064.
+The reviewed research backlog currently spans **EH-TS-001 through EH-TS-102** across four files:
 
-Additional reviewed backlog extensions are currently kept separate to avoid destructive large-file rewrites during research:
+- `EPICHUB_BACKLOG.md` — EH-TS-001…064;
+- `EPICHUB_BACKLOG_COMPARE_HISTORY.md` — EH-TS-065…076;
+- `EPICHUB_BACKLOG_MIGRATION.md` — EH-TS-077…090;
+- `EPICHUB_BACKLOG_PERFORMANCE.md` — EH-TS-091…102.
 
-- `EPICHUB_BACKLOG_COMPARE_HISTORY.md` — EH-TS-065 through EH-TS-076;
-- `EPICHUB_BACKLOG_MIGRATION.md` — EH-TS-077 through EH-TS-090.
+These should be consolidated into one ordered backlog during the research-closeout maintenance pass. Numbering indicates research traceability, not implementation acceptance or priority.
 
-They should be consolidated into one ordered backlog during the final research-maintenance pass.
+## Research closeout state
 
-## Next research slice
+The planned TunerStudio behavioral-reference investigation is now complete enough to stop broad exploratory research.
 
-Proceed to **large-project/table/log performance and cache behavior**.
+Remaining unknowns are intentionally narrow dynamic-validation questions recorded inside the subsystem documents, such as exact disconnect/repaint/flush/cache algorithms that static package evidence cannot establish.
 
-High-value questions include:
+The next useful step is **research closeout and implementation mapping**, not another broad TunerStudio subsystem sweep:
 
-- project-open/profile-parse cost and caching;
-- large tune/table editor responsiveness;
-- runtime-channel/calculated-channel scaling;
-- dashboard hidden/visible work suppression;
-- long-log memory and indexing behavior;
-- comparison/diff cost for large tunes;
-- restore/history storage growth;
-- resource/cache invalidation after profile or project changes;
-- whether any mature TunerStudio cache behavior reveals failure modes EpicHub should explicitly avoid;
-- concrete performance/regression budgets that fit EpicHub's existing `phase2/performance-foundation` work.
+1. consolidate the four backlog files without losing numbering/provenance;
+2. produce a cross-slice architecture/requirement index mapping EH-TS findings onto current EpicHub owners (`ResolvedProfile`, `TuneDraft`, mutation coordinator, `ChannelStore`, Logger, Analyzer, Dashboard, Diagnostics, project/history/migration services);
+3. mark findings as already-covered, accepted candidate, deferred, runtime-validation-needed, or rejected;
+4. identify the smallest implementation-ready Tuner slice that fits the existing product-development order;
+5. keep unresolved TunerStudio runtime questions as targeted validation tasks only when they materially affect an implementation decision.
 
-The research branch intentionally contains documentation/specification only until a reviewed finding is explicitly accepted for implementation.
+The research branch intentionally remains documentation/specification only until findings are explicitly accepted into production implementation.
