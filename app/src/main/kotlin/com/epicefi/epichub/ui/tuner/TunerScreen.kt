@@ -19,6 +19,7 @@ import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -31,6 +32,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.dp
 import com.epicefi.epichub.engine.OfflineTunerFixture
 import com.epicefi.epichub.engine.TunerCellStep
+import com.epicefi.epichub.engine.TunerNumericOperation
 import com.epicefi.epichub.engine.TunerRectangle
 import com.epicefi.epichub.engine.TunerTableProjection
 import com.epicefi.epichub.ui.components.StructuralCard
@@ -66,9 +68,18 @@ private data class RectangleSelection(
     )
 }
 
+private sealed interface PendingOperation {
+    data class Step(val step: TunerCellStep) : PendingOperation
+
+    data class Numeric(
+        val operation: TunerNumericOperation,
+        val operand: String,
+    ) : PendingOperation
+}
+
 private data class PendingPreview(
     val selection: RectangleSelection,
-    val step: TunerCellStep,
+    val operation: PendingOperation,
     val projection: TunerTableProjection,
     val baseRevision: Long,
 )
@@ -82,6 +93,8 @@ fun TunerScreen(modifier: Modifier = Modifier) {
     var extendSelection by remember { mutableStateOf(false) }
     var selection by remember { mutableStateOf<RectangleSelection?>(null) }
     var pendingPreview by remember { mutableStateOf<PendingPreview?>(null) }
+    var numericOperation by remember { mutableStateOf(TunerNumericOperation.SET) }
+    var numericOperand by remember { mutableStateOf("") }
 
     fun selectCell(row: Int, col: Int) {
         val cell = CellSelection(row, col)
@@ -94,21 +107,28 @@ fun TunerScreen(modifier: Modifier = Modifier) {
         errorMessage = null
     }
 
+    fun validatePreview(
+        current: TunerTableProjection,
+        preview: TunerTableProjection,
+    ) {
+        check(preview.tableId == current.tableId)
+        check(preview.profileGeneration == current.profileGeneration)
+        check(preview.draftRevision == current.draftRevision) {
+            "Preview revision changed the committed draft."
+        }
+    }
+
     fun previewStep(step: TunerCellStep) {
         val selected = selection ?: return
         val current = projection ?: return
         runCatching {
             OfflineTunerFixture.previewRectangleStep(selected.toNative(), step).also { preview ->
-                check(preview.tableId == current.tableId)
-                check(preview.profileGeneration == current.profileGeneration)
-                check(preview.draftRevision == current.draftRevision) {
-                    "Preview revision changed the committed draft."
-                }
+                validatePreview(current, preview)
             }
         }.onSuccess { previewProjection ->
             pendingPreview = PendingPreview(
                 selection = selected,
-                step = step,
+                operation = PendingOperation.Step(step),
                 projection = previewProjection,
                 baseRevision = current.draftRevision,
             )
@@ -119,14 +139,48 @@ fun TunerScreen(modifier: Modifier = Modifier) {
         }
     }
 
+    fun previewNumeric() {
+        val selected = selection ?: return
+        val current = projection ?: return
+        runCatching {
+            OfflineTunerFixture.previewRectangleNumeric(
+                rectangle = selected.toNative(),
+                operation = numericOperation,
+                operand = numericOperand,
+            ).also { preview ->
+                validatePreview(current, preview)
+            }
+        }.onSuccess { previewProjection ->
+            pendingPreview = PendingPreview(
+                selection = selected,
+                operation = PendingOperation.Numeric(numericOperation, numericOperand),
+                projection = previewProjection,
+                baseRevision = current.draftRevision,
+            )
+            errorMessage = null
+        }.onFailure { error ->
+            pendingPreview = null
+            errorMessage = error.message ?: "Numeric preview rejected."
+        }
+    }
+
     fun applyPreview() {
         val preview = pendingPreview ?: return
         runCatching {
-            OfflineTunerFixture.applyRectangleStep(
-                rectangle = preview.selection.toNative(),
-                step = preview.step,
-                expectedRevision = preview.baseRevision,
-            )
+            when (val operation = preview.operation) {
+                is PendingOperation.Step -> OfflineTunerFixture.applyRectangleStep(
+                    rectangle = preview.selection.toNative(),
+                    step = operation.step,
+                    expectedRevision = preview.baseRevision,
+                )
+
+                is PendingOperation.Numeric -> OfflineTunerFixture.applyRectangleNumeric(
+                    rectangle = preview.selection.toNative(),
+                    operation = operation.operation,
+                    operand = operation.operand,
+                    expectedRevision = preview.baseRevision,
+                )
+            }
         }.onSuccess { next ->
             projection = next
             pendingPreview = null
@@ -258,7 +312,8 @@ fun TunerScreen(modifier: Modifier = Modifier) {
                     }
                     pendingPreview?.let { preview ->
                         Text(
-                            "Preview generated by Rust · ${preview.selection.cellCount} cells · base revision ${preview.baseRevision}",
+                            "Preview generated by Rust · ${preview.selection.cellCount} cells · " +
+                                "${operationLabel(preview.operation)} · base revision ${preview.baseRevision}",
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }
@@ -276,6 +331,57 @@ fun TunerScreen(modifier: Modifier = Modifier) {
                             Text("Apply preview")
                         }
                     }
+
+                    Text("Numeric operation", style = MaterialTheme.typography.labelLarge)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TunerNumericOperation.entries.forEach { operation ->
+                            AssistChip(
+                                onClick = {
+                                    numericOperation = operation
+                                    pendingPreview = null
+                                    errorMessage = null
+                                },
+                                label = {
+                                    Text(
+                                        if (numericOperation == operation) {
+                                            "${numericOperationLabel(operation)} · active"
+                                        } else {
+                                            numericOperationLabel(operation)
+                                        },
+                                    )
+                                },
+                            )
+                        }
+                    }
+                    OutlinedTextField(
+                        value = numericOperand,
+                        onValueChange = {
+                            numericOperand = it
+                            pendingPreview = null
+                            errorMessage = null
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        label = {
+                            Text(
+                                if (numericOperation == TunerNumericOperation.SCALE) {
+                                    "Scale factor"
+                                } else {
+                                    "Value"
+                                },
+                            )
+                        },
+                        supportingText = {
+                            Text("Text is parsed and validated by Rust before preview. Decimal point uses '.'.")
+                        },
+                    )
+                    OutlinedButton(
+                        enabled = numericOperand.isNotBlank(),
+                        onClick = ::previewNumeric,
+                    ) {
+                        Text("Preview ${numericOperationLabel(numericOperation)}")
+                    }
+
                     OutlinedButton(
                         onClick = {
                             selection = null
@@ -477,6 +583,22 @@ private fun countProtectedCells(
         }
     }
     return count
+}
+
+private fun operationLabel(operation: PendingOperation): String = when (operation) {
+    is PendingOperation.Step -> when (operation.step) {
+        TunerCellStep.DECREMENT -> "Decrement"
+        TunerCellStep.INCREMENT -> "Increment"
+    }
+
+    is PendingOperation.Numeric ->
+        "${numericOperationLabel(operation.operation)} ${operation.operand.trim()}"
+}
+
+private fun numericOperationLabel(operation: TunerNumericOperation): String = when (operation) {
+    TunerNumericOperation.SET -> "Set"
+    TunerNumericOperation.ADD -> "Add"
+    TunerNumericOperation.SCALE -> "Scale"
 }
 
 private fun formatValue(value: Double, decimals: Int): String =
