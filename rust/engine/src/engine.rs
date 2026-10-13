@@ -7,7 +7,7 @@ use crate::diagnostics::{
     DIAGNOSTIC_BATCH_SIZE, DIAGNOSTIC_CODE_RUNTIME_SNAPSHOT_PUBLISHED, DIAGNOSTIC_SEVERITY_TRACE,
     EngineDiagnostics,
 };
-use crate::offline_tune_source::{OFFLINE_SOURCE_PRIMARY_TABLE_ID, offline_source_snapshot};
+use crate::offline_tune_source::offline_source_snapshot;
 use crate::runtime_snapshot::{RUNTIME_SNAPSHOT_SIZE, RuntimeSnapshot};
 use crate::tune_session::TuneSession;
 
@@ -21,12 +21,17 @@ struct EngineState {
 
 impl EngineState {
     fn new(handle: i64) -> Self {
+        let tune_session = TuneSession::from_snapshot(offline_source_snapshot());
+        debug_assert_eq!(
+            tune_session.profile_generation(),
+            tune_session.baseline().profile_generation,
+        );
         Self {
             started_at: Instant::now(),
             sequence: 0,
             channels: ChannelStore::new_synthetic(),
             diagnostics: EngineDiagnostics::new(u64::try_from(handle).unwrap_or(0)),
-            tune_session: TuneSession::from_snapshot(offline_source_snapshot()),
+            tune_session,
         }
     }
 
@@ -163,14 +168,6 @@ pub(crate) fn with_tune_session<T>(
     with_registry(|registry| registry.tune_session(handle, operation))
 }
 
-pub fn tune_table_projection(handle: i64, table_id: u32) -> Option<Vec<u8>> {
-    with_tune_session(handle, |session| session.projection_bytes(table_id)).and_then(Result::ok)
-}
-
-pub fn offline_table_projection(handle: i64) -> Option<Vec<u8>> {
-    tune_table_projection(handle, OFFLINE_SOURCE_PRIMARY_TABLE_ID)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -178,6 +175,7 @@ mod tests {
         DIAGNOSTIC_BATCH_ABI_VERSION, DIAGNOSTIC_CODE_ENGINE_CREATED,
         DIAGNOSTIC_CODE_RUNTIME_SNAPSHOT_PUBLISHED,
     };
+    use crate::offline_tune_source::OFFLINE_SOURCE_PRIMARY_TABLE_ID;
     use crate::runtime_snapshot::{RUNTIME_SNAPSHOT_ABI_VERSION, RUNTIME_SNAPSHOT_SIZE};
     use crate::table_projection_abi::TABLE_PROJECTION_ABI_VERSION;
 
