@@ -8,15 +8,20 @@ enum class TunerCellStep(val nativeCode: Int) {
     INCREMENT(1),
 }
 
+data class TunerRectangle(
+    val anchorRow: Int,
+    val anchorCol: Int,
+    val focusRow: Int,
+    val focusCol: Int,
+)
+
 object OfflineTunerFixture {
     init {
         System.loadLibrary("epichub_engine")
     }
 
     fun readProjection(): TunerTableProjection {
-        val size = projectionSize()
-        check(size > 0) { "Offline Tuner fixture projection is unavailable." }
-        val buffer = ByteBuffer.allocateDirect(size).order(ByteOrder.LITTLE_ENDIAN)
+        val buffer = projectionBuffer()
         val status = fillProjection(buffer)
         check(status == NATIVE_BUFFER_STATUS_OK) {
             "Offline Tuner fixture projection failed with status $status."
@@ -24,23 +29,42 @@ object OfflineTunerFixture {
         return TunerTableProjectionDecoder.decode(buffer)
     }
 
-    fun previewCellStep(row: Int, col: Int, step: TunerCellStep): Double {
-        val value = previewCellStepNative(row, col, step.nativeCode)
-        check(value.isFinite()) { "Offline Tuner preview was rejected." }
-        return value
+    fun previewRectangleStep(
+        rectangle: TunerRectangle,
+        step: TunerCellStep,
+    ): TunerTableProjection {
+        val buffer = projectionBuffer()
+        val status = fillRectanglePreviewNative(
+            rectangle.anchorRow,
+            rectangle.anchorCol,
+            rectangle.focusRow,
+            rectangle.focusCol,
+            step.nativeCode,
+            buffer,
+        )
+        check(status == NATIVE_BUFFER_STATUS_OK) {
+            "Offline Tuner rectangle preview was rejected with status $status."
+        }
+        return TunerTableProjectionDecoder.decode(buffer)
     }
 
-    fun applyCellStep(
-        row: Int,
-        col: Int,
+    fun applyRectangleStep(
+        rectangle: TunerRectangle,
         step: TunerCellStep,
         expectedRevision: Long,
     ): TunerTableProjection {
-        val revision = applyCellStepNative(row, col, step.nativeCode, expectedRevision)
-        check(revision >= 0L) { "Offline Tuner edit was rejected or stale." }
+        val revision = applyRectangleStepNative(
+            rectangle.anchorRow,
+            rectangle.anchorCol,
+            rectangle.focusRow,
+            rectangle.focusCol,
+            step.nativeCode,
+            expectedRevision,
+        )
+        check(revision >= 0L) { "Offline Tuner rectangle edit was rejected or stale." }
         return readProjection().also { projection ->
             check(projection.draftRevision == revision) {
-                "Offline Tuner projection revision did not match the applied edit."
+                "Offline Tuner projection revision did not match the applied rectangle edit."
             }
         }
     }
@@ -61,12 +85,27 @@ object OfflineTunerFixture {
         }
     }
 
+    private fun projectionBuffer(): ByteBuffer {
+        val size = projectionSize()
+        check(size > 0) { "Offline Tuner fixture projection is unavailable." }
+        return ByteBuffer.allocateDirect(size).order(ByteOrder.LITTLE_ENDIAN)
+    }
+
     private external fun projectionSize(): Int
     private external fun fillProjection(buffer: ByteBuffer): Int
-    private external fun previewCellStepNative(row: Int, col: Int, direction: Int): Double
-    private external fun applyCellStepNative(
-        row: Int,
-        col: Int,
+    private external fun fillRectanglePreviewNative(
+        anchorRow: Int,
+        anchorCol: Int,
+        focusRow: Int,
+        focusCol: Int,
+        direction: Int,
+        buffer: ByteBuffer,
+    ): Int
+    private external fun applyRectangleStepNative(
+        anchorRow: Int,
+        anchorCol: Int,
+        focusRow: Int,
+        focusCol: Int,
         direction: Int,
         expectedRevision: Long,
     ): Long
