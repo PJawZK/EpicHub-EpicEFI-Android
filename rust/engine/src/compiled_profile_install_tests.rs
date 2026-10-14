@@ -1,10 +1,8 @@
 use crate::compiled_ecu_profile::test_support::mega_profile;
-use crate::engine::{close_engine, create_engine, with_tune_session};
 use crate::ecu_profile::ResolvedEcuProfile;
+use crate::engine::{close_engine, create_engine, with_tune_session};
 use crate::offline_tune_source::OFFLINE_SOURCE_PRIMARY_TABLE_ID;
-use crate::resolved_profile_source::{
-    MEGA144H7_PAGE_1_SIZE, MEGA144H7_PAGE_2_SIZE, TABLE_ID_VE,
-};
+use crate::resolved_profile_source::{MEGA144H7_PAGE_1_SIZE, MEGA144H7_PAGE_2_SIZE, TABLE_ID_VE};
 use crate::tune_source_install::install_imported_pages;
 use crate::tuning::TuneSnapshotOrigin;
 
