@@ -35,6 +35,13 @@ sealed interface RuntimeIdentityValidationResult {
     ) : RuntimeIdentityValidationResult
 }
 
+fun interface RuntimeIdentityResponseAuthority {
+    fun validate(
+        response: ByteArray,
+        maxResponseBytes: Int,
+    ): RuntimeIdentityValidationResult
+}
+
 internal fun interface RuntimeSignatureValidator {
     fun validate(
         buffer: ByteBuffer,
@@ -45,7 +52,7 @@ internal fun interface RuntimeSignatureValidator {
 
 class NativeRuntimeIdentityAuthority internal constructor(
     private val validator: RuntimeSignatureValidator,
-) {
+) : RuntimeIdentityResponseAuthority {
     constructor() : this(
         RuntimeSignatureValidator { buffer, responseLength, maxResponseBytes ->
             NativeRuntimeIdentityBridge.validateRuntimeSignatureResponse(
@@ -56,7 +63,7 @@ class NativeRuntimeIdentityAuthority internal constructor(
         },
     )
 
-    fun validate(
+    override fun validate(
         response: ByteArray,
         maxResponseBytes: Int,
     ): RuntimeIdentityValidationResult {
