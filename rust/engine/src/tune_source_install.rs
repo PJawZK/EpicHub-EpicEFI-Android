@@ -73,7 +73,7 @@ mod tests {
     struct AlternateTestProfile;
 
     impl ResolvedEcuProfile for AlternateTestProfile {
-        fn identity(&self) -> ProfileIdentity {
+        fn identity(&self) -> ProfileIdentity<'_> {
             ProfileIdentity {
                 profile_name: "alternate-test-profile",
                 signature: "alternate-firmware.9001",
@@ -82,7 +82,7 @@ mod tests {
             }
         }
 
-        fn page_sizes(&self) -> &'static [usize] {
+        fn page_sizes(&self) -> &[usize] {
             &[]
         }
 
