@@ -30,12 +30,12 @@ pub enum ProfileSelectionError {
     RecognizedControllerWithoutProfile,
 }
 
-pub struct ProfileRegistry<'a> {
-    profiles: Vec<&'a dyn ResolvedEcuProfile>,
+pub struct ProfileRegistry {
+    profiles: Vec<Box<dyn ResolvedEcuProfile>>,
     recognized_signatures: HashSet<String>,
 }
 
-impl<'a> ProfileRegistry<'a> {
+impl ProfileRegistry {
     pub fn new() -> Self {
         Self {
             profiles: Vec::new(),
@@ -47,21 +47,26 @@ impl<'a> ProfileRegistry<'a> {
         self.recognized_signatures.insert(signature.into());
     }
 
-    pub fn register_profile(
+    pub fn register_profile<P>(&mut self, profile: P) -> Result<(), ProfileRegistryError>
+    where
+        P: ResolvedEcuProfile + 'static,
+    {
+        self.register_boxed_profile(Box::new(profile))
+    }
+
+    pub fn register_boxed_profile(
         &mut self,
-        profile: &'a dyn ResolvedEcuProfile,
+        profile: Box<dyn ResolvedEcuProfile>,
     ) -> Result<(), ProfileRegistryError> {
-        let signature = profile.identity().signature;
+        let signature = profile.identity().signature.to_string();
         if self
             .profiles
             .iter()
             .any(|registered| registered.identity().signature == signature)
         {
-            return Err(ProfileRegistryError::DuplicateProfileSignature(
-                signature.to_string(),
-            ));
+            return Err(ProfileRegistryError::DuplicateProfileSignature(signature));
         }
-        self.recognized_signatures.insert(signature.to_string());
+        self.recognized_signatures.insert(signature);
         self.profiles.push(profile);
         Ok(())
     }
@@ -70,12 +75,12 @@ impl<'a> ProfileRegistry<'a> {
         &self,
         runtime_identity: &RuntimeControllerIdentity,
     ) -> Result<&dyn ResolvedEcuProfile, ProfileSelectionError> {
-        if let Some(profile) = self.profiles.iter().copied().find(|profile| {
+        if let Some(profile) = self.profiles.iter().find(|profile| {
             profile
                 .identity()
                 .exact_signature_matches(&runtime_identity.signature)
         }) {
-            return Ok(profile);
+            return Ok(profile.as_ref());
         }
 
         if self
@@ -93,7 +98,7 @@ impl<'a> ProfileRegistry<'a> {
     }
 }
 
-impl<'a> Default for ProfileRegistry<'a> {
+impl Default for ProfileRegistry {
     fn default() -> Self {
         Self::new()
     }
@@ -157,8 +162,8 @@ mod tests {
     #[test]
     fn selects_only_the_exact_full_live_signature() {
         let mut registry = ProfileRegistry::new();
-        registry.register_profile(&FIRST).unwrap();
-        registry.register_profile(&SECOND).unwrap();
+        registry.register_profile(FIRST).unwrap();
+        registry.register_profile(SECOND).unwrap();
 
         let matched = registry
             .select_exact_profile(&RuntimeControllerIdentity::from_signature(SECOND.signature))
@@ -201,7 +206,7 @@ mod tests {
     #[test]
     fn board_and_firmware_descriptions_do_not_participate_in_authority() {
         let mut registry = ProfileRegistry::new();
-        registry.register_profile(&FIRST).unwrap();
+        registry.register_profile(FIRST).unwrap();
         let identity = RuntimeControllerIdentity {
             signature: FIRST.signature.to_string(),
             firmware_info: Some("descriptive firmware text".to_string()),
@@ -226,13 +231,31 @@ mod tests {
             generation: 999,
         };
         let mut registry = ProfileRegistry::new();
-        registry.register_profile(&FIRST).unwrap();
+        registry.register_profile(FIRST).unwrap();
         assert_eq!(
-            registry.register_profile(&alias),
+            registry.register_profile(alias),
             Err(ProfileRegistryError::DuplicateProfileSignature(
                 FIRST.signature.to_string()
             ))
         );
         assert_eq!(registry.profile_count(), 1);
+    }
+
+    #[test]
+    fn accepts_runtime_owned_boxed_profiles_without_borrowed_lifetimes() {
+        let profile = Box::new(TestProfile {
+            name: "runtime-loaded",
+            signature: "rusEFI runtime.loaded.500",
+            generation: 500,
+        });
+        let mut registry = ProfileRegistry::new();
+        registry.register_boxed_profile(profile).unwrap();
+
+        let selected = registry
+            .select_exact_profile(&RuntimeControllerIdentity::from_signature(
+                "rusEFI runtime.loaded.500",
+            ))
+            .unwrap();
+        assert_eq!(selected.identity().profile_name, "runtime-loaded");
     }
 }
