@@ -84,6 +84,13 @@ impl<'a> ProfileRegistry<'a> {
         Ok(())
     }
 
+    pub fn select_exact_profile(
+        &self,
+        runtime_identity: &RuntimeControllerIdentity,
+    ) -> Result<&dyn ResolvedEcuProfile, ProfileSelectionError> {
+        ExactProfileSelector::select_exact_profile(self, runtime_identity)
+    }
+
     pub fn profile_count(&self) -> usize {
         self.profiles.len()
     }
@@ -154,6 +161,13 @@ impl OwnedProfileRegistry {
         self.recognized_signatures.insert(signature);
         self.profiles.push(profile);
         Ok(())
+    }
+
+    pub fn select_exact_profile(
+        &self,
+        runtime_identity: &RuntimeControllerIdentity,
+    ) -> Result<&dyn ResolvedEcuProfile, ProfileSelectionError> {
+        ExactProfileSelector::select_exact_profile(self, runtime_identity)
     }
 
     pub fn profile_count(&self) -> usize {
