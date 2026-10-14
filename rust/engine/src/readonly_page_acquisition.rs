@@ -32,22 +32,10 @@ pub enum ReadOnlyPageAcquisitionError {
     Planner(PageReadPlanError),
     Envelope(EnvelopeCodecError),
     NonSuccessStatus(u8),
-    PayloadLengthMismatch {
-        expected: usize,
-        actual: usize,
-    },
-    ChunkPageMismatch {
-        expected: usize,
-        actual: usize,
-    },
-    ChunkOffsetMismatch {
-        expected: usize,
-        actual: usize,
-    },
-    PageIncomplete {
-        expected: usize,
-        actual: usize,
-    },
+    PayloadLengthMismatch { expected: usize, actual: usize },
+    ChunkPageMismatch { expected: usize, actual: usize },
+    ChunkOffsetMismatch { expected: usize, actual: usize },
+    PageIncomplete { expected: usize, actual: usize },
 }
 
 impl From<PageReadPlanError> for ReadOnlyPageAcquisitionError {
@@ -229,7 +217,8 @@ pageReadCommand = "R%2i%2o%2c"
     #[test]
     fn android_frame_limit_reduces_payload_chunk_to_65529_bytes() {
         let bundle = bundle(65_536);
-        let plans = plan_page_acquisition(&bundle, 0, ANDROID_READ_ONLY_RESPONSE_LIMIT_BYTES).unwrap();
+        let plans =
+            plan_page_acquisition(&bundle, 0, ANDROID_READ_ONLY_RESPONSE_LIMIT_BYTES).unwrap();
 
         assert_eq!(plans.len(), 2);
         assert_eq!((plans[0].offset, plans[0].count), (0, 65_529));
