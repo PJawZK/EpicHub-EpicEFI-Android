@@ -4,10 +4,22 @@ import java.io.Closeable
 import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicLong
 
+data class Mega144h7TuneSourceModes(
+    val hundredthVe: Boolean = true,
+    val hundredthIgnition: Boolean = true,
+    val lambdaTargets: Boolean = true,
+) {
+    internal fun flags(): Int =
+        (if (hundredthVe) 0x1 else 0) or
+            (if (hundredthIgnition) 0x2 else 0) or
+            (if (lambdaTargets) 0x4 else 0)
+}
+
 class NativeEngine private constructor(initialHandle: Long) : Closeable {
     private val handle = AtomicLong(initialHandle)
     private val snapshotBuffer = RuntimeSnapshotBuffer()
     private val diagnosticBuffer = NativeDiagnosticBatchBuffer()
+    private val tuneCatalogBuffer = TunerTableCatalogBuffer()
 
     val isAlive: Boolean
         get() {
@@ -28,6 +40,39 @@ class NativeEngine private constructor(initialHandle: Long) : Closeable {
     fun drainDiagnosticEvents(): NativeDiagnosticBatch = diagnosticBuffer.read(requireNativeHandle())
 
     @Synchronized
+    fun readTuneCatalog(): TunerTableCatalog = tuneCatalogBuffer.read(requireNativeHandle())
+
+    @Synchronized
+    fun installMega144h7ImportedTunePages(
+        page1: ByteArray,
+        page2: ByteArray,
+        modes: Mega144h7TuneSourceModes = Mega144h7TuneSourceModes(),
+    ): Long {
+        require(page1.size == MEGA144H7_PAGE_1_SIZE) {
+            "Mega144H7 page 1 must be exactly $MEGA144H7_PAGE_1_SIZE bytes."
+        }
+        require(page2.size == MEGA144H7_PAGE_2_SIZE) {
+            "Mega144H7 page 2 must be exactly $MEGA144H7_PAGE_2_SIZE bytes."
+        }
+        val page1Buffer = ByteBuffer.allocateDirect(page1.size).apply {
+            put(page1)
+            rewind()
+        }
+        val page2Buffer = ByteBuffer.allocateDirect(page2.size).apply {
+            put(page2)
+            rewind()
+        }
+        val result = NativeEngineBridge.installMega144h7ImportedTunePages(
+            requireNativeHandle(),
+            page1Buffer,
+            page2Buffer,
+            modes.flags(),
+        )
+        check(result > 0L) { "Mega144H7 tune source install failed with status $result." }
+        return result
+    }
+
+    @Synchronized
     override fun close() {
         val current = handle.getAndSet(0L)
         if (current != 0L) {
@@ -37,6 +82,9 @@ class NativeEngine private constructor(initialHandle: Long) : Closeable {
     }
 
     companion object {
+        const val MEGA144H7_PAGE_1_SIZE = 55_764
+        const val MEGA144H7_PAGE_2_SIZE = 5_000
+
         private val currentEngineHandle = AtomicLong(0L)
 
         fun create(): NativeEngine {
@@ -70,6 +118,16 @@ object NativeEngineBridge {
     external fun activeCount(): Int
     external fun fillRuntimeSnapshot(handle: Long, buffer: ByteBuffer): Int
     external fun fillDiagnosticEvents(handle: Long, buffer: ByteBuffer): Int
+
+    external fun installMega144h7ImportedTunePages(
+        handle: Long,
+        page1: ByteBuffer,
+        page2: ByteBuffer,
+        modeFlags: Int,
+    ): Long
+
+    external fun tuneCatalogSize(handle: Long): Int
+    external fun fillTuneCatalog(handle: Long, buffer: ByteBuffer): Int
 
     external fun tuneProjectionSize(handle: Long, tableId: Int): Int
     external fun fillTuneProjection(handle: Long, tableId: Int, buffer: ByteBuffer): Int
