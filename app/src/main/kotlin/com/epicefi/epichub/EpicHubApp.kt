@@ -32,8 +32,11 @@ import com.epicefi.epichub.navigation.AppDestination
 import com.epicefi.epichub.navigation.PrimaryWorkspace
 import com.epicefi.epichub.platform.diagnostics.DiagnosticCaptureExporter
 import com.epicefi.epichub.platform.diagnostics.ProcessPerformanceSampler
+import com.epicefi.epichub.platform.profile.AndroidLiveTuneProfileDocumentSelectionOwner
+import com.epicefi.epichub.platform.profile.EPICHUB_PROFILE_MIME_TYPE
 import com.epicefi.epichub.ui.EpicHubShell
 import com.epicefi.epichub.ui.diagnostics.DiagnosticsTab
+import com.epicefi.epichub.ui.settings.ProfilePackageSettingsState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -89,6 +92,9 @@ fun EpicHubApp(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val engine = remember { NativeEngine.create() }
+    val profileDocuments = remember(engine, context.contentResolver) {
+        AndroidLiveTuneProfileDocumentSelectionOwner(engine, context.contentResolver)
+    }
     val nativeDiagnostics = remember { NativeDiagnosticIngestor() }
     val processPerformanceSampler = remember { ProcessPerformanceSampler() }
     val nativeEngineOwnerId = remember(nativeEngineGeneration) {
@@ -100,6 +106,7 @@ fun EpicHubApp(
     var lastLoggerDestinationId by rememberSaveable { mutableStateOf(AppDestination.LOGGER.id) }
     var diagnosticsTabName by rememberSaveable { mutableStateOf(DiagnosticsTab.OVERVIEW.name) }
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
+    var profilePackages by remember { mutableStateOf(ProfilePackageSettingsState()) }
     val runtimeSnapshot = remember(engine) { mutableStateOf<RuntimeSnapshot?>(null) }
     val diagnosticSnapshotState = remember {
         mutableStateOf(
@@ -201,6 +208,24 @@ fun EpicHubApp(
         }
     }
 
+    val profilePackagePicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenMultipleDocuments(),
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            profilePackages = profilePackages.beginOperation()
+            scope.launch {
+                val result = withContext(Dispatchers.IO) {
+                    profileDocuments.replace(uris)
+                }
+                profilePackages =
+                    profilePackages.completeSelection(
+                        result = result,
+                        selectedDocumentCount = profileDocuments.selectedUris.size,
+                    )
+            }
+        }
+    }
+
     fun selectDestination(destination: AppDestination) {
         Trace.beginSection("EpicHub.selectDestination:${destination.id}")
         try {
@@ -237,7 +262,7 @@ fun EpicHubApp(
         selectDestination(target)
     }
 
-    DisposableEffect(engine, diagnostics, nativeEngineOwnerId) {
+    DisposableEffect(engine, profileDocuments, diagnostics, nativeEngineOwnerId) {
         diagnostics.createLifecycleOwner(
             ownerId = nativeEngineOwnerId,
             ownerKind = "NativeEngine",
@@ -246,6 +271,7 @@ fun EpicHubApp(
         )
 
         onDispose {
+            profileDocuments.close()
             engine.close()
             diagnostics.record(
                 severity = DiagnosticSeverity.INFO,
@@ -364,6 +390,23 @@ fun EpicHubApp(
             activeCapture = activeCapture,
             engineAlive = engine.isAlive,
             activeEngineCount = NativeEngine.activeCount(),
+            profilePackages = profilePackages,
+            onSelectProfilePackages = {
+                profilePackagePicker.launch(
+                    arrayOf(EPICHUB_PROFILE_MIME_TYPE, "application/zip"),
+                )
+            },
+            onClearProfilePackages = {
+                if (!profilePackages.busy) {
+                    profilePackages = profilePackages.beginOperation()
+                    scope.launch {
+                        val result = withContext(Dispatchers.IO) {
+                            profileDocuments.clear()
+                        }
+                        profilePackages = profilePackages.completeClear(result)
+                    }
+                }
+            },
             benchmarkPlaceholderContent = benchmarkPlaceholderContent,
             onDiagnosticsTabSelected = { tab ->
                 if (diagnosticsTabName != tab.name) {
