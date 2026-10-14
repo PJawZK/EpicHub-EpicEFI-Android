@@ -93,7 +93,7 @@ impl<'a> ProfileRegistry<'a> {
     }
 }
 
-impl Default for ProfileRegistry<'_> {
+impl<'a> Default for ProfileRegistry<'a> {
     fn default() -> Self {
         Self::new()
     }
@@ -167,18 +167,18 @@ mod tests {
             .unwrap();
         assert_eq!(matched.identity().profile_name, "second");
 
-        assert_eq!(
+        assert!(matches!(
             registry.select_exact_profile(&RuntimeControllerIdentity::from_signature(
                 "rusEFI target.second"
             )),
             Err(ProfileSelectionError::UnknownController)
-        );
-        assert_eq!(
+        ));
+        assert!(matches!(
             registry.select_exact_profile(&RuntimeControllerIdentity::from_signature(
                 "RUSEFI TARGET.SECOND.200"
             )),
             Err(ProfileSelectionError::UnknownController)
-        );
+        ));
     }
 
     #[test]
@@ -186,18 +186,18 @@ mod tests {
         let mut registry = ProfileRegistry::new();
         registry.register_recognized_signature("rusEFI known.no-profile.300");
 
-        assert_eq!(
+        assert!(matches!(
             registry.select_exact_profile(&RuntimeControllerIdentity::from_signature(
                 "rusEFI known.no-profile.300"
             )),
             Err(ProfileSelectionError::RecognizedControllerWithoutProfile)
-        );
-        assert_eq!(
+        ));
+        assert!(matches!(
             registry.select_exact_profile(&RuntimeControllerIdentity::from_signature(
                 "rusEFI unknown.400"
             )),
             Err(ProfileSelectionError::UnknownController)
-        );
+        ));
     }
 
     #[test]
