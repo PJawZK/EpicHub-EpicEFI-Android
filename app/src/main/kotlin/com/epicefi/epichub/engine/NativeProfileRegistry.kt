@@ -13,6 +13,43 @@ private const val PROFILE_RESULT_UNKNOWN_CONTROLLER = -8L
 private const val PROFILE_RESULT_RECOGNIZED_NO_PROFILE = -9L
 private const val PROFILE_RESULT_REGISTRY_ERROR = -10L
 
+private const val PROFILE_IMPORT_OK = 0
+private const val PROFILE_IMPORT_INVALID_HANDLE = -1
+private const val PROFILE_IMPORT_INVALID_ARGUMENT = -2
+private const val PROFILE_IMPORT_BINDING_LENGTH_MISMATCH = -3
+private const val PROFILE_IMPORT_COMPILE_ERROR = -4
+private const val PROFILE_IMPORT_REGISTRY_ERROR = -5
+
+data class SemanticTableImportBinding(
+    val semanticId: Long,
+    val editorTableId: String,
+)
+
+data class CompiledProfileImport(
+    val profileName: String,
+    val profileGeneration: Long,
+    val definitionFingerprint: String?,
+    val resolvedDefinition: String,
+    val semanticTables: List<SemanticTableImportBinding>,
+)
+
+enum class CompiledProfileImportRejection {
+    InvalidHandle,
+    InvalidArgument,
+    BindingLengthMismatch,
+    CompileFailure,
+    RegistryFailure,
+    NativeFailure,
+}
+
+sealed interface CompiledProfileImportResult {
+    data object Imported : CompiledProfileImportResult
+
+    data class Rejected(
+        val reason: CompiledProfileImportRejection,
+    ) : CompiledProfileImportResult
+}
+
 enum class RuntimeProfileSelectionRejection {
     InvalidHandle,
     NotDirectBuffer,
@@ -46,6 +83,16 @@ internal interface NativeProfileRegistryOps {
 
     fun activeCount(): Int
 
+    fun registerCompiledProfile(
+        handle: Long,
+        profileName: String,
+        profileGeneration: Long,
+        definitionFingerprint: String?,
+        resolvedDefinition: String,
+        semanticIds: LongArray,
+        editorTableIds: Array<String>,
+    ): Int
+
     fun selectRuntimeProfileGeneration(
         handle: Long,
         buffer: ByteBuffer,
@@ -63,6 +110,45 @@ class NativeProfileRegistry internal constructor(
 
     val isAlive: Boolean
         get() = handle != 0L && ops.isAlive(handle)
+
+    fun importCompiledProfile(import: CompiledProfileImport): CompiledProfileImportResult {
+        val currentHandle = handle
+        if (currentHandle == 0L) {
+            return CompiledProfileImportResult.Rejected(CompiledProfileImportRejection.InvalidHandle)
+        }
+        if (
+            import.profileName.isEmpty() ||
+                import.profileGeneration <= 0L ||
+                import.resolvedDefinition.isEmpty() ||
+                import.semanticTables.any {
+                    it.semanticId < 0L || it.semanticId > 0xffff_ffffL || it.editorTableId.isEmpty()
+                }
+        ) {
+            return CompiledProfileImportResult.Rejected(CompiledProfileImportRejection.InvalidArgument)
+        }
+
+        val semanticIds = LongArray(import.semanticTables.size) { import.semanticTables[it].semanticId }
+        val editorTableIds = Array(import.semanticTables.size) { import.semanticTables[it].editorTableId }
+        return when (
+            ops.registerCompiledProfile(
+                currentHandle,
+                import.profileName,
+                import.profileGeneration,
+                import.definitionFingerprint,
+                import.resolvedDefinition,
+                semanticIds,
+                editorTableIds,
+            )
+        ) {
+            PROFILE_IMPORT_OK -> CompiledProfileImportResult.Imported
+            PROFILE_IMPORT_INVALID_HANDLE -> rejectedImport(CompiledProfileImportRejection.InvalidHandle)
+            PROFILE_IMPORT_INVALID_ARGUMENT -> rejectedImport(CompiledProfileImportRejection.InvalidArgument)
+            PROFILE_IMPORT_BINDING_LENGTH_MISMATCH -> rejectedImport(CompiledProfileImportRejection.BindingLengthMismatch)
+            PROFILE_IMPORT_COMPILE_ERROR -> rejectedImport(CompiledProfileImportRejection.CompileFailure)
+            PROFILE_IMPORT_REGISTRY_ERROR -> rejectedImport(CompiledProfileImportRejection.RegistryFailure)
+            else -> rejectedImport(CompiledProfileImportRejection.NativeFailure)
+        }
+    }
 
     fun select(
         response: ByteArray,
@@ -111,6 +197,9 @@ class NativeProfileRegistry internal constructor(
 
     private fun rejected(reason: RuntimeProfileSelectionRejection) =
         RuntimeProfileSelectionResult.Rejected(reason)
+
+    private fun rejectedImport(reason: CompiledProfileImportRejection) =
+        CompiledProfileImportResult.Rejected(reason)
 }
 
 private object JniNativeProfileRegistryOps : NativeProfileRegistryOps {
@@ -121,6 +210,25 @@ private object JniNativeProfileRegistryOps : NativeProfileRegistryOps {
     override fun isAlive(handle: Long): Boolean = NativeProfileRegistryBridge.isAlive(handle)
 
     override fun activeCount(): Int = NativeProfileRegistryBridge.activeCount()
+
+    override fun registerCompiledProfile(
+        handle: Long,
+        profileName: String,
+        profileGeneration: Long,
+        definitionFingerprint: String?,
+        resolvedDefinition: String,
+        semanticIds: LongArray,
+        editorTableIds: Array<String>,
+    ): Int =
+        NativeProfileRegistryBridge.registerCompiledProfile(
+            handle,
+            profileName,
+            profileGeneration,
+            definitionFingerprint,
+            resolvedDefinition,
+            semanticIds,
+            editorTableIds,
+        )
 
     override fun selectRuntimeProfileGeneration(
         handle: Long,
@@ -148,6 +256,16 @@ object NativeProfileRegistryBridge {
     external fun isAlive(handle: Long): Boolean
 
     external fun activeCount(): Int
+
+    external fun registerCompiledProfile(
+        handle: Long,
+        profileName: String,
+        profileGeneration: Long,
+        definitionFingerprint: String?,
+        resolvedDefinition: String,
+        semanticIds: LongArray,
+        editorTableIds: Array<String>,
+    ): Int
 
     external fun selectRuntimeProfileGeneration(
         handle: Long,
