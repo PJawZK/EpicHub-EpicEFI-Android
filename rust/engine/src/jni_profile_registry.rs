@@ -40,7 +40,10 @@ fn ffi_guard<T: Copy>(fallback: T, operation: impl FnOnce() -> T) -> T {
 fn map_store_error(error: RegistryStoreError) -> jlong {
     match error {
         RegistryStoreError::InvalidHandle => RESULT_INVALID_HANDLE,
-        RegistryStoreError::Compile(_) | RegistryStoreError::Registry(_) => RESULT_REGISTRY_ERROR,
+        RegistryStoreError::Compile(_)
+        | RegistryStoreError::BundleCompile(_)
+        | RegistryStoreError::Registry(_)
+        | RegistryStoreError::MissingCompiledBundle(_) => RESULT_REGISTRY_ERROR,
         RegistryStoreError::Authority(authority) => match authority {
             RuntimeProfileAuthorityError::UnknownController => RESULT_UNKNOWN_CONTROLLER,
             RuntimeProfileAuthorityError::RecognizedControllerWithoutProfile => {
@@ -60,8 +63,12 @@ fn map_store_error(error: RegistryStoreError) -> jlong {
 fn map_import_error(error: RegistryStoreError) -> jint {
     match error {
         RegistryStoreError::InvalidHandle => IMPORT_INVALID_HANDLE,
-        RegistryStoreError::Compile(_) => IMPORT_COMPILE_ERROR,
-        RegistryStoreError::Registry(_) | RegistryStoreError::Authority(_) => IMPORT_REGISTRY_ERROR,
+        RegistryStoreError::Compile(_) | RegistryStoreError::BundleCompile(_) => {
+            IMPORT_COMPILE_ERROR
+        }
+        RegistryStoreError::Registry(_)
+        | RegistryStoreError::Authority(_)
+        | RegistryStoreError::MissingCompiledBundle(_) => IMPORT_REGISTRY_ERROR,
     }
 }
 
