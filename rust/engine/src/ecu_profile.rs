@@ -15,6 +15,18 @@ impl ProfileIdentity {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum EcuProfileResolveError {
+    InvalidPageCount { expected: usize, actual: usize },
+    Profile(ProfileResolveError),
+}
+
+impl From<ProfileResolveError> for EcuProfileResolveError {
+    fn from(value: ProfileResolveError) -> Self {
+        Self::Profile(value)
+    }
+}
+
 /// Definition-resolved ECU profile contract.
 ///
 /// Transport discovery and board-name recognition are intentionally absent here. A profile owns
@@ -28,7 +40,7 @@ pub trait ResolvedEcuProfile {
         &self,
         pages: &[&[u8]],
         origin: TuneSnapshotOrigin,
-    ) -> Result<TuneSnapshot, ProfileResolveError>;
+    ) -> Result<TuneSnapshot, EcuProfileResolveError>;
 }
 
 pub fn find_exact_profile<'a>(
@@ -61,15 +73,16 @@ mod tests {
             &self,
             pages: &[&[u8]],
             origin: TuneSnapshotOrigin,
-        ) -> Result<TuneSnapshot, ProfileResolveError> {
+        ) -> Result<TuneSnapshot, EcuProfileResolveError> {
             if !pages.is_empty() {
-                return Err(ProfileResolveError::InvalidPageCount {
+                return Err(EcuProfileResolveError::InvalidPageCount {
                     expected: 0,
                     actual: pages.len(),
                 });
             }
             TuneSnapshot::new(self.identity.profile_generation, origin, [])
                 .map_err(ProfileResolveError::InvalidTune)
+                .map_err(EcuProfileResolveError::Profile)
         }
     }
 
