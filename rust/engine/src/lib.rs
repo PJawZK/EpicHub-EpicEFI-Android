@@ -1,6 +1,7 @@
 mod channel_store;
 mod diagnostics;
 pub mod ecu_calibration;
+pub mod ecu_compiled_snapshot;
 pub mod ecu_definition;
 pub mod ecu_definition_resolver;
 pub mod ecu_editor_definition;
