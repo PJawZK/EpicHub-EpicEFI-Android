@@ -1,8 +1,10 @@
 use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex};
 
+use crate::compiled_ecu_profile::CompiledProfileBuildError;
 use crate::ecu_profile::ResolvedEcuProfile;
 use crate::ecu_profile_registry::{OwnedProfileRegistry, ProfileRegistryError};
+use crate::profile_import::{OwnedCompiledProfileImport, compile_owned_profile_import};
 use crate::runtime_profile_authority::{
     RuntimeProfileAuthorityError, select_profile_from_runtime_response,
 };
@@ -74,6 +76,18 @@ impl ProfileRegistryStore {
             .map_err(RegistryStoreError::Registry)
     }
 
+    pub fn register_compiled_import(
+        &mut self,
+        handle: i64,
+        import: &OwnedCompiledProfileImport,
+    ) -> Result<(), RegistryStoreError> {
+        if !self.registries.contains_key(&handle) {
+            return Err(RegistryStoreError::InvalidHandle);
+        }
+        let profile = compile_owned_profile_import(import).map_err(RegistryStoreError::Compile)?;
+        self.register_profile(handle, profile)
+    }
+
     pub fn select_from_runtime_response(
         &self,
         handle: i64,
@@ -98,9 +112,10 @@ impl Default for ProfileRegistryStore {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum RegistryStoreError {
     InvalidHandle,
+    Compile(CompiledProfileBuildError),
     Registry(ProfileRegistryError),
     Authority(RuntimeProfileAuthorityError),
 }
@@ -135,6 +150,13 @@ pub fn register_recognized_signature(handle: i64, signature: impl Into<String>) 
     with_store(|store| store.register_recognized_signature(handle, signature))
 }
 
+pub fn register_compiled_profile_import(
+    handle: i64,
+    import: &OwnedCompiledProfileImport,
+) -> Result<(), RegistryStoreError> {
+    with_store(|store| store.register_compiled_import(handle, import))
+}
+
 pub fn select_profile_summary_from_runtime_response(
     handle: i64,
     response: &[u8],
@@ -148,8 +170,32 @@ mod tests {
     use super::*;
     use crate::ecu_profile::{EcuProfileResolveError, ProfileIdentity};
     use crate::ecu_profile_registry::ProfileSelectionError;
+    use crate::profile_import::OwnedSemanticTableBindingSpec;
     use crate::runtime_identity_probe::RuntimeProbeError;
     use crate::tuning::{TuneSnapshot, TuneSnapshotOrigin};
+
+    const IMPORT_DEFINITION: &str = r#"
+[TunerStudio]
+queryCommand = "S"
+versionInfo = "V"
+signature = "rusEFI registry.import.700"
+
+[Constants]
+messageEnvelopeFormat = msEnvelope_1.0
+endianness = little
+nPages = 1
+pageSize = 32
+page = 1
+rpmBins = array, U16, 0, [2], "RPM", 1, 0, 0, 10000, 0
+loadBins = array, U08, 4, [2], "Load", 1, 0, 0, 255, 0
+values = array, U08, 6, [2x2], "%", 1, 0, 0, 255, 0
+
+[TableEditor]
+table = registryTable, registryMap, "Registry Table", 1
+    xBins = rpmBins, RPMValue
+    yBins = loadBins, LoadValue
+    zBins = values
+"#;
 
     struct TestProfile {
         name: String,
@@ -188,6 +234,19 @@ mod tests {
         }
     }
 
+    fn compiled_import() -> OwnedCompiledProfileImport {
+        OwnedCompiledProfileImport {
+            profile_name: "registry-import".to_string(),
+            profile_generation: 700,
+            definition_fingerprint: Some("registry-fingerprint".to_string()),
+            resolved_definition: IMPORT_DEFINITION.to_string(),
+            semantic_tables: vec![OwnedSemanticTableBindingSpec {
+                semantic_id: 42_700,
+                editor_table_id: "registryTable".to_string(),
+            }],
+        }
+    }
+
     #[test]
     fn local_store_owns_registries_and_profiles_independently() {
         let mut store = ProfileRegistryStore::new();
@@ -215,6 +274,65 @@ mod tests {
             ))
         );
         assert_eq!(store.active_count(), 2);
+    }
+
+    #[test]
+    fn compiled_import_registers_real_profile_and_is_exactly_selectable() {
+        let mut store = ProfileRegistryStore::new();
+        let handle = store.create();
+        store
+            .register_compiled_import(handle, &compiled_import())
+            .unwrap();
+
+        assert_eq!(
+            store
+                .select_from_runtime_response(handle, b"rusEFI registry.import.700", 256)
+                .unwrap(),
+            SelectedProfileSummary {
+                profile_generation: 700,
+            }
+        );
+    }
+
+    #[test]
+    fn failed_compiled_import_does_not_partially_register_signature() {
+        let mut store = ProfileRegistryStore::new();
+        let handle = store.create();
+        let mut import = compiled_import();
+        import.semantic_tables[0].editor_table_id = "missingTable".to_string();
+
+        assert!(matches!(
+            store.register_compiled_import(handle, &import),
+            Err(RegistryStoreError::Compile(_))
+        ));
+        assert_eq!(
+            store.select_from_runtime_response(handle, b"rusEFI registry.import.700", 256),
+            Err(RegistryStoreError::Authority(
+                RuntimeProfileAuthorityError::UnknownController,
+            ))
+        );
+    }
+
+    #[test]
+    fn duplicate_compiled_import_is_rejected_without_replacing_original() {
+        let mut store = ProfileRegistryStore::new();
+        let handle = store.create();
+        let import = compiled_import();
+        store.register_compiled_import(handle, &import).unwrap();
+
+        assert!(matches!(
+            store.register_compiled_import(handle, &import),
+            Err(RegistryStoreError::Registry(
+                ProfileRegistryError::DuplicateProfileSignature(_)
+            ))
+        ));
+        assert_eq!(
+            store
+                .select_from_runtime_response(handle, b"rusEFI registry.import.700", 256)
+                .unwrap()
+                .profile_generation,
+            700
+        );
     }
 
     #[test]
