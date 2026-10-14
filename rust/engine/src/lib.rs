@@ -19,6 +19,7 @@ mod jni_profile_registry;
 mod jni_readonly_page_acquisition;
 mod jni_runtime_identity;
 mod jni_tune_session;
+pub mod live_tune_install;
 mod mega144h7_profile;
 pub mod ms_envelope_codec;
 mod offline_tune_source;
