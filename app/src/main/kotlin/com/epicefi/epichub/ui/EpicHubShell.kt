@@ -44,6 +44,7 @@ import com.epicefi.epichub.ui.dashboard.DashboardScreen
 import com.epicefi.epichub.ui.diagnostics.DiagnosticsScreen
 import com.epicefi.epichub.ui.diagnostics.DiagnosticsTab
 import com.epicefi.epichub.ui.logger.LoggerScreen
+import com.epicefi.epichub.ui.settings.ProfilePackageSettingsState
 import com.epicefi.epichub.ui.settings.SettingsScreen
 import com.epicefi.epichub.ui.tools.TuningToolsScreen
 import com.epicefi.epichub.ui.tuner.TunerScreen
@@ -61,6 +62,9 @@ fun EpicHubShell(
     activeCapture: ActiveDiagnosticCapture?,
     engineAlive: Boolean,
     activeEngineCount: Int,
+    profilePackages: ProfilePackageSettingsState = ProfilePackageSettingsState(),
+    onSelectProfilePackages: () -> Unit = {},
+    onClearProfilePackages: () -> Unit = {},
     benchmarkPlaceholderContent: Boolean = false,
     onDiagnosticsTabSelected: (DiagnosticsTab) -> Unit,
     onCaptureRecentProblem: () -> Unit,
@@ -107,6 +111,9 @@ fun EpicHubShell(
                                 onCloseSettings = onCloseSettings,
                                 runtimeSnapshot = runtimeSnapshot,
                                 diagnostics = diagnostics,
+                                profilePackages = profilePackages,
+                                onSelectProfilePackages = onSelectProfilePackages,
+                                onClearProfilePackages = onClearProfilePackages,
                                 benchmarkPlaceholderContent = benchmarkPlaceholderContent,
                                 onDiagnosticsTabSelected = onDiagnosticsTabSelected,
                                 onSaveCapture = onSaveCapture,
@@ -123,6 +130,9 @@ fun EpicHubShell(
                             onCloseSettings = onCloseSettings,
                             runtimeSnapshot = runtimeSnapshot,
                             diagnostics = diagnostics,
+                            profilePackages = profilePackages,
+                            onSelectProfilePackages = onSelectProfilePackages,
+                            onClearProfilePackages = onClearProfilePackages,
                             benchmarkPlaceholderContent = benchmarkPlaceholderContent,
                             onDiagnosticsTabSelected = onDiagnosticsTabSelected,
                             onSaveCapture = onSaveCapture,
@@ -362,6 +372,9 @@ private fun ShellContent(
     onCloseSettings: () -> Unit,
     runtimeSnapshot: State<RuntimeSnapshot?>,
     diagnostics: State<DiagnosticsSnapshot>,
+    profilePackages: ProfilePackageSettingsState,
+    onSelectProfilePackages: () -> Unit,
+    onClearProfilePackages: () -> Unit,
     benchmarkPlaceholderContent: Boolean,
     onDiagnosticsTabSelected: (DiagnosticsTab) -> Unit,
     onSaveCapture: (DiagnosticCapture) -> Unit,
@@ -369,7 +382,12 @@ private fun ShellContent(
 ) {
     Trace.beginSection("EpicHub.ShellContent:${destination.id}")
     if (settingsOpen) {
-        SettingsScreen(onClose = onCloseSettings)
+        SettingsScreen(
+            onClose = onCloseSettings,
+            profilePackages = profilePackages,
+            onSelectProfilePackages = onSelectProfilePackages,
+            onClearProfilePackages = onClearProfilePackages,
+        )
         Trace.endSection()
         return
     }
