@@ -4,6 +4,7 @@ pub mod ecu_calibration;
 pub mod ecu_definition;
 pub mod ecu_definition_resolver;
 pub mod ecu_editor_definition;
+pub mod ecu_page_codec;
 pub mod ecu_profile;
 pub mod ecu_protocol;
 mod engine;
