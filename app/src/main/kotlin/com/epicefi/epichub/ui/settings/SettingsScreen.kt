@@ -38,6 +38,10 @@ fun SettingsScreen(
     profilePackages: ProfilePackageSettingsState = ProfilePackageSettingsState(),
     onSelectProfilePackages: () -> Unit = {},
     onClearProfilePackages: () -> Unit = {},
+    usbController: UsbControllerSettingsState = UsbControllerSettingsState(),
+    onRefreshUsbCandidates: () -> Unit = {},
+    onSelectUsbCandidate: (String) -> Unit = {},
+    onRequestUsbPermission: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier.fillMaxSize()) {
@@ -98,6 +102,59 @@ fun SettingsScreen(
                             }
                         }
                         profilePackages.message?.let { message ->
+                            Text(message, style = MaterialTheme.typography.bodySmall)
+                        }
+
+                        Text("USB controller access", style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            "USB discovery and permission identify only a transport endpoint. Exact ECU identity is probed later before any tune is loaded.",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(
+                                enabled = !usbController.permissionPending,
+                                onClick = onRefreshUsbCandidates,
+                            ) {
+                                Text("Refresh USB")
+                            }
+                            Button(
+                                enabled =
+                                    profilePackages.hasSelection &&
+                                        usbController.selectedCandidate != null &&
+                                        !usbController.permissionPending,
+                                onClick = onRequestUsbPermission,
+                            ) {
+                                Text("Request access")
+                            }
+                        }
+
+                        if (usbController.candidates.isEmpty()) {
+                            Text("No USB candidates listed.", style = MaterialTheme.typography.bodySmall)
+                        } else {
+                            usbController.candidates.forEach { candidate ->
+                                val selected = candidate.endpointId == usbController.selectedEndpointId
+                                OutlinedButton(
+                                    enabled = !usbController.permissionPending,
+                                    onClick = { onSelectUsbCandidate(candidate.endpointId) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Text(
+                                        buildString {
+                                            if (selected) append("Selected · ")
+                                            append(candidate.displayName ?: candidate.endpointId)
+                                        },
+                                    )
+                                }
+                            }
+                        }
+
+                        if (!profilePackages.hasSelection) {
+                            Text(
+                                "Select at least one ECU profile package before requesting controller access.",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                        usbController.message?.let { message ->
                             Text(message, style = MaterialTheme.typography.bodySmall)
                         }
                     }
