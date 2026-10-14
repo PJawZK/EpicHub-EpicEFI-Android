@@ -20,9 +20,9 @@ mod mega144h7_profile;
 mod offline_tune_source;
 pub mod resolved_profile_source;
 pub mod runtime_identity_probe;
-pub mod runtime_profile_authority;
 #[cfg(test)]
 mod runtime_probe_selection_tests;
+pub mod runtime_profile_authority;
 #[cfg(test)]
 mod runtime_profile_selection_tests;
 mod runtime_snapshot;
