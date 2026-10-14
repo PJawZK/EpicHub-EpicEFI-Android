@@ -1,8 +1,10 @@
 use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex};
 
+use crate::compiled_ecu_profile::CompiledProfileBuildError;
 use crate::ecu_profile::ResolvedEcuProfile;
 use crate::ecu_profile_registry::{OwnedProfileRegistry, ProfileRegistryError};
+use crate::profile_import::{CompiledProfileImportRequest, compile_imported_profile};
 use crate::runtime_profile_authority::{
     RuntimeProfileAuthorityError, select_profile_from_runtime_response,
 };
@@ -74,6 +76,18 @@ impl ProfileRegistryStore {
             .map_err(RegistryStoreError::Registry)
     }
 
+    pub fn register_compiled_import(
+        &mut self,
+        handle: i64,
+        request: &CompiledProfileImportRequest,
+    ) -> Result<(), RegistryStoreError> {
+        if !self.registries.contains_key(&handle) {
+            return Err(RegistryStoreError::InvalidHandle);
+        }
+        let profile = compile_imported_profile(request).map_err(RegistryStoreError::Compile)?;
+        self.register_profile(handle, profile)
+    }
+
     pub fn select_from_runtime_response(
         &self,
         handle: i64,
@@ -98,9 +112,10 @@ impl Default for ProfileRegistryStore {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum RegistryStoreError {
     InvalidHandle,
+    Compile(CompiledProfileBuildError),
     Registry(ProfileRegistryError),
     Authority(RuntimeProfileAuthorityError),
 }
@@ -135,6 +150,13 @@ pub fn register_recognized_signature(handle: i64, signature: impl Into<String>) 
     with_store(|store| store.register_recognized_signature(handle, signature))
 }
 
+pub fn register_compiled_profile_import(
+    handle: i64,
+    request: &CompiledProfileImportRequest,
+) -> Result<(), RegistryStoreError> {
+    with_store(|store| store.register_compiled_import(handle, request))
+}
+
 pub fn select_profile_summary_from_runtime_response(
     handle: i64,
     response: &[u8],
@@ -146,8 +168,13 @@ pub fn select_profile_summary_from_runtime_response(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::compiled_ecu_profile::test_support::{MEGA_BINDINGS, MEGA_COMPILED_DEFINITION};
     use crate::ecu_profile::{EcuProfileResolveError, ProfileIdentity};
     use crate::ecu_profile_registry::ProfileSelectionError;
+    use crate::resolved_profile_source::{
+        MEGA144H7_PROFILE_FINGERPRINT, MEGA144H7_PROFILE_GENERATION, MEGA144H7_PROFILE_NAME,
+        MEGA144H7_PROFILE_SIGNATURE,
+    };
     use crate::runtime_identity_probe::RuntimeProbeError;
     use crate::tuning::{TuneSnapshot, TuneSnapshotOrigin};
 
@@ -188,6 +215,22 @@ mod tests {
         }
     }
 
+    fn mega_import() -> CompiledProfileImportRequest {
+        CompiledProfileImportRequest {
+            profile_name: MEGA144H7_PROFILE_NAME.to_string(),
+            profile_generation: MEGA144H7_PROFILE_GENERATION,
+            definition_fingerprint: Some(MEGA144H7_PROFILE_FINGERPRINT.to_string()),
+            resolved_definition: MEGA_COMPILED_DEFINITION.to_string(),
+            semantic_tables: MEGA_BINDINGS
+                .iter()
+                .map(|binding| crate::compiled_ecu_profile::OwnedSemanticTableBinding {
+                    semantic_id: binding.semantic_id,
+                    editor_table_id: binding.editor_table_id.to_string(),
+                })
+                .collect(),
+        }
+    }
+
     #[test]
     fn local_store_owns_registries_and_profiles_independently() {
         let mut store = ProfileRegistryStore::new();
@@ -215,6 +258,63 @@ mod tests {
             ))
         );
         assert_eq!(store.active_count(), 2);
+    }
+
+    #[test]
+    fn compiled_import_registers_real_profile_and_is_exactly_selectable() {
+        let mut store = ProfileRegistryStore::new();
+        let handle = store.create();
+        store.register_compiled_import(handle, &mega_import()).unwrap();
+
+        assert_eq!(
+            store
+                .select_from_runtime_response(handle, MEGA144H7_PROFILE_SIGNATURE.as_bytes(), 256)
+                .unwrap(),
+            SelectedProfileSummary {
+                profile_generation: MEGA144H7_PROFILE_GENERATION,
+            }
+        );
+    }
+
+    #[test]
+    fn failed_compiled_import_does_not_partially_register_signature() {
+        let mut store = ProfileRegistryStore::new();
+        let handle = store.create();
+        let mut request = mega_import();
+        request.resolved_definition = "[TunerStudio]\nsignature = \"broken\"\n".to_string();
+
+        assert!(matches!(
+            store.register_compiled_import(handle, &request),
+            Err(RegistryStoreError::Compile(_))
+        ));
+        assert_eq!(
+            store.select_from_runtime_response(handle, b"broken", 256),
+            Err(RegistryStoreError::Authority(
+                RuntimeProfileAuthorityError::UnknownController,
+            ))
+        );
+    }
+
+    #[test]
+    fn duplicate_compiled_import_is_rejected_without_replacing_original() {
+        let mut store = ProfileRegistryStore::new();
+        let handle = store.create();
+        let request = mega_import();
+        store.register_compiled_import(handle, &request).unwrap();
+
+        assert!(matches!(
+            store.register_compiled_import(handle, &request),
+            Err(RegistryStoreError::Registry(
+                ProfileRegistryError::DuplicateProfileSignature(_)
+            ))
+        ));
+        assert_eq!(
+            store
+                .select_from_runtime_response(handle, MEGA144H7_PROFILE_SIGNATURE.as_bytes(), 256)
+                .unwrap()
+                .profile_generation,
+            MEGA144H7_PROFILE_GENERATION
+        );
     }
 
     #[test]
