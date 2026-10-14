@@ -128,10 +128,7 @@ fn plan_for_index(
     })
     .map_err(map_store_error)?
     .map_err(map_acquisition_error)?;
-    plans
-        .get(plan_index)
-        .cloned()
-        .ok_or(ACQ_INVALID_ARGUMENT)
+    plans.get(plan_index).cloned().ok_or(ACQ_INVALID_ARGUMENT)
 }
 
 #[unsafe(no_mangle)]
@@ -146,15 +143,11 @@ pub extern "system" fn Java_com_epicefi_epichub_engine_NativeReadOnlyPageBridge_
     max_response_frame_bytes: jint,
 ) -> jint {
     ffi_guard(ACQ_PANIC, || {
-        let signature = match direct_bytes(
-            &env,
-            &signature_buffer,
-            signature_length,
-            signature_limit,
-        ) {
-            Ok(value) => value,
-            Err(status) => return status,
-        };
+        let signature =
+            match direct_bytes(&env, &signature_buffer, signature_length, signature_limit) {
+                Ok(value) => value,
+                Err(status) => return status,
+            };
         let Ok(signature_limit) = usize::try_from(signature_limit) else {
             return ACQ_INVALID_LIMIT;
         };
@@ -194,15 +187,11 @@ pub extern "system" fn Java_com_epicefi_epichub_engine_NativeReadOnlyPageBridge_
     request_output: JByteBuffer,
 ) -> jlong {
     ffi_guard(i64::from(ACQ_PANIC), || {
-        let signature = match direct_bytes(
-            &env,
-            &signature_buffer,
-            signature_length,
-            signature_limit,
-        ) {
-            Ok(value) => value,
-            Err(status) => return i64::from(status),
-        };
+        let signature =
+            match direct_bytes(&env, &signature_buffer, signature_length, signature_limit) {
+                Ok(value) => value,
+                Err(status) => return i64::from(status),
+            };
         let Ok(signature_limit) = usize::try_from(signature_limit) else {
             return i64::from(ACQ_INVALID_LIMIT);
         };
@@ -267,15 +256,11 @@ pub extern "system" fn Java_com_epicefi_epichub_engine_NativeReadOnlyPageBridge_
     payload_output: JByteBuffer,
 ) -> jint {
     ffi_guard(ACQ_PANIC, || {
-        let signature = match direct_bytes(
-            &env,
-            &signature_buffer,
-            signature_length,
-            signature_limit,
-        ) {
-            Ok(value) => value,
-            Err(status) => return status,
-        };
+        let signature =
+            match direct_bytes(&env, &signature_buffer, signature_length, signature_limit) {
+                Ok(value) => value,
+                Err(status) => return status,
+            };
         let response = match direct_bytes(
             &env,
             &response_buffer,
@@ -317,16 +302,14 @@ pub extern "system" fn Java_com_epicefi_epichub_engine_NativeReadOnlyPageBridge_
         if response.len() != plan.expected_response_frame_bytes {
             return ACQ_INVALID_LENGTH;
         }
-        let verified = match with_selected_compiled_bundle(
-            handle,
-            &signature,
-            signature_limit,
-            |bundle| verify_page_read_response(bundle, &plan, &response),
-        ) {
-            Ok(Ok(chunk)) => chunk,
-            Ok(Err(error)) => return map_acquisition_error(error),
-            Err(error) => return map_store_error(error),
-        };
+        let verified =
+            match with_selected_compiled_bundle(handle, &signature, signature_limit, |bundle| {
+                verify_page_read_response(bundle, &plan, &response)
+            }) {
+                Ok(Ok(chunk)) => chunk,
+                Ok(Err(error)) => return map_acquisition_error(error),
+                Err(error) => return map_store_error(error),
+            };
 
         let (output, capacity) = match output_buffer(&env, &payload_output) {
             Ok(value) => value,
