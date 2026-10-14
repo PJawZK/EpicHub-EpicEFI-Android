@@ -90,7 +90,10 @@ table = genericTable, genericMap, "Generic Table", 1
         assert_eq!(profile.identity().profile_name, "generic-import");
         assert_eq!(profile.identity().signature, "rusEFI generic.import.100");
         assert_eq!(profile.identity().profile_generation, 100);
-        assert_eq!(profile.identity().definition_fingerprint, Some("fingerprint-100"));
+        assert_eq!(
+            profile.identity().definition_fingerprint,
+            Some("fingerprint-100")
+        );
         assert_eq!(profile.page_sizes(), &[32]);
         assert_eq!(profile.semantic_tables()[0].semantic_id, 42_001);
         assert_eq!(profile.semantic_tables()[0].editor_table_id, "genericTable");
