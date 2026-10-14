@@ -1,8 +1,10 @@
 mod channel_store;
 mod diagnostics;
+pub mod ecu_profile;
 mod engine;
 mod jni_engine;
 mod jni_tune_session;
+mod mega144h7_profile;
 mod offline_tune_source;
 pub mod resolved_profile_source;
 mod runtime_snapshot;
