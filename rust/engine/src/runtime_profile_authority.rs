@@ -20,7 +20,9 @@ pub fn select_profile_from_runtime_response<'registry>(
     registry
         .select_exact_profile(&identity)
         .map_err(|error| match error {
-            ProfileSelectionError::UnknownController => RuntimeProfileAuthorityError::UnknownController,
+            ProfileSelectionError::UnknownController => {
+                RuntimeProfileAuthorityError::UnknownController
+            }
             ProfileSelectionError::RecognizedControllerWithoutProfile => {
                 RuntimeProfileAuthorityError::RecognizedControllerWithoutProfile
             }
@@ -32,7 +34,9 @@ mod tests {
     use super::*;
     use crate::compiled_ecu_profile::test_support::mega_profile;
     use crate::ecu_profile::{EcuProfileResolveError, ProfileIdentity};
-    use crate::resolved_profile_source::{MEGA144H7_PROFILE_GENERATION, MEGA144H7_PROFILE_SIGNATURE};
+    use crate::resolved_profile_source::{
+        MEGA144H7_PROFILE_GENERATION, MEGA144H7_PROFILE_SIGNATURE,
+    };
     use crate::tuning::{TuneSnapshot, TuneSnapshotOrigin};
 
     struct TestProfile {
@@ -106,17 +110,12 @@ mod tests {
         registry.register_recognized_signature("rusEFI known.no-profile.300");
 
         assert_eq!(
-            select_profile_from_runtime_response(
-                &registry,
-                b"rusEFI known.no-profile.300",
-                256,
-            )
-            .map(|_| ()),
+            select_profile_from_runtime_response(&registry, b"rusEFI known.no-profile.300", 256,)
+                .map(|_| ()),
             Err(RuntimeProfileAuthorityError::RecognizedControllerWithoutProfile)
         );
         assert_eq!(
-            select_profile_from_runtime_response(&registry, b"rusEFI unknown.400", 256)
-                .map(|_| ()),
+            select_profile_from_runtime_response(&registry, b"rusEFI unknown.400", 256).map(|_| ()),
             Err(RuntimeProfileAuthorityError::UnknownController)
         );
     }
