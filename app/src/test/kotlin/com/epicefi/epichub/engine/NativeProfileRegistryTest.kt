@@ -36,6 +36,38 @@ class NativeProfileRegistryTest {
     }
 
     @Test
+    fun definition_bundle_import_forwards_root_symbols_includes_and_bindings_deterministically() {
+        val ops = FakeOps(createHandle = 51L, bundleImportResult = 0)
+        val registry = NativeProfileRegistry(ops)
+        val import =
+            DefinitionBundleImport(
+                profileName = "bundle-profile",
+                profileGeneration = 800L,
+                definitionFingerprint = "bundle-fingerprint",
+                rootDefinition = "#include \"a.inc\"\n#include \"z.inc\"",
+                enabledSymbols = setOf("ZETA", "ALPHA"),
+                includes = mapOf("z.inc" to "z-content", "a.inc" to "a-content"),
+                semanticTables =
+                    listOf(
+                        SemanticTableImportBinding(42_800L, "bundleTable"),
+                        SemanticTableImportBinding(0xffff_ffffL, "maxTable"),
+                    ),
+            )
+
+        assertEquals(DefinitionBundleImportResult.Imported, registry.importDefinitionBundle(import))
+        assertEquals(51L, ops.lastBundleImportHandle)
+        assertEquals("bundle-profile", ops.lastBundleProfileName)
+        assertEquals(800L, ops.lastBundleProfileGeneration)
+        assertEquals("bundle-fingerprint", ops.lastBundleFingerprint)
+        assertEquals(import.rootDefinition, ops.lastRootDefinition)
+        assertArrayEquals(arrayOf("ALPHA", "ZETA"), ops.lastEnabledSymbols)
+        assertArrayEquals(arrayOf("a.inc", "z.inc"), ops.lastIncludeNames)
+        assertArrayEquals(arrayOf("a-content", "z-content"), ops.lastIncludeContents)
+        assertArrayEquals(longArrayOf(42_800L, 0xffff_ffffL), ops.lastBundleSemanticIds)
+        assertArrayEquals(arrayOf("bundleTable", "maxTable"), ops.lastBundleEditorTableIds)
+    }
+
+    @Test
     fun import_statuses_remain_explicit_and_invalid_input_fails_before_native() {
         val cases =
             listOf(
@@ -82,6 +114,62 @@ class NativeProfileRegistryTest {
             ),
         )
         assertEquals(0, ops.importCalls)
+    }
+
+    @Test
+    fun definition_bundle_statuses_are_explicit_and_invalid_input_fails_before_native() {
+        val cases =
+            listOf(
+                -1 to DefinitionBundleImportRejection.InvalidHandle,
+                -2 to DefinitionBundleImportRejection.InvalidArgument,
+                -3 to DefinitionBundleImportRejection.BindingLengthMismatch,
+                -4 to DefinitionBundleImportRejection.CompileFailure,
+                -5 to DefinitionBundleImportRejection.RegistryFailure,
+                -6 to DefinitionBundleImportRejection.IncludeLengthMismatch,
+                -255 to DefinitionBundleImportRejection.NativeFailure,
+            )
+        val valid =
+            DefinitionBundleImport(
+                profileName = "bundle",
+                profileGeneration = 2L,
+                definitionFingerprint = null,
+                rootDefinition = "root",
+                enabledSymbols = setOf("FEATURE"),
+                includes = mapOf("constants.inc" to "content"),
+                semanticTables = emptyList(),
+            )
+
+        cases.forEach { (status, expected) ->
+            val registry = NativeProfileRegistry(FakeOps(bundleImportResult = status))
+            assertEquals(
+                DefinitionBundleImportResult.Rejected(expected),
+                registry.importDefinitionBundle(valid),
+            )
+        }
+
+        val ops = FakeOps(bundleImportResult = 0)
+        val registry = NativeProfileRegistry(ops)
+        assertEquals(
+            DefinitionBundleImportResult.Rejected(DefinitionBundleImportRejection.InvalidArgument),
+            registry.importDefinitionBundle(valid.copy(rootDefinition = "")),
+        )
+        assertEquals(
+            DefinitionBundleImportResult.Rejected(DefinitionBundleImportRejection.InvalidArgument),
+            registry.importDefinitionBundle(valid.copy(enabledSymbols = setOf(""))),
+        )
+        assertEquals(
+            DefinitionBundleImportResult.Rejected(DefinitionBundleImportRejection.InvalidArgument),
+            registry.importDefinitionBundle(valid.copy(includes = mapOf("" to "content"))),
+        )
+        assertEquals(
+            DefinitionBundleImportResult.Rejected(DefinitionBundleImportRejection.InvalidArgument),
+            registry.importDefinitionBundle(
+                valid.copy(
+                    semanticTables = listOf(SemanticTableImportBinding(0x1_0000_0000L, "tooWide")),
+                ),
+            ),
+        )
+        assertEquals(0, ops.bundleImportCalls)
     }
 
     @Test
@@ -148,18 +236,27 @@ class NativeProfileRegistryTest {
                 CompiledProfileImport("profile", 1, null, "definition", emptyList()),
             ),
         )
+        assertEquals(
+            DefinitionBundleImportResult.Rejected(DefinitionBundleImportRejection.InvalidHandle),
+            registry.importDefinitionBundle(
+                DefinitionBundleImport("bundle", 1, null, "root", semanticTables = emptyList()),
+            ),
+        )
         assertEquals(0, ops.selectionCalls)
         assertEquals(0, ops.importCalls)
+        assertEquals(0, ops.bundleImportCalls)
     }
 
     private class FakeOps(
         private val createHandle: Long = 1L,
         private val selectionResult: Long = 1L,
         private val importResult: Int = 0,
+        private val bundleImportResult: Int = 0,
     ) : NativeProfileRegistryOps {
         val closedHandles = mutableListOf<Long>()
         var selectionCalls = 0
         var importCalls = 0
+        var bundleImportCalls = 0
         var lastSelectionHandle = -1L
         var lastResponseLength = -1
         var lastResponseLimit = -1
@@ -171,6 +268,16 @@ class NativeProfileRegistryTest {
         var lastResolvedDefinition: String? = null
         var lastSemanticIds = longArrayOf()
         var lastEditorTableIds = arrayOf<String>()
+        var lastBundleImportHandle = -1L
+        var lastBundleProfileName: String? = null
+        var lastBundleProfileGeneration = -1L
+        var lastBundleFingerprint: String? = null
+        var lastRootDefinition: String? = null
+        var lastEnabledSymbols = arrayOf<String>()
+        var lastIncludeNames = arrayOf<String>()
+        var lastIncludeContents = arrayOf<String>()
+        var lastBundleSemanticIds = longArrayOf()
+        var lastBundleEditorTableIds = arrayOf<String>()
 
         override fun create(): Long = createHandle
 
@@ -200,6 +307,32 @@ class NativeProfileRegistryTest {
             lastSemanticIds = semanticIds.copyOf()
             lastEditorTableIds = editorTableIds.copyOf()
             return importResult
+        }
+
+        override fun registerDefinitionBundle(
+            handle: Long,
+            profileName: String,
+            profileGeneration: Long,
+            definitionFingerprint: String?,
+            rootDefinition: String,
+            enabledSymbols: Array<String>,
+            includeNames: Array<String>,
+            includeContents: Array<String>,
+            semanticIds: LongArray,
+            editorTableIds: Array<String>,
+        ): Int {
+            bundleImportCalls += 1
+            lastBundleImportHandle = handle
+            lastBundleProfileName = profileName
+            lastBundleProfileGeneration = profileGeneration
+            lastBundleFingerprint = definitionFingerprint
+            lastRootDefinition = rootDefinition
+            lastEnabledSymbols = enabledSymbols.copyOf()
+            lastIncludeNames = includeNames.copyOf()
+            lastIncludeContents = includeContents.copyOf()
+            lastBundleSemanticIds = semanticIds.copyOf()
+            lastBundleEditorTableIds = editorTableIds.copyOf()
+            return bundleImportResult
         }
 
         override fun selectRuntimeProfileGeneration(
