@@ -27,7 +27,7 @@ class UsbReadOnlyTuneLoaderTest {
                 liveInstall =
                     LiveTuneInstallOperation { _, _, pages ->
                         installCalls += 1
-                        installedPages = pages.map(ByteArray::copyOf)
+                        installedPages = pages.map { it.copyOf() }
                         LiveTuneInstallResult.Installed(4_242L)
                     },
             )
