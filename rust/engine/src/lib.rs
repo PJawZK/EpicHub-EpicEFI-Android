@@ -18,6 +18,7 @@ mod jni_engine;
 mod jni_live_tune_install;
 mod jni_profile_registry;
 mod jni_readonly_page_acquisition;
+mod jni_readonly_tune_metadata;
 mod jni_runtime_identity;
 mod jni_tune_session;
 pub mod live_tune_install;
