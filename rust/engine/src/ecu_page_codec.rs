@@ -16,7 +16,10 @@ pub enum PageCodecError {
     CalibrationCompile(CalibrationCompileError),
     MissingPageForPrimitive(String),
     InvalidPageNumber(String),
-    PageUnavailable { page: usize, available: usize },
+    PageUnavailable {
+        page: usize,
+        available: usize,
+    },
     OutOfBounds {
         name: String,
         page: usize,
@@ -24,11 +27,23 @@ pub enum PageCodecError {
         byte_count: usize,
         page_size: usize,
     },
-    ElementCountMismatch { expected: usize, actual: usize },
+    ElementCountMismatch {
+        expected: usize,
+        actual: usize,
+    },
     InvalidScale(String),
-    NonFiniteValue { name: String, value: f64 },
-    OutsideDeclaredRange { name: String, value: f64 },
-    UnrepresentableValue { name: String, value: f64 },
+    NonFiniteValue {
+        name: String,
+        value: f64,
+    },
+    OutsideDeclaredRange {
+        name: String,
+        value: f64,
+    },
+    UnrepresentableValue {
+        name: String,
+        value: f64,
+    },
 }
 
 impl From<CalibrationCompileError> for PageCodecError {
@@ -208,10 +223,12 @@ fn element_count(shape: &CalibrationShape) -> Result<usize, PageCodecError> {
     match shape {
         CalibrationShape::Scalar => Ok(1),
         CalibrationShape::Array(dimensions) => dimensions.iter().try_fold(1usize, |total, size| {
-            total.checked_mul(*size).ok_or(PageCodecError::ElementCountMismatch {
-                expected: usize::MAX,
-                actual: 0,
-            })
+            total
+                .checked_mul(*size)
+                .ok_or(PageCodecError::ElementCountMismatch {
+                    expected: usize::MAX,
+                    actual: 0,
+                })
         }),
     }
 }
@@ -449,13 +466,7 @@ voltage = scalar, F32, 24, "V", 1, 0, 0, 20, 3
         assert_eq!(decoded, vec![78.25, 100.0, 123.45, 650.0]);
 
         let mut encoded = vec![0_u8; 16_456];
-        encode_primitive(
-            &mut [&mut encoded],
-            &ve,
-            Endianness::Little,
-            &decoded,
-        )
-        .unwrap();
+        encode_primitive(&mut [&mut encoded], &ve, Endianness::Little, &decoded).unwrap();
         assert_eq!(&encoded[16_448..16_456], &page[16_448..16_456]);
     }
 
