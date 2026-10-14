@@ -223,10 +223,12 @@ mod tests {
             resolved_definition: MEGA_COMPILED_DEFINITION.to_string(),
             semantic_tables: MEGA_BINDINGS
                 .iter()
-                .map(|binding| crate::compiled_ecu_profile::OwnedSemanticTableBinding {
-                    semantic_id: binding.semantic_id,
-                    editor_table_id: binding.editor_table_id.to_string(),
-                })
+                .map(
+                    |binding| crate::compiled_ecu_profile::OwnedSemanticTableBinding {
+                        semantic_id: binding.semantic_id,
+                        editor_table_id: binding.editor_table_id.to_string(),
+                    },
+                )
                 .collect(),
         }
     }
@@ -264,7 +266,9 @@ mod tests {
     fn compiled_import_registers_real_profile_and_is_exactly_selectable() {
         let mut store = ProfileRegistryStore::new();
         let handle = store.create();
-        store.register_compiled_import(handle, &mega_import()).unwrap();
+        store
+            .register_compiled_import(handle, &mega_import())
+            .unwrap();
 
         assert_eq!(
             store
