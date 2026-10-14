@@ -50,17 +50,21 @@ impl From<TuneError> for ProfileResolveError {
     }
 }
 
-pub fn resolve_mega144h7_controller_snapshot(
+/// Resolves the two raw tune pages for the qualified Mega144H7 profile into EpicHub's semantic
+/// TuneSnapshot. The caller owns source provenance. This decoder never guesses where the bytes
+/// came from, so imported files and future live-controller captures can share one profile compiler.
+pub fn resolve_mega144h7_tune_pages(
     page_1: &[u8],
     page_2: &[u8],
     modes: Mega144h7ResolvedModes,
+    origin: TuneSnapshotOrigin,
 ) -> Result<TuneSnapshot, ProfileResolveError> {
     validate_page_size(1, page_1, MEGA144H7_PAGE_1_SIZE)?;
     validate_page_size(2, page_2, MEGA144H7_PAGE_2_SIZE)?;
 
     TuneSnapshot::new(
         MEGA144H7_PROFILE_GENERATION,
-        TuneSnapshotOrigin::ControllerSnapshot,
+        origin,
         [
             decode_ve_table(page_1, modes)?,
             decode_ignition_table(page_1, modes)?,
@@ -372,7 +376,17 @@ mod tests {
     use crate::tuning::TuneDraft;
 
     fn pages() -> (Vec<u8>, Vec<u8>) {
-        (vec![0; MEGA144H7_PAGE_1_SIZE], vec![0; MEGA144H7_PAGE_2_SIZE])
+        let mut page_1 = vec![0; MEGA144H7_PAGE_1_SIZE];
+        page_1[18_848..19_872].fill(147);
+        (page_1, vec![0; MEGA144H7_PAGE_2_SIZE])
+    }
+
+    fn imported_snapshot(
+        page_1: &[u8],
+        page_2: &[u8],
+        modes: Mega144h7ResolvedModes,
+    ) -> Result<TuneSnapshot, ProfileResolveError> {
+        resolve_mega144h7_tune_pages(page_1, page_2, modes, TuneSnapshotOrigin::ImportedFile)
     }
 
     fn put_u8(page: &mut [u8], offset: usize, value: u8) {
@@ -392,11 +406,7 @@ mod tests {
         let (mut page_1, page_2) = pages();
         page_1.pop();
         assert_eq!(
-            resolve_mega144h7_controller_snapshot(
-                &page_1,
-                &page_2,
-                Mega144h7ResolvedModes::default()
-            ),
+            imported_snapshot(&page_1, &page_2, Mega144h7ResolvedModes::default()),
             Err(ProfileResolveError::InvalidPageSize {
                 page: 1,
                 expected: MEGA144H7_PAGE_1_SIZE,
@@ -421,14 +431,10 @@ mod tests {
         put_u8(&mut page_1, 13_680, 25);
         put_u8(&mut page_1, 13_664, 80);
 
-        let snapshot = resolve_mega144h7_controller_snapshot(
-            &page_1,
-            &page_2,
-            Mega144h7ResolvedModes::default(),
-        )
-        .unwrap();
+        let snapshot = imported_snapshot(&page_1, &page_2, Mega144h7ResolvedModes::default())
+            .unwrap();
 
-        assert_eq!(snapshot.origin, TuneSnapshotOrigin::ControllerSnapshot);
+        assert_eq!(snapshot.origin, TuneSnapshotOrigin::ImportedFile);
         assert_eq!(snapshot.profile_generation, MEGA144H7_PROFILE_GENERATION);
         assert_eq!(snapshot.tables.len(), 4);
 
@@ -459,7 +465,7 @@ mod tests {
     #[test]
     fn profile_modes_change_presentation_not_integer_storage_quantum() {
         let (page_1, page_2) = pages();
-        let snapshot = resolve_mega144h7_controller_snapshot(
+        let snapshot = imported_snapshot(
             &page_1,
             &page_2,
             Mega144h7ResolvedModes {
@@ -486,12 +492,8 @@ mod tests {
     #[test]
     fn lambda_bounds_are_clamped_to_the_encoded_grid() {
         let (page_1, page_2) = pages();
-        let snapshot = resolve_mega144h7_controller_snapshot(
-            &page_1,
-            &page_2,
-            Mega144h7ResolvedModes::default(),
-        )
-        .unwrap();
+        let snapshot = imported_snapshot(&page_1, &page_2, Mega144h7ResolvedModes::default())
+            .unwrap();
         let target = &snapshot.tables[&TABLE_ID_TARGET_MIXTURE].descriptor;
         assert!(target.minimum >= 0.6);
         assert!(target.maximum <= 1.5);
@@ -504,16 +506,12 @@ mod tests {
     #[test]
     fn resolved_snapshot_is_accepted_by_existing_tune_draft() {
         let (page_1, page_2) = pages();
-        let snapshot = resolve_mega144h7_controller_snapshot(
-            &page_1,
-            &page_2,
-            Mega144h7ResolvedModes::default(),
-        )
-        .unwrap();
+        let snapshot = imported_snapshot(&page_1, &page_2, Mega144h7ResolvedModes::default())
+            .unwrap();
         let draft = TuneDraft::from_snapshot(&snapshot);
         let projection = draft.table_projection(TABLE_ID_VE).unwrap();
         assert_eq!(projection.descriptor.name, "VE Table");
         assert_eq!(projection.values.len(), 1_024);
-        assert_eq!(draft.origin(), TuneSnapshotOrigin::ControllerSnapshot);
+        assert_eq!(draft.origin(), TuneSnapshotOrigin::ImportedFile);
     }
 }
