@@ -6,7 +6,7 @@ use crate::tune_catalog_abi;
 use crate::tune_session::TuneSession;
 use crate::tuning::TuneSnapshotOrigin;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum TuneSourceInstallError {
     InvalidHandle,
     Resolve(EcuProfileResolveError),
