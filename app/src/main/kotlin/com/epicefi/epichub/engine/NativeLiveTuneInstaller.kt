@@ -53,13 +53,17 @@ internal interface NativeLiveTuneInstallOps {
 }
 
 class NativeLiveTuneInstaller internal constructor(
-    private val registry: NativeProfileRegistry,
+    private val engineHandleProvider: () -> Long,
+    private val registryHandleProvider: () -> Long,
     private val ops: NativeLiveTuneInstallOps,
 ) {
-    constructor(registry: NativeProfileRegistry) : this(registry, JniNativeLiveTuneInstallOps)
+    constructor(engine: NativeEngine, registry: NativeProfileRegistry) : this(
+        engine::requireNativeHandle,
+        registry::readOnlyRegistryHandle,
+        JniNativeLiveTuneInstallOps,
+    )
 
     fun install(
-        engine: NativeEngine,
         signatureResponse: ByteArray,
         signatureLimit: Int,
         pages: List<ByteArray>,
@@ -71,19 +75,19 @@ class NativeLiveTuneInstaller internal constructor(
             return rejected(LiveTuneInstallRejection.ResponseTooLarge)
         }
 
-        val engineHandle = runCatching(engine::requireNativeHandle).getOrElse {
+        val engineHandle = runCatching(engineHandleProvider).getOrElse {
             return rejected(LiveTuneInstallRejection.InvalidEngineHandle)
         }
-        val registryHandle = registry.readOnlyRegistryHandle()
+        if (engineHandle == 0L) {
+            return rejected(LiveTuneInstallRejection.InvalidEngineHandle)
+        }
+        val registryHandle = registryHandleProvider()
         if (registryHandle == 0L) {
             return rejected(LiveTuneInstallRejection.InvalidRegistryHandle)
         }
 
         val signatureBuffer = directBuffer(signatureResponse)
-        val pageBuffers =
-            Array(pages.size) { index ->
-                directBuffer(pages[index])
-            }
+        val pageBuffers = Array(pages.size) { index -> directBuffer(pages[index]) }
         val result =
             ops.installLivePages(
                 engineHandle,
