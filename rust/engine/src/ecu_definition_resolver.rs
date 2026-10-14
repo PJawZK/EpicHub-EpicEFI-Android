@@ -76,7 +76,7 @@ fn resolve_text(
         let directive = trimmed[1..].trim();
         if let Some(condition) = directive.strip_prefix("if ") {
             let symbol = parse_condition_symbol(condition)?;
-            let condition_true = enabled_symbols.contains(symbol) || defines.contains_key(symbol);
+            let condition_true = enabled_symbols.contains(symbol);
             condition_stack.push(ConditionalFrame {
                 parent_active: active,
                 condition_true,
@@ -263,6 +263,21 @@ lambdaTable = array, U08, 18848, [32x32], "afr", 0.1, 0, 0, 25, 1
             Some("\"NONE\", \"PA0\"")
         );
         assert!(!resolved.text.contains("#define"));
+    }
+
+    #[test]
+    fn define_presence_does_not_enable_conditions() {
+        let text = "#define FEATURE=1\n#if FEATURE\nenabled\n#else\ndisabled\n#endif\n";
+        let enabled = HashSet::new();
+        let includes = HashMap::new();
+        let resolved = resolve_definition(DefinitionResolveRequest {
+            text,
+            enabled_symbols: &enabled,
+            includes: &includes,
+        })
+        .unwrap();
+        assert!(resolved.text.contains("disabled"));
+        assert!(!resolved.text.contains("enabled\n"));
     }
 
     #[test]
