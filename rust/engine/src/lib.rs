@@ -1,5 +1,7 @@
 mod channel_store;
 pub mod compiled_ecu_profile;
+#[cfg(test)]
+mod compiled_profile_install_tests;
 mod diagnostics;
 pub mod ecu_calibration;
 pub mod ecu_compiled_snapshot;
