@@ -65,6 +65,36 @@ class TunerTableCatalogDecoderTest {
     }
 
     @Test
+    fun defaultTableUsesFirstDeterministicCatalogEntry() {
+        val first = TunerTableCatalogEntry(1001, "VE Table", 16, 16, 2)
+        val second = TunerTableCatalogEntry(1002, "Ignition Table", 16, 16, 2)
+        val catalog =
+            TunerTableCatalog(
+                profileGeneration = 9L,
+                draftRevision = 0L,
+                origin = TuneSourceOrigin.LIVE_CONTROLLER,
+                tables = listOf(first, second),
+            )
+
+        assertEquals(first, catalog.defaultTable())
+    }
+
+    @Test
+    fun defaultTableRejectsEmptyCatalog() {
+        val catalog =
+            TunerTableCatalog(
+                profileGeneration = 9L,
+                draftRevision = 0L,
+                origin = TuneSourceOrigin.LIVE_CONTROLLER,
+                tables = emptyList(),
+            )
+
+        assertThrows(IllegalStateException::class.java) {
+            catalog.defaultTable()
+        }
+    }
+
+    @Test
     fun rejectsNameRangeOutsideCatalog() {
         val buffer = ByteBuffer.allocate(64).order(ByteOrder.LITTLE_ENDIAN)
         buffer.putInt(1)
