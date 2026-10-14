@@ -36,6 +36,7 @@ impl CompiledEcuDefinition {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum DefinitionCompileError {
+    UnresolvedDirective(String),
     MissingSignature,
     MissingQueryCommand,
     MissingEnvelopeFormat,
@@ -69,8 +70,13 @@ pub fn compile_definition(
 
     for raw_line in request.text.lines() {
         let line = strip_comment(raw_line).trim();
-        if line.is_empty() || line.starts_with('#') {
+        if line.is_empty() {
             continue;
+        }
+        if line.starts_with('#') {
+            return Err(DefinitionCompileError::UnresolvedDirective(
+                line.to_string(),
+            ));
         }
         if line.starts_with('[') && line.ends_with(']') {
             section.clear();
@@ -297,6 +303,22 @@ pageSize = 23824
                 text: &bad,
             }),
             Err(DefinitionCompileError::MissingSignature)
+        );
+    }
+
+    #[test]
+    fn rejects_unresolved_preprocessor_directives() {
+        let bad = format!("{MEGA144H7_DEFINITION_EXCERPT}\n#if HUNDREDTH_VE\n");
+        assert_eq!(
+            compile_definition(DefinitionCompileRequest {
+                profile_name: "bad",
+                profile_generation: 1,
+                definition_fingerprint: None,
+                text: &bad,
+            }),
+            Err(DefinitionCompileError::UnresolvedDirective(
+                "#if HUNDREDTH_VE".to_string()
+            ))
         );
     }
 
