@@ -2,11 +2,13 @@
 
 ## Continuation instruction
 
-Read this file first, then verify the current head of `phase2/tuner-definition-condition-protocol-compiler`, draft PR #26 if it exists, PR #25, and the latest Foundation quality run before continuing.
+Read this file first, then verify the current head of `phase2/tuner-readonly-runtime-probe`, draft PR #29, and the latest Foundation quality run before continuing.
 
 Repository: `PJawZK/EpicHub-EpicEFI-Android`
 
-The active direction is **definition-driven multi-ECU Tuner architecture**. Do not return to Mega144H7-specific Android source-provider UI until the compiled profile path can reproduce the proven Mega144H7 `TuneSnapshot` semantics.
+The active direction is **definition-driven multi-ECU Tuner architecture**. Do not return to Mega144H7-specific source-provider routing. The compiled profile path is now qualified through raw-page decode, semantic snapshot assembly, generic source install, runtime identity, and exact profile selection.
+
+Historical pre-generic Phase 2 detail is preserved in `docs/HANDOFF_PHASE2_PRE_GENERIC_PROFILE.md`; do not replace or delete it.
 
 ---
 
@@ -14,138 +16,113 @@ The active direction is **definition-driven multi-ECU Tuner architecture**. Do n
 
 ## Qualified stacked PRs
 
-- **PR #23 — Tuner: generalize ECU profile resolution and source install**
+- **PR #23 — generic ECU profile architecture**
   - branch: `phase2/tuner-generic-ecu-profile-architecture`
   - exact qualified head: `7b0cb2d4144e01ecc4fec51f8559ee92a0bb52b8`
-  - generic `ResolvedEcuProfile` contract;
-  - generic imported-page install path;
-  - Mega144H7 becomes an adapter rather than a hard-coded product architecture.
+  - generic `ResolvedEcuProfile` and atomic `install_imported_pages()`.
 
-- **PR #24 — Tuner: compile ECU identity and page geometry from definitions**
+- **PR #24 — definition identity/page geometry compiler**
   - branch: `phase2/tuner-ecu-definition-compiler`
   - exact qualified head: `374629e70feeee3186d6fdc0aeb1f0193dee193d`
-  - Foundation run `38542649432` / #536 — PASS;
-  - dynamic profile identity and page geometry;
-  - exact signature matching;
-  - first normalized definition compiler fields: query/version command, envelope, endianness, page count and sizes.
+  - Foundation run `38542649432` — PASS.
 
-- **PR #25 — Tuner: compile calibration primitives and editor descriptors**
-  - branch: `phase2/tuner-definition-calibration-compiler`
+- **PR #25 — calibration primitives/editor descriptors**
   - exact qualified head: `1b55955e9abb9ed94d0a6f712c76c31a039b4b5e`
-  - Foundation run `38545563759` / #546 — PASS;
-  - PR remains open/draft/unmerged/mergeable;
-  - normalized scalar/array calibration storage;
-  - normalized `[TableEditor]` and `[CurveEditor]` bindings;
-  - reference/shape validation;
-  - unresolved `#...` definition directives fail closed.
+  - normalized scalar/array storage and table/curve editor bindings.
+
+- **PR #26 — condition/include resolver + per-page protocol compiler**
+  - exact qualified head: `309bbeafb98996a82f2a327ce25dcf5d8cadc0dc`
+  - unsupported definition logic fails closed;
+  - protocol commands are per-page definition data, not board switches.
+
+- **PR #27 — page codec + semantic snapshot assembler**
+  - branch: `phase2/tuner-definition-page-codec`
+  - exact qualified head: `4a1560c0569403ddc41d882c76dabb3b86ba1812`
+  - bounded endian-aware U8/S8/U16/S16/U32/S32/F32 codec;
+  - compiled page ownership;
+  - generic semantic table assembler;
+  - complete covered Mega144H7 `TuneSnapshot` equality against the qualified hand-coded oracle.
+
+- **PR #28 — compiled definitions as real `ResolvedEcuProfile`**
+  - branch: `phase2/tuner-compiled-resolved-profile`
+  - exact qualified head: `2a08a490ab3dc1155929dbb0f6c4af784c218dc1`
+  - Foundation run `38558750390` — PASS;
+  - `CompiledResolvedEcuProfile` validates page geometry, resolves snapshots, and installs through the generic atomic source path with no Mega-specific installer.
+
+- **PR #29 — runtime identity + generic profile registry**
+  - branch: `phase2/tuner-profile-registry-runtime-identity`
+  - exact qualified head: `35ca22e427c9b1c8ba24cf1979c0a23767a19147`
+  - Foundation run `38562361749` — PASS;
+  - exact full-signature selection only;
+  - duplicate profile signatures rejected;
+  - `UnknownController` remains distinct from `RecognizedControllerWithoutProfile`;
+  - board/firmware descriptions are non-authoritative;
+  - integration path proven: runtime identity → exact compiled profile → generic atomic source install.
+
+All qualified heads above are immutable checkpoints. Do not append documentation or cleanup commits to them; branch the next slice from the exact qualified SHA.
 
 ## Active branch
 
-`phase2/tuner-definition-condition-protocol-compiler`
+`phase2/tuner-readonly-runtime-probe`
 
-This branch starts exactly from qualified PR #25 head `1b55955e...`.
+Base: exact qualified PR #29 head `35ca22e427c9b1c8ba24cf1979c0a23767a19147`.
 
-Next slice: resolve definition conditions/includes sufficiently to make full generated definitions safe input, and normalize per-page protocol command geometry. This branch may become PR #26 stacked on PR #25.
+Current slice: define and qualify a **read-only, transport-neutral runtime identity probe boundary**. This layer must produce `RuntimeControllerIdentity` before profile selection while remaining incapable of ECU writes/Burn.
 
 ---
 
 # Product architecture authority
-
-The target architecture is:
 
 ```text
 transport candidate
     ↓
 read-only runtime identity probe
     ↓
-exact live signature
+RuntimeControllerIdentity(full live signature)
     ↓
-ProfileRegistry / definition provider
+ProfileRegistry exact match
     ↓
-resolved + compiled ECU definition
+CompiledResolvedEcuProfile
     ↓
-protocol capability / page geometry validation
+protocol/page geometry validation + source acquisition
     ↓
 complete TuneSnapshot
     ↓
 engine-owned TuneSession / TuneDraft
 ```
 
-Three identities must remain separate:
+Keep these identities separate:
 
-1. **Transport candidate identity** — USB VID/PID, serial endpoint, TCP, CAN adapter. Only answers whether a controller could be reachable.
-2. **Runtime controller identity** — full live firmware signature plus optional descriptive firmware/board data.
-3. **Resolved profile identity** — exact expected signature, definition fingerprint/generation and compiled schema/capabilities.
+1. **Transport candidate identity** — endpoint/adapter metadata only; says where a controller might be reachable.
+2. **Runtime controller identity** — full live signature plus optional descriptive firmware/board information.
+3. **Resolved profile identity** — exact expected signature, definition fingerprint/generation, compiled schema and capabilities.
 
-Only an exact resolved profile match plus validated schema grants interpretation/tuning authority.
+Only #3 selected by exact #2 grants interpretation/tuning authority.
 
-USB VID/PID is never ECU identity. Board-name matching and signature-prefix matching are not authority.
+USB VID/PID, board labels, endpoint names, signature prefixes, case-insensitive matches and descriptive firmware strings are never sufficient authority.
 
-Unknown firmware, recognized controller without profile, profile mismatch and malformed/incomplete profile all fail closed.
+Unknown firmware and recognized firmware without an installed profile remain reportable states but must not produce a tune snapshot, ECU write, or Burn action.
 
 ---
 
-# Definition compiler direction
+# Definition/compiler state
 
 TunerStudio/rusEFI INI is an **input/compiler source**, not runtime architecture to copy.
 
-Preferred flow:
+Qualified compiler stages now cover:
 
-```text
-mainController.ini + resolved includes/conditions
-        ↓
-EpicHub definition compiler
-        ↓
-CompiledEcuDefinition / CompiledEcuProfile
-        ↓
-production engine
-```
+- resolved simple definition conditions/includes with unsupported grammar failing closed;
+- exact signature, query/version command, envelope and endianness;
+- page count/sizes;
+- page identifiers and per-page read/write/Burn/CRC templates;
+- scalar/array calibration primitives, type/offset/dimensions/units/scale/translate/bounds/precision;
+- table and curve editor bindings;
+- explicit page ownership;
+- bounded engineering-value decode/encode;
+- semantic table assembly into `TuneSnapshot`;
+- concrete `CompiledResolvedEcuProfile`.
 
-Do not scatter live INI string lookups throughout Android or Rust runtime code.
-
-Current compiled stages:
-
-## Identity / geometry
-
-- exact signature;
-- query/version command;
-- message envelope;
-- endianness;
-- declared page count;
-- page sizes.
-
-## Calibration primitives
-
-`scalar` and `array` definitions normalize to:
-
-- name;
-- storage type (`U08`, `S08`, `U16`, `S16`, `U32`, `S32`, `F32`);
-- byte offset;
-- scalar/array dimensions;
-- units/expression text;
-- scale/translate;
-- optional bounds;
-- display precision.
-
-Top-level field splitting preserves commas inside quoted strings, braces and function expressions.
-
-Bitfields/enums are deliberately not compiled yet.
-
-## Editor semantics
-
-`[TableEditor]` compiles table/map/title/page plus X/Y/Z primitive references and runtime-channel bindings.
-
-`[CurveEditor]` compiles curve/title plus X/Y primitive references and runtime-channel binding.
-
-Validation currently rejects:
-
-- unknown primitive references;
-- non-1D table axes;
-- table Z dimensions that do not match axis lengths;
-- curve X/Y length mismatch;
-- unresolved preprocessor directives.
-
-The current Mega144H7 hand-coded resolver remains reference authority until a compiled definition reproduces the same semantic snapshot exactly.
+The hand-coded Mega144H7 resolver remains only a compatibility/reference oracle while parity coverage is expanded; it is no longer the desired production architecture.
 
 ---
 
@@ -156,54 +133,44 @@ The current Mega144H7 hand-coded resolver remains reference authority until a co
 - profile name: `353`
 - signature: `rusEFI master.2026.08.26.MEGA144H7.2273317132`
 - fingerprint: `1546186d795690b45b4fb5b064f1bd225a3e5f8b102bad28f54fb96afd6390fa`
+- generation: `2_273_317_132`
 - little endian;
-- 2 pages: 55,764 and 5,000 bytes;
-- `pageIdentifier = "\x00\x00", "\x00\x01"`
-- `pageReadCommand = "R%2i%2o%2c", "R%2i%2o%2c"`
-- `burnCommand = "B%2i", "B%2i"`
+- pages: 55,764 and 5,000 bytes;
+- `queryCommand = "S"`;
+- `pageIdentifier = "\x00\x00", "\x00\x01"`;
+- `pageReadCommand = "R%2i%2o%2c", "R%2i%2o%2c"`;
+- `burnCommand = "B%2i", "B%2i"`.
 
-Current hand-coded semantic table IDs:
+Current stable Mega semantic table IDs:
 
 - 1001 VE;
 - 1002 ignition;
-- 1003 target lambda/AFR;
+- 1003 target mixture;
 - 1004 MAP estimate.
 
-These IDs are stable semantic IDs for the current Mega profile, not evidence that unrelated ECUs should reuse the same numeric IDs automatically.
+Do not assume unrelated ECUs share these numeric IDs automatically.
 
-## uaEFI comparison evidence
+## uaEFI evidence
 
-- signature: `rusEFI master.2025.05.23.uaefi.3590163173`
-- little endian;
-- 1 page: 23,824 bytes;
-- `pageIdentifier = "\x00\x00"`
-- `pageReadCommand = "R%2o%2c"`
-- `burnCommand = "B"`
-- `pageValueWrite = "W%2o%v"`
-- `pageChunkWrite = "C%2o%2c%v"`
-- `crc32CheckCommand = "k%2o%2c"`
-
-The Mega vs uaEFI command differences are direct proof that command framing belongs in definition data, not board-specific control flow.
+Older 2025 uaEFI is one-page/non-page-indexed while later definitions may use multiple page-indexed commands. This proves that even an ECU/board family name is not protocol authority; the exact firmware definition owns command geometry.
 
 ---
 
-# Proven engine/tuning architecture that must not regress
+# Proven engine/tuning invariants
 
-Earlier qualified Phase 2 work established:
+Do not regress:
 
 - one Rust semantic tuning authority;
 - one engine-owned `TuneSession` per engine instance;
 - immutable baseline + mutable `TuneDraft`;
-- revision guard and Rust-owned Undo/Redo;
-- 2D and 3D are peer representations of the same table state;
-- all input surfaces emit semantic commands;
-- preview is non-mutating until explicit Apply;
-- table transforms operate on semantic calibration values, not UI-local arrays;
-- source install is atomic and validates completely before session replacement;
-- failed source install preserves prior baseline, draft, revision and history;
-- source/profile/draft/write/Burn remain separate;
+- Rust-owned revision guard and Undo/Redo;
+- 2D and 3D are peers over the same semantic table state;
+- preview is non-mutating until Apply;
+- atomic source installation validates completely before session replacement;
+- failed source install preserves prior baseline/draft/revision/history;
 - stable semantic IDs are independent of raw byte offsets;
-- no fabricated tune values.
+- no fabricated tune values;
+- source/profile/draft/write/Burn remain separate.
 
 Critical invariant:
 
@@ -211,20 +178,19 @@ Critical invariant:
 TuneDraft Apply != ECU RAM write != Burn
 ```
 
-Do not reintroduce `ReusableContentHost`; retained inactive Compose route trees caused a physical crash in earlier work.
-
-TunerStudio, MegaLogViewer and the Table Interaction Lab are behavioral references, not architecture authority.
+Do not reintroduce `ReusableContentHost`.
 
 ---
 
 # Immediate next work
 
-1. Inspect real Mega144H7/uaEFI directive grammar (`#if`, `#else`, `#endif`, `#include`, nested conditions, negation/expressions) before implementing a resolver.
-2. Implement a deterministic resolved-definition stage; unsupported directive grammar must fail closed rather than guess.
-3. Normalize per-page protocol data: page identifiers, read commands, Burn commands and write/CRC command templates.
-4. Validate command cardinality against `nPages` without inventing undocumented replication rules.
-5. Add tests using real Mega144H7 and uaEFI definition excerpts.
-6. Qualify the exact branch head with the full Foundation pipeline.
-7. Next after that: page ownership + raw-byte decode/encode + deterministic semantic-ID mapping, then prove compiled Mega output equals the current hand-coded resolver.
+1. Implement a transport-neutral read-only signature probe interface that cannot express write/Burn operations.
+2. Keep the probe strategy parameterized; do not require a selected ECU profile to know how to ask for identity.
+3. Bound probe requests/responses and reject empty/malformed identity responses fail closed.
+4. Prove transport-candidate metadata alone cannot select a profile.
+5. Prove failed/unknown/no-profile probes never mutate `TuneSession`.
+6. Prove exact live signature → `RuntimeControllerIdentity` → `ProfileRegistry` → compiled profile remains the only successful authority path.
+7. Qualify the exact branch head through the full Foundation pipeline.
+8. Only after that add concrete Android/USB/serial transport adapters; keep those adapters below the same read-only probe contract.
 
-Do not build generic Android live/source-provider UI before the compiled definition/profile authority is ready.
+No live ECU RAM write or Burn belongs in this stage.
