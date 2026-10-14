@@ -71,9 +71,8 @@ fn assert_dirty_offline_session_preserved(handle: i64) {
 
 #[test]
 fn transport_metadata_cannot_authorize_a_profile_when_live_signature_is_unknown() {
-    let profile = mega_profile();
     let mut registry = ProfileRegistry::new();
-    registry.register_profile(&profile).unwrap();
+    registry.register_profile(mega_profile()).unwrap();
 
     let misleading_candidate = candidate("Mega144H7 ECU on known EpicEFI USB VID/PID");
     let mut channel = FakeProbeChannel {
@@ -137,9 +136,8 @@ fn unknown_and_recognized_without_profile_do_not_mutate_existing_session() {
 
 #[test]
 fn exact_read_only_probe_can_select_compiled_profile_then_use_generic_source_install() {
-    let profile = mega_profile();
     let mut registry = ProfileRegistry::new();
-    registry.register_profile(&profile).unwrap();
+    registry.register_profile(mega_profile()).unwrap();
 
     let mut channel = FakeProbeChannel {
         response: Ok(MEGA144H7_PROFILE_SIGNATURE.as_bytes().to_vec()),
