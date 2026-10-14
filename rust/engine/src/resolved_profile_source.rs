@@ -354,10 +354,11 @@ fn read_i16_width(
     let bytes = page
         .get(offset..end)
         .ok_or(ProfileResolveError::OutOfBounds(key))?;
-    Ok(bytes
-        .chunks_exact(2)
-        .map(|pair| decode([pair[0], pair[1]]))
-        .collect())
+    let (pairs, remainder) = bytes.as_chunks::<2>();
+    if !remainder.is_empty() {
+        return Err(ProfileResolveError::OutOfBounds(key));
+    }
+    Ok(pairs.iter().copied().map(decode).collect())
 }
 
 #[cfg(test)]
