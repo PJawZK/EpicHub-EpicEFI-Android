@@ -1,5 +1,6 @@
 mod channel_store;
 pub mod compiled_ecu_profile;
+pub mod compiled_profile_bundle;
 #[cfg(test)]
 mod compiled_profile_install_tests;
 mod diagnostics;
