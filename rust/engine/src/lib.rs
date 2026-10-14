@@ -4,6 +4,7 @@ mod engine;
 mod jni_engine;
 mod jni_tune_session;
 mod offline_tune_source;
+mod resolved_profile_source;
 mod runtime_snapshot;
 mod table_projection_abi;
 mod tune_session;
