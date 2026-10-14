@@ -216,9 +216,7 @@ mod tests {
     use std::collections::{HashMap, HashSet};
 
     use super::*;
-    use crate::compiled_profile_bundle::{
-        OwnedDefinitionBundleImport, compile_definition_bundle,
-    };
+    use crate::compiled_profile_bundle::{OwnedDefinitionBundleImport, compile_definition_bundle};
 
     fn bundle(
         endianness: &str,
@@ -317,7 +315,10 @@ pageReadCommand = {reads}
     fn invalid_ranges_and_chunk_limits_fail_before_request_rendering() {
         let bundle = bundle("little", "64", r#""\x00\x00""#, r#""R%2o%2c""#);
 
-        assert_eq!(plan_page_read(&bundle, 0, 0, 0), Err(PageReadPlanError::ZeroCount));
+        assert_eq!(
+            plan_page_read(&bundle, 0, 0, 0),
+            Err(PageReadPlanError::ZeroCount)
+        );
         assert_eq!(
             plan_page_read(&bundle, 1, 0, 1),
             Err(PageReadPlanError::PageOutOfRange {
@@ -360,12 +361,7 @@ pageReadCommand = {reads}
             Err(PageReadPlanError::MissingCountToken)
         );
 
-        let duplicate_offset = bundle(
-            "little",
-            "64",
-            r#""\x00\x00""#,
-            r#""R%2o%2o%2c""#,
-        );
+        let duplicate_offset = bundle("little", "64", r#""\x00\x00""#, r#""R%2o%2o%2c""#);
         assert_eq!(
             plan_page_read(&duplicate_offset, 0, 0, 1),
             Err(PageReadPlanError::DuplicateOffsetToken)
