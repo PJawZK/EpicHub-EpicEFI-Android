@@ -1,7 +1,7 @@
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use jni::JNIEnv;
-use jni::objects::{JByteBuffer, JIntArray, JObject, JObjectArray, JString};
+use jni::objects::{JByteBuffer, JLongArray, JObject, JObjectArray, JString};
 use jni::sys::{JNI_FALSE, JNI_TRUE, jboolean, jint, jlong};
 
 use crate::compiled_ecu_profile::OwnedSemanticTableBinding;
@@ -130,7 +130,7 @@ pub extern "system" fn Java_com_epicefi_epichub_engine_NativeProfileRegistryBrid
     profile_generation: jlong,
     definition_fingerprint: JString,
     resolved_definition: JString,
-    semantic_ids: JIntArray,
+    semantic_ids: JLongArray,
     editor_table_ids: JObjectArray,
 ) -> jint {
     ffi_guard(IMPORT_PANIC, || {
@@ -140,6 +140,9 @@ pub extern "system" fn Java_com_epicefi_epichub_engine_NativeProfileRegistryBrid
         let Ok(profile_generation) = u64::try_from(profile_generation) else {
             return IMPORT_INVALID_ARGUMENT;
         };
+        if profile_generation == 0 {
+            return IMPORT_INVALID_ARGUMENT;
+        }
         let Ok(profile_name) = required_string(&mut env, profile_name) else {
             return IMPORT_INVALID_ARGUMENT;
         };
@@ -163,9 +166,9 @@ pub extern "system" fn Java_com_epicefi_epichub_engine_NativeProfileRegistryBrid
             return IMPORT_BINDING_LENGTH_MISMATCH;
         }
 
-        let mut semantic_values = vec![0_i32; semantic_count as usize];
+        let mut semantic_values = vec![0_i64; semantic_count as usize];
         if env
-            .get_int_array_region(&semantic_ids, 0, &mut semantic_values)
+            .get_long_array_region(&semantic_ids, 0, &mut semantic_values)
             .is_err()
         {
             return IMPORT_INVALID_ARGUMENT;
