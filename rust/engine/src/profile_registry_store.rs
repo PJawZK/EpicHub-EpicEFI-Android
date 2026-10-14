@@ -459,7 +459,10 @@ table = registryBundleTable, registryBundleMap, "Registry Bundle Table", 1
         assert_eq!(bundle.protocol.pages.len(), 1);
         assert_eq!(bundle.protocol.pages[0].identifier, vec![0, 1]);
         assert_eq!(bundle.protocol.pages[0].read_command, "R%2i%2o%2c");
-        assert_eq!(bundle.protocol.pages[0].burn_command.as_deref(), Some("B%2i"));
+        assert_eq!(
+            bundle.protocol.pages[0].burn_command.as_deref(),
+            Some("B%2i")
+        );
         assert_eq!(store.compiled_bundle_count(handle).unwrap(), 1);
     }
 
