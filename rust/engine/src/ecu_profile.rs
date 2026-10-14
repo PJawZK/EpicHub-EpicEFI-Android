@@ -43,7 +43,7 @@ impl From<CompiledSnapshotError> for EcuProfileResolveError {
     }
 }
 
-pub trait ResolvedEcuProfile {
+pub trait ResolvedEcuProfile: Send + Sync {
     fn identity(&self) -> ProfileIdentity<'_>;
     fn page_sizes(&self) -> &[usize];
 
