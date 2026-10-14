@@ -4,6 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 pub enum TuneSnapshotOrigin {
     OfflineFixture,
     ImportedFile,
+    LiveController,
 }
 
 #[derive(Clone, Debug, PartialEq)]
