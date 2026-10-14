@@ -1,12 +1,14 @@
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use jni::JNIEnv;
-use jni::objects::{JByteBuffer, JObject};
+use jni::objects::{JByteBuffer, JIntArray, JObject, JObjectArray, JString};
 use jni::sys::{JNI_FALSE, JNI_TRUE, jboolean, jint, jlong};
 
+use crate::compiled_ecu_profile::OwnedSemanticTableBinding;
+use crate::profile_import::CompiledProfileImportRequest;
 use crate::profile_registry_store::{
     RegistryStoreError, active_profile_registry_count, close_profile_registry,
-    create_profile_registry, profile_registry_is_alive,
+    create_profile_registry, profile_registry_is_alive, register_compiled_profile_import,
     select_profile_summary_from_runtime_response,
 };
 use crate::runtime_identity_probe::RuntimeProbeError;
@@ -24,6 +26,14 @@ const RESULT_RECOGNIZED_NO_PROFILE: jlong = -9;
 const RESULT_REGISTRY_ERROR: jlong = -10;
 const RESULT_PANIC: jlong = -255;
 
+const IMPORT_OK: jint = 0;
+const IMPORT_INVALID_HANDLE: jint = -1;
+const IMPORT_INVALID_ARGUMENT: jint = -2;
+const IMPORT_BINDING_LENGTH_MISMATCH: jint = -3;
+const IMPORT_COMPILE_ERROR: jint = -4;
+const IMPORT_REGISTRY_ERROR: jint = -5;
+const IMPORT_PANIC: jint = -255;
+
 fn ffi_guard<T: Copy>(fallback: T, operation: impl FnOnce() -> T) -> T {
     catch_unwind(AssertUnwindSafe(operation)).unwrap_or(fallback)
 }
@@ -31,7 +41,7 @@ fn ffi_guard<T: Copy>(fallback: T, operation: impl FnOnce() -> T) -> T {
 fn map_store_error(error: RegistryStoreError) -> jlong {
     match error {
         RegistryStoreError::InvalidHandle => RESULT_INVALID_HANDLE,
-        RegistryStoreError::Registry(_) => RESULT_REGISTRY_ERROR,
+        RegistryStoreError::Compile(_) | RegistryStoreError::Registry(_) => RESULT_REGISTRY_ERROR,
         RegistryStoreError::Authority(authority) => match authority {
             RuntimeProfileAuthorityError::UnknownController => RESULT_UNKNOWN_CONTROLLER,
             RuntimeProfileAuthorityError::RecognizedControllerWithoutProfile => {
@@ -45,6 +55,29 @@ fn map_store_error(error: RegistryStoreError) -> jlong {
                 RuntimeProbeError::EmptyQuery | RuntimeProbeError::Transport(_) => RESULT_PANIC,
             },
         },
+    }
+}
+
+fn map_import_error(error: RegistryStoreError) -> jint {
+    match error {
+        RegistryStoreError::InvalidHandle => IMPORT_INVALID_HANDLE,
+        RegistryStoreError::Compile(_) => IMPORT_COMPILE_ERROR,
+        RegistryStoreError::Registry(_) | RegistryStoreError::Authority(_) => IMPORT_REGISTRY_ERROR,
+    }
+}
+
+fn required_string(env: &mut JNIEnv, value: JString) -> Result<String, ()> {
+    if value.is_null() {
+        return Err(());
+    }
+    env.get_string(&value).map(Into::into).map_err(|_| ())
+}
+
+fn optional_string(env: &mut JNIEnv, value: JString) -> Result<Option<String>, ()> {
+    if value.is_null() {
+        Ok(None)
+    } else {
+        required_string(env, value).map(Some)
     }
 }
 
@@ -86,6 +119,92 @@ pub extern "system" fn Java_com_epicefi_epichub_engine_NativeProfileRegistryBrid
     _object: JObject,
 ) -> jint {
     ffi_guard(0, active_profile_registry_count)
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_epicefi_epichub_engine_NativeProfileRegistryBridge_registerCompiledProfile(
+    mut env: JNIEnv,
+    _object: JObject,
+    handle: jlong,
+    profile_name: JString,
+    profile_generation: jlong,
+    definition_fingerprint: JString,
+    resolved_definition: JString,
+    semantic_ids: JIntArray,
+    editor_table_ids: JObjectArray,
+) -> jint {
+    ffi_guard(IMPORT_PANIC, || {
+        if !profile_registry_is_alive(handle) {
+            return IMPORT_INVALID_HANDLE;
+        }
+        let Ok(profile_generation) = u64::try_from(profile_generation) else {
+            return IMPORT_INVALID_ARGUMENT;
+        };
+        let Ok(profile_name) = required_string(&mut env, profile_name) else {
+            return IMPORT_INVALID_ARGUMENT;
+        };
+        let Ok(definition_fingerprint) = optional_string(&mut env, definition_fingerprint) else {
+            return IMPORT_INVALID_ARGUMENT;
+        };
+        let Ok(resolved_definition) = required_string(&mut env, resolved_definition) else {
+            return IMPORT_INVALID_ARGUMENT;
+        };
+        if profile_name.is_empty() || resolved_definition.is_empty() {
+            return IMPORT_INVALID_ARGUMENT;
+        }
+
+        let Ok(semantic_count) = env.get_array_length(&semantic_ids) else {
+            return IMPORT_INVALID_ARGUMENT;
+        };
+        let Ok(editor_count) = env.get_array_length(&editor_table_ids) else {
+            return IMPORT_INVALID_ARGUMENT;
+        };
+        if semantic_count != editor_count {
+            return IMPORT_BINDING_LENGTH_MISMATCH;
+        }
+
+        let mut semantic_values = vec![0_i32; semantic_count as usize];
+        if env
+            .get_int_array_region(&semantic_ids, 0, &mut semantic_values)
+            .is_err()
+        {
+            return IMPORT_INVALID_ARGUMENT;
+        }
+
+        let mut semantic_tables = Vec::with_capacity(semantic_count as usize);
+        for (index, semantic_id) in semantic_values.into_iter().enumerate() {
+            let Ok(semantic_id) = u32::try_from(semantic_id) else {
+                return IMPORT_INVALID_ARGUMENT;
+            };
+            let Ok(editor_object) = env.get_object_array_element(&editor_table_ids, index as i32)
+            else {
+                return IMPORT_INVALID_ARGUMENT;
+            };
+            let editor_string = JString::from(editor_object);
+            let Ok(editor_table_id) = required_string(&mut env, editor_string) else {
+                return IMPORT_INVALID_ARGUMENT;
+            };
+            if editor_table_id.is_empty() {
+                return IMPORT_INVALID_ARGUMENT;
+            }
+            semantic_tables.push(OwnedSemanticTableBinding {
+                semantic_id,
+                editor_table_id,
+            });
+        }
+
+        let request = CompiledProfileImportRequest {
+            profile_name,
+            profile_generation,
+            definition_fingerprint,
+            resolved_definition,
+            semantic_tables,
+        };
+        match register_compiled_profile_import(handle, &request) {
+            Ok(()) => IMPORT_OK,
+            Err(error) => map_import_error(error),
+        }
+    })
 }
 
 #[unsafe(no_mangle)]
@@ -163,6 +282,20 @@ mod tests {
             RESULT_RECOGNIZED_NO_PROFILE
         );
         let _ = ProfileSelectionError::UnknownController;
+    }
+
+    #[test]
+    fn import_error_mapping_distinguishes_compile_and_registry_failures() {
+        assert_eq!(
+            map_import_error(RegistryStoreError::InvalidHandle),
+            IMPORT_INVALID_HANDLE
+        );
+        assert_eq!(
+            map_import_error(RegistryStoreError::Registry(
+                ProfileRegistryError::DuplicateProfileSignature("duplicate".to_string())
+            )),
+            IMPORT_REGISTRY_ERROR
+        );
     }
 
     #[test]
