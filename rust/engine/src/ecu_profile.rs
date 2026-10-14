@@ -1,3 +1,4 @@
+use crate::ecu_compiled_snapshot::CompiledSnapshotError;
 use crate::resolved_profile_source::ProfileResolveError;
 use crate::tuning::{TuneSnapshot, TuneSnapshotOrigin};
 
@@ -15,15 +16,30 @@ impl ProfileIdentity<'_> {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum EcuProfileResolveError {
-    InvalidPageCount { expected: usize, actual: usize },
+    InvalidPageCount {
+        expected: usize,
+        actual: usize,
+    },
+    InvalidPageSize {
+        page: usize,
+        expected: usize,
+        actual: usize,
+    },
     Profile(ProfileResolveError),
+    Compiled(CompiledSnapshotError),
 }
 
 impl From<ProfileResolveError> for EcuProfileResolveError {
     fn from(value: ProfileResolveError) -> Self {
         Self::Profile(value)
+    }
+}
+
+impl From<CompiledSnapshotError> for EcuProfileResolveError {
+    fn from(value: CompiledSnapshotError) -> Self {
+        Self::Compiled(value)
     }
 }
 
