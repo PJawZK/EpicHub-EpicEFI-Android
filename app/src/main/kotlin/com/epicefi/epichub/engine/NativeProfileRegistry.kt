@@ -278,6 +278,8 @@ class NativeProfileRegistry internal constructor(
         }
     }
 
+    internal fun readOnlyRegistryHandle(): Long = handle
+
     override fun close() {
         val currentHandle = handle
         if (currentHandle != 0L) {
