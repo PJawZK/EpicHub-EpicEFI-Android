@@ -135,7 +135,7 @@ fn plan_for_index(
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_epicefi_epichub_engine_NativeProfileRegistryBridge_pageReadPlanCount(
+pub extern "system" fn Java_com_epicefi_epichub_engine_NativeReadOnlyPageBridge_pageReadPlanCount(
     env: JNIEnv,
     _object: JObject,
     handle: jlong,
@@ -181,7 +181,7 @@ pub extern "system" fn Java_com_epicefi_epichub_engine_NativeProfileRegistryBrid
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_epicefi_epichub_engine_NativeProfileRegistryBridge_fillPageReadPlan(
+pub extern "system" fn Java_com_epicefi_epichub_engine_NativeReadOnlyPageBridge_fillPageReadPlan(
     env: JNIEnv,
     _object: JObject,
     handle: jlong,
@@ -252,7 +252,7 @@ pub extern "system" fn Java_com_epicefi_epichub_engine_NativeProfileRegistryBrid
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_epicefi_epichub_engine_NativeProfileRegistryBridge_verifyPageReadResponse(
+pub extern "system" fn Java_com_epicefi_epichub_engine_NativeReadOnlyPageBridge_verifyPageReadResponse(
     env: JNIEnv,
     _object: JObject,
     handle: jlong,
