@@ -16,6 +16,7 @@ pub mod ecu_protocol;
 mod engine;
 mod jni_engine;
 mod jni_profile_registry;
+mod jni_readonly_page_acquisition;
 mod jni_runtime_identity;
 mod jni_tune_session;
 mod mega144h7_profile;
