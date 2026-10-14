@@ -116,6 +116,7 @@ object NativeEngineBridge {
     external fun close(handle: Long)
     external fun isAlive(handle: Long): Boolean
     external fun activeCount(): Int
+    external fun validateRuntimeIdentityResponse(response: ByteArray, maxResponseBytes: Int): Int
     external fun fillRuntimeSnapshot(handle: Long, buffer: ByteBuffer): Int
     external fun fillDiagnosticEvents(handle: Long, buffer: ByteBuffer): Int
 
