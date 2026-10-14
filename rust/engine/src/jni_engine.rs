@@ -1,7 +1,7 @@
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use jni::JNIEnv;
-use jni::objects::{JByteBuffer, JObject};
+use jni::objects::{JByteArray, JByteBuffer, JObject};
 use jni::sys::{JNI_FALSE, JNI_TRUE, jboolean, jint, jlong};
 
 use crate::diagnostics::DIAGNOSTIC_BATCH_SIZE;
@@ -12,6 +12,7 @@ use crate::engine::{
 use crate::resolved_profile_source::{
     MEGA144H7_PAGE_1_SIZE, MEGA144H7_PAGE_2_SIZE, Mega144h7ResolvedModes,
 };
+use crate::runtime_identity_probe::{RuntimeProbeError, runtime_identity_from_probe_response};
 use crate::runtime_snapshot::RUNTIME_SNAPSHOT_SIZE;
 use crate::tune_source_install::{
     TuneSourceInstallError, install_mega144h7_imported_pages, tune_catalog_bytes,
@@ -23,6 +24,15 @@ const BUFFER_STATUS_NOT_DIRECT: jint = 2;
 const BUFFER_STATUS_TOO_SMALL: jint = 3;
 const BUFFER_STATUS_SOURCE_REJECTED: jint = 4;
 const BUFFER_STATUS_PANIC: jint = 255;
+
+const RUNTIME_IDENTITY_STATUS_OK: jint = 0;
+const RUNTIME_IDENTITY_STATUS_INVALID_LIMIT: jint = 1;
+const RUNTIME_IDENTITY_STATUS_TOO_LARGE: jint = 2;
+const RUNTIME_IDENTITY_STATUS_EMPTY: jint = 3;
+const RUNTIME_IDENTITY_STATUS_INVALID_UTF8: jint = 4;
+const RUNTIME_IDENTITY_STATUS_JNI_ERROR: jint = 5;
+const RUNTIME_IDENTITY_STATUS_INTERNAL_ERROR: jint = 6;
+const RUNTIME_IDENTITY_STATUS_PANIC: jint = 255;
 
 const SOURCE_RESULT_INVALID_HANDLE: jlong = -1;
 const SOURCE_RESULT_NOT_DIRECT: jlong = -2;
@@ -111,6 +121,36 @@ pub extern "system" fn Java_com_epicefi_epichub_engine_NativeEngineBridge_active
     _object: JObject,
 ) -> jint {
     ffi_guard(0, active_engine_count)
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_epicefi_epichub_engine_NativeEngineBridge_validateRuntimeIdentityResponse(
+    env: JNIEnv,
+    _object: JObject,
+    response: JByteArray,
+    max_response_bytes: jint,
+) -> jint {
+    ffi_guard(RUNTIME_IDENTITY_STATUS_PANIC, || {
+        let max_response_bytes = match usize::try_from(max_response_bytes) {
+            Ok(0) | Err(_) => return RUNTIME_IDENTITY_STATUS_INVALID_LIMIT,
+            Ok(value) => value,
+        };
+        let response = match env.convert_byte_array(&response) {
+            Ok(bytes) => bytes,
+            Err(_) => return RUNTIME_IDENTITY_STATUS_JNI_ERROR,
+        };
+
+        match runtime_identity_from_probe_response(&response, max_response_bytes) {
+            Ok(_) => RUNTIME_IDENTITY_STATUS_OK,
+            Err(RuntimeProbeError::InvalidResponseLimit) => RUNTIME_IDENTITY_STATUS_INVALID_LIMIT,
+            Err(RuntimeProbeError::ResponseTooLarge { .. }) => RUNTIME_IDENTITY_STATUS_TOO_LARGE,
+            Err(RuntimeProbeError::EmptySignature) => RUNTIME_IDENTITY_STATUS_EMPTY,
+            Err(RuntimeProbeError::InvalidUtf8) => RUNTIME_IDENTITY_STATUS_INVALID_UTF8,
+            Err(RuntimeProbeError::EmptyQuery | RuntimeProbeError::Transport(_)) => {
+                RUNTIME_IDENTITY_STATUS_INTERNAL_ERROR
+            }
+        }
+    })
 }
 
 #[unsafe(no_mangle)]
