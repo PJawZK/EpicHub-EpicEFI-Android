@@ -15,6 +15,7 @@ pub mod ecu_profile_registry;
 pub mod ecu_protocol;
 mod engine;
 mod jni_engine;
+mod jni_live_tune_install;
 mod jni_profile_registry;
 mod jni_readonly_page_acquisition;
 mod jni_runtime_identity;
