@@ -80,12 +80,8 @@ fn transport_metadata_cannot_authorize_a_profile_when_live_signature_is_unknown(
         response: Ok(b"rusEFI completely.unknown.999".to_vec()),
         calls: 0,
     };
-    let identity = probe_runtime_identity(
-        &mut channel,
-        &misleading_candidate,
-        &signature_plan(),
-    )
-    .unwrap();
+    let identity =
+        probe_runtime_identity(&mut channel, &misleading_candidate, &signature_plan()).unwrap();
 
     assert_eq!(channel.calls, 1);
     assert!(matches!(
