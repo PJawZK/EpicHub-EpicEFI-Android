@@ -25,11 +25,17 @@ pub fn encode(snapshot: &TuneSnapshot, revision: u64) -> Vec<u8> {
     write_u32(&mut bytes, TUNE_CATALOG_ABI_VERSION);
     write_u32(&mut bytes, TUNE_CATALOG_HEADER_SIZE as u32);
     write_u32(&mut bytes, TUNE_CATALOG_ENTRY_SIZE as u32);
-    write_u32(&mut bytes, u32::try_from(tables.len()).expect("catalog table count overflow"));
+    write_u32(
+        &mut bytes,
+        u32::try_from(tables.len()).expect("catalog table count overflow"),
+    );
     write_u64(&mut bytes, snapshot.profile_generation);
     write_u64(&mut bytes, revision);
     write_u32(&mut bytes, origin_code(snapshot.origin));
-    write_u32(&mut bytes, u32::try_from(total_size).expect("catalog total size overflow"));
+    write_u32(
+        &mut bytes,
+        u32::try_from(total_size).expect("catalog total size overflow"),
+    );
 
     let names_offset = TUNE_CATALOG_HEADER_SIZE + entries_size;
     let mut next_name_offset = names_offset;
@@ -81,9 +87,8 @@ fn write_u64(bytes: &mut Vec<u8>, value: u64) {
 mod tests {
     use super::*;
     use crate::resolved_profile_source::{
-        MEGA144H7_PAGE_1_SIZE, MEGA144H7_PAGE_2_SIZE, Mega144h7ResolvedModes,
-        TABLE_ID_IGNITION, TABLE_ID_MAP_ESTIMATE, TABLE_ID_TARGET_MIXTURE, TABLE_ID_VE,
-        resolve_mega144h7_tune_pages,
+        MEGA144H7_PAGE_1_SIZE, MEGA144H7_PAGE_2_SIZE, Mega144h7ResolvedModes, TABLE_ID_IGNITION,
+        TABLE_ID_MAP_ESTIMATE, TABLE_ID_TARGET_MIXTURE, TABLE_ID_VE, resolve_mega144h7_tune_pages,
     };
 
     fn read_u32(bytes: &[u8], offset: usize) -> u32 {
