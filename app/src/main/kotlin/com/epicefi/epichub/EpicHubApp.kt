@@ -1,5 +1,6 @@
 package com.epicefi.epichub
 
+import android.hardware.usb.UsbManager
 import android.os.Debug
 import android.os.SystemClock
 import android.os.Trace
@@ -34,9 +35,12 @@ import com.epicefi.epichub.platform.diagnostics.DiagnosticCaptureExporter
 import com.epicefi.epichub.platform.diagnostics.ProcessPerformanceSampler
 import com.epicefi.epichub.platform.profile.AndroidLiveTuneProfileDocumentSelectionOwner
 import com.epicefi.epichub.platform.profile.EPICHUB_PROFILE_MIME_TYPE
+import com.epicefi.epichub.platform.transport.usb.AndroidUsbCandidateDiscovery
+import com.epicefi.epichub.platform.transport.usb.AndroidUsbPermissionRequestOwner
 import com.epicefi.epichub.ui.EpicHubShell
 import com.epicefi.epichub.ui.diagnostics.DiagnosticsTab
 import com.epicefi.epichub.ui.settings.ProfilePackageSettingsState
+import com.epicefi.epichub.ui.settings.UsbControllerSettingsState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -95,6 +99,12 @@ fun EpicHubApp(
     val profileDocuments = remember(engine, context.contentResolver) {
         AndroidLiveTuneProfileDocumentSelectionOwner(engine, context.contentResolver)
     }
+    val usbManager = remember(context) {
+        checkNotNull(context.getSystemService(UsbManager::class.java)) {
+            "Android USB manager is unavailable."
+        }
+    }
+    val usbDiscovery = remember(usbManager) { AndroidUsbCandidateDiscovery(usbManager) }
     val nativeDiagnostics = remember { NativeDiagnosticIngestor() }
     val processPerformanceSampler = remember { ProcessPerformanceSampler() }
     val nativeEngineOwnerId = remember(nativeEngineGeneration) {
@@ -107,6 +117,16 @@ fun EpicHubApp(
     var diagnosticsTabName by rememberSaveable { mutableStateOf(DiagnosticsTab.OVERVIEW.name) }
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
     var profilePackages by remember { mutableStateOf(ProfilePackageSettingsState()) }
+    var usbController by remember { mutableStateOf(UsbControllerSettingsState()) }
+    val usbPermissionOwner = remember(context, usbManager) {
+        AndroidUsbPermissionRequestOwner(
+            context = context,
+            usbManager = usbManager,
+            onCompletion = { completion ->
+                usbController = usbController.permissionCompleted(completion)
+            },
+        )
+    }
     val runtimeSnapshot = remember(engine) { mutableStateOf<RuntimeSnapshot?>(null) }
     val diagnosticSnapshotState = remember {
         mutableStateOf(
@@ -262,7 +282,13 @@ fun EpicHubApp(
         selectDestination(target)
     }
 
-    DisposableEffect(engine, profileDocuments, diagnostics, nativeEngineOwnerId) {
+    DisposableEffect(
+        engine,
+        profileDocuments,
+        usbPermissionOwner,
+        diagnostics,
+        nativeEngineOwnerId,
+    ) {
         diagnostics.createLifecycleOwner(
             ownerId = nativeEngineOwnerId,
             ownerKind = "NativeEngine",
@@ -271,6 +297,7 @@ fun EpicHubApp(
         )
 
         onDispose {
+            usbPermissionOwner.close()
             profileDocuments.close()
             engine.close()
             diagnostics.record(
@@ -285,6 +312,11 @@ fun EpicHubApp(
             )
             diagnostics.destroyLifecycleOwner(nativeEngineOwnerId)
         }
+    }
+
+    LaunchedEffect(usbDiscovery) {
+        val candidates = withContext(Dispatchers.Default) { usbDiscovery.discover() }
+        usbController = usbController.refresh(candidates)
     }
 
     LaunchedEffect(destinationId, settingsOpen, diagnosticsTabName, diagnostics) {
@@ -405,6 +437,35 @@ fun EpicHubApp(
                         }
                         profilePackages = profilePackages.completeClear(result)
                     }
+                }
+            },
+            usbController = usbController,
+            onRefreshUsbCandidates = {
+                if (!usbController.permissionPending) {
+                    scope.launch {
+                        val candidates = withContext(Dispatchers.Default) {
+                            usbDiscovery.discover()
+                        }
+                        usbController = usbController.refresh(candidates)
+                    }
+                }
+            },
+            onSelectUsbCandidate = { endpointId ->
+                if (!usbController.permissionPending) {
+                    usbController = usbController.select(endpointId)
+                }
+            },
+            onRequestUsbPermission = {
+                val selected = usbController.selectedCandidate
+                if (
+                    selected != null &&
+                    profilePackages.hasSelection &&
+                    !usbController.permissionPending
+                ) {
+                    usbController =
+                        usbController.permissionStarted(
+                            usbPermissionOwner.request(selected),
+                        )
                 }
             },
             benchmarkPlaceholderContent = benchmarkPlaceholderContent,
