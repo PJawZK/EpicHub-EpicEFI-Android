@@ -21,7 +21,7 @@ private const val PROFILE_IMPORT_COMPILE_ERROR = -4
 private const val PROFILE_IMPORT_REGISTRY_ERROR = -5
 
 data class SemanticTableImportBinding(
-    val semanticId: Int,
+    val semanticId: Long,
     val editorTableId: String,
 )
 
@@ -89,7 +89,7 @@ internal interface NativeProfileRegistryOps {
         profileGeneration: Long,
         definitionFingerprint: String?,
         resolvedDefinition: String,
-        semanticIds: IntArray,
+        semanticIds: LongArray,
         editorTableIds: Array<String>,
     ): Int
 
@@ -118,14 +118,16 @@ class NativeProfileRegistry internal constructor(
         }
         if (
             import.profileName.isEmpty() ||
-                import.profileGeneration < 0L ||
+                import.profileGeneration <= 0L ||
                 import.resolvedDefinition.isEmpty() ||
-                import.semanticTables.any { it.semanticId < 0 || it.editorTableId.isEmpty() }
+                import.semanticTables.any {
+                    it.semanticId < 0L || it.semanticId > 0xffff_ffffL || it.editorTableId.isEmpty()
+                }
         ) {
             return CompiledProfileImportResult.Rejected(CompiledProfileImportRejection.InvalidArgument)
         }
 
-        val semanticIds = IntArray(import.semanticTables.size) { import.semanticTables[it].semanticId }
+        val semanticIds = LongArray(import.semanticTables.size) { import.semanticTables[it].semanticId }
         val editorTableIds = Array(import.semanticTables.size) { import.semanticTables[it].editorTableId }
         return when (
             ops.registerCompiledProfile(
@@ -215,7 +217,7 @@ private object JniNativeProfileRegistryOps : NativeProfileRegistryOps {
         profileGeneration: Long,
         definitionFingerprint: String?,
         resolvedDefinition: String,
-        semanticIds: IntArray,
+        semanticIds: LongArray,
         editorTableIds: Array<String>,
     ): Int =
         NativeProfileRegistryBridge.registerCompiledProfile(
@@ -261,7 +263,7 @@ object NativeProfileRegistryBridge {
         profileGeneration: Long,
         definitionFingerprint: String?,
         resolvedDefinition: String,
-        semanticIds: IntArray,
+        semanticIds: LongArray,
         editorTableIds: Array<String>,
     ): Int
 
