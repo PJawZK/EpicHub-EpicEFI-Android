@@ -37,19 +37,30 @@ data class TunerBrushPathPoint(
     val col: Int,
 )
 
-private const val OFFLINE_SOURCE_PRIMARY_TABLE_ID = 7
-
 /**
- * Compatibility facade for the current offline-source Tuner screen.
+ * Catalog-driven facade for the active engine-owned TuneSession.
  *
- * This object does not own tune state. Every operation resolves the one active NativeEngine and
- * delegates to that engine's handle-scoped TuneSession. The source table is still the built-in
- * offline snapshot, but draft/history authority now lives in EngineState.
+ * The catalog is the only source of table identity here. The first catalog entry is deterministic
+ * because the native catalog encoder sorts by semantic table ID. This preserves the current
+ * single-table Tuner screen while removing the old hardcoded offline table ID. A future table
+ * selector can choose another catalog entry without changing any edit/preview semantics below.
+ *
+ * This object owns no tune state. Every operation resolves the current NativeEngine handle and
+ * delegates to that handle-scoped TuneSession.
  */
-object OfflineTunerFixture {
+object ActiveTunerTable {
+    fun catalog(): TunerTableCatalog {
+        val handle = NativeEngine.requireCurrentHandle()
+        return TunerTableCatalogBuffer().read(handle)
+    }
+
+    fun activeEntry(): TunerTableCatalogEntry =
+        catalog().tables.firstOrNull()
+            ?: error("Active TuneSession does not expose any tunable tables.")
+
     private fun client(): TunerSessionClient = TunerSessionClient(
         handle = NativeEngine.requireCurrentHandle(),
-        tableId = OFFLINE_SOURCE_PRIMARY_TABLE_ID,
+        tableId = activeEntry().tableId,
     )
 
     fun readProjection(): TunerTableProjection = client().readProjection()
@@ -168,6 +179,130 @@ object OfflineTunerFixture {
     fun undoProjection(): TunerTableProjection = client().undoProjection()
 
     fun redoProjection(): TunerTableProjection = client().redoProjection()
+}
+
+/**
+ * Compatibility name retained for callers/tests from the offline-only phase. It now delegates to
+ * the catalog-driven active TuneSession rather than assuming semantic table ID 7.
+ */
+object OfflineTunerFixture {
+    fun readProjection(): TunerTableProjection = ActiveTunerTable.readProjection()
+
+    fun previewRectangleStep(
+        rectangle: TunerRectangle,
+        step: TunerCellStep,
+    ): TunerTableProjection = ActiveTunerTable.previewRectangleStep(rectangle, step)
+
+    fun applyRectangleStep(
+        rectangle: TunerRectangle,
+        step: TunerCellStep,
+        expectedRevision: Long,
+    ): TunerTableProjection = ActiveTunerTable.applyRectangleStep(rectangle, step, expectedRevision)
+
+    fun previewRectangleNumeric(
+        rectangle: TunerRectangle,
+        operation: TunerNumericOperation,
+        operand: String,
+    ): TunerTableProjection = ActiveTunerTable.previewRectangleNumeric(rectangle, operation, operand)
+
+    fun applyRectangleNumeric(
+        rectangle: TunerRectangle,
+        operation: TunerNumericOperation,
+        operand: String,
+        expectedRevision: Long,
+    ): TunerTableProjection =
+        ActiveTunerTable.applyRectangleNumeric(rectangle, operation, operand, expectedRevision)
+
+    fun previewInterpolation(
+        rectangle: TunerRectangle,
+        mode: TunerInterpolationMode,
+    ): TunerTableProjection = ActiveTunerTable.previewInterpolation(rectangle, mode)
+
+    fun applyInterpolation(
+        rectangle: TunerRectangle,
+        mode: TunerInterpolationMode,
+        expectedRevision: Long,
+    ): TunerTableProjection = ActiveTunerTable.applyInterpolation(rectangle, mode, expectedRevision)
+
+    fun previewSmoothing(
+        rectangle: TunerRectangle,
+        strengthPercent: String,
+    ): TunerTableProjection = ActiveTunerTable.previewSmoothing(rectangle, strengthPercent)
+
+    fun applySmoothing(
+        rectangle: TunerRectangle,
+        strengthPercent: String,
+        expectedRevision: Long,
+    ): TunerTableProjection =
+        ActiveTunerTable.applySmoothing(rectangle, strengthPercent, expectedRevision)
+
+    fun previewBrushPull(
+        rectangle: TunerRectangle,
+        mode: TunerBrushPullMode,
+        delta: String,
+        radiusCells: String,
+        strengthPercent: String,
+        falloffExponent: String,
+    ): TunerTableProjection = ActiveTunerTable.previewBrushPull(
+        rectangle,
+        mode,
+        delta,
+        radiusCells,
+        strengthPercent,
+        falloffExponent,
+    )
+
+    fun applyBrushPull(
+        rectangle: TunerRectangle,
+        mode: TunerBrushPullMode,
+        delta: String,
+        radiusCells: String,
+        strengthPercent: String,
+        falloffExponent: String,
+        expectedRevision: Long,
+    ): TunerTableProjection = ActiveTunerTable.applyBrushPull(
+        rectangle,
+        mode,
+        delta,
+        radiusCells,
+        strengthPercent,
+        falloffExponent,
+        expectedRevision,
+    )
+
+    fun previewBrushPath(
+        path: List<TunerBrushPathPoint>,
+        delta: String,
+        radiusCells: String,
+        strengthPercent: String,
+        falloffExponent: String,
+    ): TunerTableProjection = ActiveTunerTable.previewBrushPath(
+        path,
+        delta,
+        radiusCells,
+        strengthPercent,
+        falloffExponent,
+    )
+
+    fun applyBrushPath(
+        path: List<TunerBrushPathPoint>,
+        delta: String,
+        radiusCells: String,
+        strengthPercent: String,
+        falloffExponent: String,
+        expectedRevision: Long,
+    ): TunerTableProjection = ActiveTunerTable.applyBrushPath(
+        path,
+        delta,
+        radiusCells,
+        strengthPercent,
+        falloffExponent,
+        expectedRevision,
+    )
+
+    fun undoProjection(): TunerTableProjection = ActiveTunerTable.undoProjection()
+
+    fun redoProjection(): TunerTableProjection = ActiveTunerTable.redoProjection()
 }
 
 internal class TunerSessionClient(
