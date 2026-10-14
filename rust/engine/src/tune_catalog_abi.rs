@@ -72,6 +72,7 @@ fn origin_code(origin: TuneSnapshotOrigin) -> u32 {
     match origin {
         TuneSnapshotOrigin::OfflineFixture => 1,
         TuneSnapshotOrigin::ImportedFile => 2,
+        TuneSnapshotOrigin::LiveController => 3,
     }
 }
 
@@ -134,5 +135,12 @@ mod tests {
                 .unwrap(),
             "VE Table"
         );
+    }
+
+    #[test]
+    fn live_controller_catalog_origin_is_stable_code_three() {
+        let snapshot = TuneSnapshot::new(7, TuneSnapshotOrigin::LiveController, []).unwrap();
+        let bytes = encode(&snapshot, 0);
+        assert_eq!(read_u32(&bytes, 32), 3);
     }
 }
