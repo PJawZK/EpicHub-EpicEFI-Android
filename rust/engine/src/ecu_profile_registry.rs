@@ -161,9 +161,7 @@ mod tests {
         registry.register_profile(&SECOND).unwrap();
 
         let matched = registry
-            .select_exact_profile(&RuntimeControllerIdentity::from_signature(
-                SECOND.signature,
-            ))
+            .select_exact_profile(&RuntimeControllerIdentity::from_signature(SECOND.signature))
             .unwrap();
         assert_eq!(matched.identity().profile_name, "second");
 
