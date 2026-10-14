@@ -20,6 +20,7 @@ mod jni_runtime_identity;
 mod jni_tune_session;
 mod mega144h7_profile;
 mod offline_tune_source;
+pub mod page_read_planner;
 pub mod profile_import;
 pub mod profile_registry_store;
 pub mod resolved_profile_source;
