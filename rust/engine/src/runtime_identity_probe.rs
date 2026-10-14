@@ -32,6 +32,30 @@ pub trait ReadOnlyProbeChannel {
     ) -> Result<Vec<u8>, String>;
 }
 
+pub fn runtime_identity_from_response(
+    response: &[u8],
+    max_response_bytes: usize,
+) -> Result<RuntimeControllerIdentity, RuntimeProbeError> {
+    if max_response_bytes == 0 {
+        return Err(RuntimeProbeError::InvalidResponseLimit);
+    }
+    if response.len() > max_response_bytes {
+        return Err(RuntimeProbeError::ResponseTooLarge {
+            limit: max_response_bytes,
+            actual: response.len(),
+        });
+    }
+    if response.is_empty() {
+        return Err(RuntimeProbeError::EmptySignature);
+    }
+    let signature = String::from_utf8(response.to_vec()).map_err(|_| RuntimeProbeError::InvalidUtf8)?;
+    if signature.is_empty() {
+        return Err(RuntimeProbeError::EmptySignature);
+    }
+
+    Ok(RuntimeControllerIdentity::from_signature(signature))
+}
+
 pub fn probe_runtime_identity(
     channel: &mut dyn ReadOnlyProbeChannel,
     candidate: &TransportCandidate,
@@ -47,21 +71,7 @@ pub fn probe_runtime_identity(
     let response = channel
         .transact_read_only(candidate, &plan.query, plan.max_response_bytes)
         .map_err(RuntimeProbeError::Transport)?;
-    if response.len() > plan.max_response_bytes {
-        return Err(RuntimeProbeError::ResponseTooLarge {
-            limit: plan.max_response_bytes,
-            actual: response.len(),
-        });
-    }
-    if response.is_empty() {
-        return Err(RuntimeProbeError::EmptySignature);
-    }
-    let signature = String::from_utf8(response).map_err(|_| RuntimeProbeError::InvalidUtf8)?;
-    if signature.is_empty() {
-        return Err(RuntimeProbeError::EmptySignature);
-    }
-
-    Ok(RuntimeControllerIdentity::from_signature(signature))
+    runtime_identity_from_response(&response, plan.max_response_bytes)
 }
 
 #[cfg(test)]
@@ -108,6 +118,38 @@ mod tests {
             query: b"S".to_vec(),
             max_response_bytes: 256,
         }
+    }
+
+    #[test]
+    fn validates_runtime_identity_directly_from_response_bytes() {
+        let signature = "rusEFI master.2026.08.26.MEGA144H7.2273317132";
+        let identity = runtime_identity_from_response(signature.as_bytes(), 256).unwrap();
+        assert_eq!(identity.signature, signature);
+        assert_eq!(identity.firmware_info, None);
+        assert_eq!(identity.board_info, None);
+    }
+
+    #[test]
+    fn direct_response_validation_rejects_invalid_limits_empty_invalid_utf8_and_oversize() {
+        assert_eq!(
+            runtime_identity_from_response(b"signature", 0),
+            Err(RuntimeProbeError::InvalidResponseLimit)
+        );
+        assert_eq!(
+            runtime_identity_from_response(b"", 256),
+            Err(RuntimeProbeError::EmptySignature)
+        );
+        assert_eq!(
+            runtime_identity_from_response(&[0xff], 256),
+            Err(RuntimeProbeError::InvalidUtf8)
+        );
+        assert_eq!(
+            runtime_identity_from_response(b"abcd", 3),
+            Err(RuntimeProbeError::ResponseTooLarge {
+                limit: 3,
+                actual: 4,
+            })
+        );
     }
 
     #[test]
