@@ -84,7 +84,10 @@ pageReadCommand = "R%2i%2o%2c"
         assert_eq!(generation, 4_242);
         with_tune_session(engine, |session| {
             assert_eq!(session.profile_generation(), 4_242);
-            assert_eq!(session.baseline().origin, TuneSnapshotOrigin::LiveController);
+            assert_eq!(
+                session.baseline().origin,
+                TuneSnapshotOrigin::LiveController
+            );
             assert_eq!(session.revision(), 0);
             assert!(session.undo().is_err());
         })
@@ -144,7 +147,10 @@ pageReadCommand = "R%2i%2o%2c"
                 .is_err()
         );
         with_tune_session(engine, |session| {
-            assert_eq!(session.baseline().origin, TuneSnapshotOrigin::OfflineFixture);
+            assert_eq!(
+                session.baseline().origin,
+                TuneSnapshotOrigin::OfflineFixture
+            );
             assert_eq!(session.revision(), 0);
         })
         .unwrap();
