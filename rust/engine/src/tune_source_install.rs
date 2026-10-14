@@ -26,12 +26,8 @@ pub fn install_mega144h7_imported_pages(
     page_2: &[u8],
     modes: Mega144h7ResolvedModes,
 ) -> Result<u64, TuneSourceInstallError> {
-    let snapshot = resolve_mega144h7_tune_pages(
-        page_1,
-        page_2,
-        modes,
-        TuneSnapshotOrigin::ImportedFile,
-    )?;
+    let snapshot =
+        resolve_mega144h7_tune_pages(page_1, page_2, modes, TuneSnapshotOrigin::ImportedFile)?;
     let profile_generation = snapshot.profile_generation;
     with_tune_session(handle, move |session| {
         *session = TuneSession::from_snapshot(snapshot);
@@ -83,7 +79,11 @@ mod tests {
 
         with_tune_session(handle, |session| {
             assert_eq!(session.revision(), 0);
-            assert!(session.projection_bytes(OFFLINE_SOURCE_PRIMARY_TABLE_ID).is_err());
+            assert!(
+                session
+                    .projection_bytes(OFFLINE_SOURCE_PRIMARY_TABLE_ID)
+                    .is_err()
+            );
             assert!(session.projection_bytes(TABLE_ID_VE).is_ok());
             assert!(session.undo().is_err());
         })
@@ -103,17 +103,23 @@ mod tests {
 
         let (mut page_1, page_2) = valid_pages();
         page_1.pop();
-        assert!(install_mega144h7_imported_pages(
-            handle,
-            &page_1,
-            &page_2,
-            Mega144h7ResolvedModes::default(),
-        )
-        .is_err());
+        assert!(
+            install_mega144h7_imported_pages(
+                handle,
+                &page_1,
+                &page_2,
+                Mega144h7ResolvedModes::default(),
+            )
+            .is_err()
+        );
 
         with_tune_session(handle, |session| {
             assert_eq!(session.revision(), 1);
-            assert!(session.projection_bytes(OFFLINE_SOURCE_PRIMARY_TABLE_ID).is_ok());
+            assert!(
+                session
+                    .projection_bytes(OFFLINE_SOURCE_PRIMARY_TABLE_ID)
+                    .is_ok()
+            );
             assert_eq!(session.undo().unwrap(), 2);
         })
         .unwrap();
@@ -139,7 +145,11 @@ mod tests {
         .unwrap();
         with_tune_session(second, |session| {
             assert!(session.projection_bytes(TABLE_ID_VE).is_err());
-            assert!(session.projection_bytes(OFFLINE_SOURCE_PRIMARY_TABLE_ID).is_ok());
+            assert!(
+                session
+                    .projection_bytes(OFFLINE_SOURCE_PRIMARY_TABLE_ID)
+                    .is_ok()
+            );
         })
         .unwrap();
         close_engine(first);
@@ -162,7 +172,10 @@ mod tests {
         .unwrap();
         let catalog = tune_catalog_bytes(handle).unwrap();
         assert_eq!(u32::from_le_bytes(catalog[12..16].try_into().unwrap()), 4);
-        assert_eq!(u64::from_le_bytes(catalog[16..24].try_into().unwrap()), generation);
+        assert_eq!(
+            u64::from_le_bytes(catalog[16..24].try_into().unwrap()),
+            generation
+        );
         assert_eq!(u64::from_le_bytes(catalog[24..32].try_into().unwrap()), 0);
         close_engine(handle);
     }
