@@ -20,8 +20,8 @@ class NativeProfileRegistryTest {
                 resolvedDefinition = "[TunerStudio]\nsignature = \"exact\"",
                 semanticTables =
                     listOf(
-                        SemanticTableImportBinding(1001, "veTableTbl"),
-                        SemanticTableImportBinding(1002, "ignitionTableTbl"),
+                        SemanticTableImportBinding(1001L, "veTableTbl"),
+                        SemanticTableImportBinding(0xffff_ffffL, "ignitionTableTbl"),
                     ),
             )
 
@@ -31,7 +31,7 @@ class NativeProfileRegistryTest {
         assertEquals(2_273_317_132L, ops.lastProfileGeneration)
         assertEquals("fingerprint", ops.lastFingerprint)
         assertEquals(import.resolvedDefinition, ops.lastResolvedDefinition)
-        assertArrayEquals(intArrayOf(1001, 1002), ops.lastSemanticIds)
+        assertArrayEquals(longArrayOf(1001L, 0xffff_ffffL), ops.lastSemanticIds)
         assertArrayEquals(arrayOf("veTableTbl", "ignitionTableTbl"), ops.lastEditorTableIds)
     }
 
@@ -68,6 +68,18 @@ class NativeProfileRegistryTest {
         assertEquals(
             CompiledProfileImportResult.Rejected(CompiledProfileImportRejection.InvalidArgument),
             registry.importCompiledProfile(valid.copy(profileName = "")),
+        )
+        assertEquals(
+            CompiledProfileImportResult.Rejected(CompiledProfileImportRejection.InvalidArgument),
+            registry.importCompiledProfile(valid.copy(profileGeneration = 0L)),
+        )
+        assertEquals(
+            CompiledProfileImportResult.Rejected(CompiledProfileImportRejection.InvalidArgument),
+            registry.importCompiledProfile(
+                valid.copy(
+                    semanticTables = listOf(SemanticTableImportBinding(0x1_0000_0000L, "tooWide")),
+                ),
+            ),
         )
         assertEquals(0, ops.importCalls)
     }
@@ -160,7 +172,7 @@ class NativeProfileRegistryTest {
         var lastProfileGeneration = -1L
         var lastFingerprint: String? = null
         var lastResolvedDefinition: String? = null
-        var lastSemanticIds = intArrayOf()
+        var lastSemanticIds = longArrayOf()
         var lastEditorTableIds = arrayOf<String>()
 
         override fun create(): Long = createHandle
@@ -179,7 +191,7 @@ class NativeProfileRegistryTest {
             profileGeneration: Long,
             definitionFingerprint: String?,
             resolvedDefinition: String,
-            semanticIds: IntArray,
+            semanticIds: LongArray,
             editorTableIds: Array<String>,
         ): Int {
             importCalls += 1
