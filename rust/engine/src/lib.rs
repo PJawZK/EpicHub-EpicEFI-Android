@@ -14,10 +14,12 @@ pub mod ecu_profile_registry;
 pub mod ecu_protocol;
 mod engine;
 mod jni_engine;
+mod jni_profile_registry;
 mod jni_runtime_identity;
 mod jni_tune_session;
 mod mega144h7_profile;
 mod offline_tune_source;
+pub mod profile_registry_store;
 pub mod resolved_profile_source;
 pub mod runtime_identity_probe;
 #[cfg(test)]
