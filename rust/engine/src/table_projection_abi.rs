@@ -38,6 +38,7 @@ pub fn encode(
             TABLE_PROJECTION_FLAG_OFFLINE | TABLE_PROJECTION_FLAG_FIXTURE
         }
         TuneSnapshotOrigin::ImportedFile => TABLE_PROJECTION_FLAG_OFFLINE,
+        TuneSnapshotOrigin::LiveController => 0,
     };
 
     write_u32(&mut bytes, 0, TABLE_PROJECTION_ABI_VERSION);
@@ -81,6 +82,7 @@ fn origin_code(origin: TuneSnapshotOrigin) -> u32 {
     match origin {
         TuneSnapshotOrigin::OfflineFixture => 1,
         TuneSnapshotOrigin::ImportedFile => 2,
+        TuneSnapshotOrigin::LiveController => 3,
     }
 }
 
@@ -152,5 +154,20 @@ mod tests {
         assert_eq!(read_f64(&bytes, x_offset), 1000.0);
         assert_eq!(read_f64(&bytes, values_offset), 42.0);
         assert_eq!(bytes[editable_offset + 19], 0);
+    }
+
+    #[test]
+    fn live_controller_projection_is_not_marked_offline() {
+        let draft = offline_fixture_draft();
+        let projection = draft
+            .table_projection(OFFLINE_FIXTURE_PRIMARY_TABLE_ID)
+            .unwrap();
+        let bytes = encode(
+            draft.profile_generation(),
+            TuneSnapshotOrigin::LiveController,
+            &projection,
+        );
+        assert_eq!(read_u32(&bytes, 24), 3);
+        assert_eq!(read_u32(&bytes, 44), 0);
     }
 }
