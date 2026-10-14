@@ -106,10 +106,17 @@ pub fn compile_definition(
     let signature = signature.ok_or(DefinitionCompileError::MissingSignature)?;
     let query_command = query_command.ok_or(DefinitionCompileError::MissingQueryCommand)?;
     let message_envelope_format = envelope.ok_or(DefinitionCompileError::MissingEnvelopeFormat)?;
-    let endianness = match endianness.ok_or(DefinitionCompileError::MissingEndianness)?.trim() {
+    let endianness = match endianness
+        .ok_or(DefinitionCompileError::MissingEndianness)?
+        .trim()
+    {
         "little" => Endianness::Little,
         "big" => Endianness::Big,
-        other => return Err(DefinitionCompileError::UnsupportedEndianness(other.to_string())),
+        other => {
+            return Err(DefinitionCompileError::UnsupportedEndianness(
+                other.to_string(),
+            ));
+        }
     };
     let page_count_text = page_count.ok_or(DefinitionCompileError::MissingPageCount)?;
     let declared_pages = page_count_text
@@ -295,6 +302,9 @@ pageSize = 23824
 
     #[test]
     fn trailing_semicolon_comment_does_not_damage_quoted_command() {
-        assert_eq!(strip_comment("queryCommand = \"S;still-command\" ; comment").trim(), "queryCommand = \"S;still-command\"");
+        assert_eq!(
+            strip_comment("queryCommand = \"S;still-command\" ; comment").trim(),
+            "queryCommand = \"S;still-command\""
+        );
     }
 }
