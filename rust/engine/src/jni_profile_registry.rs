@@ -5,8 +5,9 @@ use jni::objects::{JByteBuffer, JObject};
 use jni::sys::{JNI_FALSE, JNI_TRUE, jboolean, jint, jlong};
 
 use crate::profile_registry_store::{
-    RegistryStoreError, active_profile_registry_count, close_profile_registry, create_profile_registry,
-    profile_registry_is_alive, select_profile_summary_from_runtime_response,
+    RegistryStoreError, active_profile_registry_count, close_profile_registry,
+    create_profile_registry, profile_registry_is_alive,
+    select_profile_summary_from_runtime_response,
 };
 use crate::runtime_identity_probe::RuntimeProbeError;
 use crate::runtime_profile_authority::RuntimeProfileAuthorityError;
@@ -124,7 +125,9 @@ pub extern "system" fn Java_com_epicefi_epichub_engine_NativeProfileRegistryBrid
         let response = unsafe { std::slice::from_raw_parts(address, response_length) };
 
         match select_profile_summary_from_runtime_response(handle, response, max_response_bytes) {
-            Ok(summary) => jlong::try_from(summary.profile_generation).unwrap_or(RESULT_REGISTRY_ERROR),
+            Ok(summary) => {
+                jlong::try_from(summary.profile_generation).unwrap_or(RESULT_REGISTRY_ERROR)
+            }
             Err(error) => map_store_error(error),
         }
     })
@@ -137,7 +140,10 @@ mod tests {
 
     #[test]
     fn store_error_mapping_preserves_authority_categories() {
-        assert_eq!(map_store_error(RegistryStoreError::InvalidHandle), RESULT_INVALID_HANDLE);
+        assert_eq!(
+            map_store_error(RegistryStoreError::InvalidHandle),
+            RESULT_INVALID_HANDLE
+        );
         assert_eq!(
             map_store_error(RegistryStoreError::Registry(
                 ProfileRegistryError::DuplicateProfileSignature("duplicate".to_string())
