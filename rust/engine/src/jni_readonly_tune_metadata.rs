@@ -100,7 +100,10 @@ mod tests {
 
     #[test]
     fn authority_categories_remain_explicit() {
-        assert_eq!(map_store_error(RegistryStoreError::InvalidHandle), META_INVALID_HANDLE);
+        assert_eq!(
+            map_store_error(RegistryStoreError::InvalidHandle),
+            META_INVALID_HANDLE
+        );
         assert_eq!(
             map_store_error(RegistryStoreError::MissingCompiledBundle("sig".to_string())),
             META_MISSING_BUNDLE
