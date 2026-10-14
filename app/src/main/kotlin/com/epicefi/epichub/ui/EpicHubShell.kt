@@ -46,6 +46,7 @@ import com.epicefi.epichub.ui.diagnostics.DiagnosticsTab
 import com.epicefi.epichub.ui.logger.LoggerScreen
 import com.epicefi.epichub.ui.settings.ProfilePackageSettingsState
 import com.epicefi.epichub.ui.settings.SettingsScreen
+import com.epicefi.epichub.ui.settings.UsbControllerSettingsState
 import com.epicefi.epichub.ui.tools.TuningToolsScreen
 import com.epicefi.epichub.ui.tuner.TunerScreen
 
@@ -65,6 +66,10 @@ fun EpicHubShell(
     profilePackages: ProfilePackageSettingsState = ProfilePackageSettingsState(),
     onSelectProfilePackages: () -> Unit = {},
     onClearProfilePackages: () -> Unit = {},
+    usbController: UsbControllerSettingsState = UsbControllerSettingsState(),
+    onRefreshUsbCandidates: () -> Unit = {},
+    onSelectUsbCandidate: (String) -> Unit = {},
+    onRequestUsbPermission: () -> Unit = {},
     benchmarkPlaceholderContent: Boolean = false,
     onDiagnosticsTabSelected: (DiagnosticsTab) -> Unit,
     onCaptureRecentProblem: () -> Unit,
@@ -114,6 +119,10 @@ fun EpicHubShell(
                                 profilePackages = profilePackages,
                                 onSelectProfilePackages = onSelectProfilePackages,
                                 onClearProfilePackages = onClearProfilePackages,
+                                usbController = usbController,
+                                onRefreshUsbCandidates = onRefreshUsbCandidates,
+                                onSelectUsbCandidate = onSelectUsbCandidate,
+                                onRequestUsbPermission = onRequestUsbPermission,
                                 benchmarkPlaceholderContent = benchmarkPlaceholderContent,
                                 onDiagnosticsTabSelected = onDiagnosticsTabSelected,
                                 onSaveCapture = onSaveCapture,
@@ -133,6 +142,10 @@ fun EpicHubShell(
                             profilePackages = profilePackages,
                             onSelectProfilePackages = onSelectProfilePackages,
                             onClearProfilePackages = onClearProfilePackages,
+                            usbController = usbController,
+                            onRefreshUsbCandidates = onRefreshUsbCandidates,
+                            onSelectUsbCandidate = onSelectUsbCandidate,
+                            onRequestUsbPermission = onRequestUsbPermission,
                             benchmarkPlaceholderContent = benchmarkPlaceholderContent,
                             onDiagnosticsTabSelected = onDiagnosticsTabSelected,
                             onSaveCapture = onSaveCapture,
@@ -375,6 +388,10 @@ private fun ShellContent(
     profilePackages: ProfilePackageSettingsState,
     onSelectProfilePackages: () -> Unit,
     onClearProfilePackages: () -> Unit,
+    usbController: UsbControllerSettingsState,
+    onRefreshUsbCandidates: () -> Unit,
+    onSelectUsbCandidate: (String) -> Unit,
+    onRequestUsbPermission: () -> Unit,
     benchmarkPlaceholderContent: Boolean,
     onDiagnosticsTabSelected: (DiagnosticsTab) -> Unit,
     onSaveCapture: (DiagnosticCapture) -> Unit,
@@ -387,6 +404,10 @@ private fun ShellContent(
             profilePackages = profilePackages,
             onSelectProfilePackages = onSelectProfilePackages,
             onClearProfilePackages = onClearProfilePackages,
+            usbController = usbController,
+            onRefreshUsbCandidates = onRefreshUsbCandidates,
+            onSelectUsbCandidate = onSelectUsbCandidate,
+            onRequestUsbPermission = onRequestUsbPermission,
         )
         Trace.endSection()
         return
