@@ -2,144 +2,97 @@
 
 ## Continuation instruction
 
-Read this file first, then verify the current head of `phase2/tuner-live-source-ui-integration`, draft PR #53, and the latest Foundation quality state before continuing.
+Read this file first, then verify the current head of `phase2/tuner-controller-usb-connect-ui`, the latest open stacked PR, and its exact Foundation quality state before continuing.
 
 Repository: `PJawZK/EpicHub-EpicEFI-Android`
 
-The active direction is **definition-driven multi-ECU Tuner architecture with qualified read-only live tune loading and explicit live-source lifecycle semantics**. Do not return to Mega144H7-specific source-provider routing or transport metadata as profile authority.
+The active direction is **definition-driven multi-ECU tuning with explicit profile-package ownership, exact runtime identity authority, qualified read-only live tune loading, and truthful live-source lifecycle state**.
 
-Historical pre-generic Phase 2 detail is preserved in `docs/HANDOFF_PHASE2_PRE_GENERIC_PROFILE.md`; do not replace or delete it.
+Do not return to Mega144H7-specific routing, USB metadata as profile authority, or any design that conflates local draft edits with ECU RAM writes/Burn.
+
+Historical pre-generic Phase 2 detail remains in `docs/HANDOFF_PHASE2_PRE_GENERIC_PROFILE.md`; do not delete it.
 
 ---
 
-# Current checkpoint — 2026-10-14
+# Current checkpoint — 2026-10-15
 
-## Qualified stacked PRs — generic profile and live read chain
+## Qualified generic definition/live-read chain
 
-- **PR #38 — native profile-registry handles**
-  - exact qualified head: `0f0c4fe7df1a9e4bcf70c178591ff7501722995c`;
-  - opaque registry handles own independent runtime registries.
+- PR #38 — native profile-registry handles: `0f0c4fe7df1a9e4bcf70c178591ff7501722995c`.
+- PR #40 — owned dynamic compiled-profile import: `1fbc76766760d45ab54219ecbd17440750762c46`, run `38581312190`.
+- PR #42 — profile import -> native registry JNI: `426e976cb18929d18a2199c7e2a0b41bda9eea23`, run `38583789666`.
+- PR #43 — coherent definition/profile/protocol bundle compiler: `c9bee5ba49926d4b3cafdca59bc0b4a5cef2d323`, run `38585755818`.
+- PR #44 — runtime registry owns coherent bundles: `1e0e5a896912d4c61886ae7904cea18d40523db1`, run `38589578913`.
+- PR #45 — Android/JNI coherent bundle import: `c6df6c7036bfae73b1d438c39abd3e10261034dd`, run `38592056689`.
+- PR #46 — bounded definition-driven page-read planner: `71bfdec5a0ffd36cf1d337770bde92444a8958cb`, run `38593799830`.
+- PR #47 — `msEnvelope_1.0` read-only codec: `90235b3fc15111587012970fd21306c210209926`, run `38596022964`.
+- PR #48 — exact-length USB collection + native acquisition authority: `9d7e53e8ffaf50109c1c75c5fa6e8609d3950a90`, run `38599655899`.
+- PR #49 — native read authority -> Android USB orchestration: `a27745cb116c6a9d56de8995206053f4be605f16`, run `38602249758`.
+- PR #50 — verified live pages -> atomic `TuneSession` install: `fd808d616754595fc0f82997083cd413dc94c0fc`, run `38606774962`.
+- PR #51 — authoritative all-page live tune loader: `73587501ee40e1a8abbb14c57f3ee75507abfa57`, run `38611863965`.
+- PR #52 — live-source lifecycle authority: `b913873dde5d3b9c1da0c9612a6859263baa372a`, run `38613548716`.
 
-- **PR #40 — owned dynamic compiled-profile import**
-  - exact qualified head: `1fbc76766760d45ab54219ecbd17440750762c46`;
-  - Foundation run `38581312190` — PASS.
+## Qualified UI/profile-package ownership chain
 
-- **PR #42 — profile import -> native registry JNI**
-  - exact qualified head: `426e976cb18929d18a2199c7e2a0b41bda9eea23`;
-  - Foundation run `38583789666` — PASS.
+- PR #53 — active tune catalog drives current Tuner editor: `e72e6d072cc14e67b98cf2defdde2f5b65b8b597`, run `38615751170`.
+  - editor no longer depends on hardcoded offline semantic table ID 7;
+  - current table comes from the engine-owned `TunerTableCatalog`.
+- PR #54 — truthful live-source status contract: `9a89bbf8cef87d1b1566f043a0cae0fae96f688a`, run `38622688005`.
+- PR #55 — transactional definition-bundle catalog ownership: `8e823b4544fb504f72b9ed1f6bc74db71c007cc6`, run `38624214366`.
+- PR #56 — live connection/profile ownership: `6f01927d87f77f7696bcfcd6791fb6e0d729eca1`, run `38625907509`.
+- PR #57 — bounded definition-bundle ZIP package decoder/catalog: `9e8513e8a0342087bcd2fa22b1c8a763cb7562a7`, run `38635706192`.
+- PR #58 — Android document-provider profile catalog: `556a0576904393d65d7eb75544ebb98e85ad434c`, run `38637194954`.
+- PR #59 — transactional selected-profile ownership: `ebd0355aef8402a794722e33647309a4973eab7b`, run `38638787870`.
+- PR #60 — transactional SAF persisted-grant/profile replacement: `18be5a8408306b2ccf661ca4b16b9798fc02e731`, run `38640276627`.
+  - acquire only new grants -> fully validate/open replacement -> atomic authority swap -> release obsolete grants;
+  - failed replacement preserves previous profile authority and grants.
+- PR #61 — explicit SAF profile-package picker: `0bdf02e74f59d79731c815bc3bd07494840435ca`, run `38648534948`.
+  - Settings > Connections has explicit Select/Replace/Clear actions;
+  - `OpenMultipleDocuments` selection is cancel-safe;
+  - package replacement/clear runs off the main thread;
+  - selecting profile packages does **not** connect/probe/load USB/controller state;
+  - profile-document owner closes before `NativeEngine`.
 
-- **PR #43 — coherent definition/profile/protocol bundle compiler**
-  - exact qualified head: `c9bee5ba49926d4b3cafdca59bc0b4a5cef2d323`;
-  - Foundation run `38585755818` — PASS;
-  - profile and protocol compile from the exact same resolved definition.
+PR #39 and PR #41 remain closed/superseded duplicate paths.
 
-- **PR #44 — runtime registry owns coherent compiled bundles**
-  - exact qualified head: `1e0e5a896912d4c61886ae7904cea18d40523db1`;
-  - Foundation run `38589578913` — PASS;
-  - profile-only authority cannot grant protocol/page access without the coherent bundle.
-
-- **PR #45 — Android/JNI coherent bundle import**
-  - exact qualified head: `c6df6c7036bfae73b1d438c39abd3e10261034dd`;
-  - Foundation run `38592056689` — PASS.
-
-- **PR #46 — bounded read-only page request planner**
-  - exact qualified head: `71bfdec5a0ffd36cf1d337770bde92444a8958cb`;
-  - Foundation run `38593799830` — PASS;
-  - supports indexed `R%2i%2o%2c` and non-indexed `R%2o%2c` from definition authority.
-
-- **PR #47 — `msEnvelope_1.0` read-only codec**
-  - exact qualified head: `90235b3fc15111587012970fd21306c210209926`;
-  - Foundation run `38596022964` — PASS;
-  - request/response framing remains separate from read-body planning.
-
-- **PR #48 — hardened read-only page acquisition boundaries**
-  - exact qualified head: `9d7e53e8ffaf50109c1c75c5fa6e8609d3950a90`;
-  - Foundation run `38599655899` — PASS;
-  - Android exact-length segmented USB response collection;
-  - Rust acquisition authority validates status/CRC/payload and assembles complete pages.
-
-- **PR #49 — native read-only page authority -> Android USB**
-  - exact qualified head: `a27745cb116c6a9d56de8995206053f4be605f16`;
-  - Foundation run `38602249758` — PASS;
-  - stateless JNI plan/verify API; Kotlin owns only sequential USB orchestration.
-
-- **PR #50 — acquired live pages -> atomic `TuneSession` install**
-  - exact qualified head: `fd808d616754595fc0f82997083cd413dc94c0fc`;
-  - Foundation run `38606774962` — PASS;
-  - live controller source origin code `3`;
-  - exact selected bundle decodes complete pages before atomic session replacement.
-
-- **PR #51 — authoritative all-page live tune loader**
-  - exact qualified head: `73587501ee40e1a8abbb14c57f3ee75507abfa57`;
-  - Foundation run `38611863965` — PASS;
-  - exact bundle page count -> acquire every page -> one final atomic install;
-  - partial acquisition never installs.
-
-- **PR #52 — live-source lifecycle authority**
-  - exact qualified head: `b913873dde5d3b9c1da0c9612a6859263baa372a`;
-  - Foundation run `38613548716` — PASS;
-  - explicit `Disconnected`, `Connected`, `Loading`, `Live`, `LoadFailed` states;
-  - retained local tune state is not treated as still live after disconnect;
-  - reconnect requires a fresh load;
-  - stale attempts are invalidated.
-
-- **PR #53 — active tune catalog drives current Tuner editor**
-  - exact qualified head: `e72e6d072cc14e67b98cf2defdde2f5b65b8b597`;
-  - Foundation run `38615751170` — PASS;
-  - removes the hardcoded offline semantic table ID from the editor path;
-  - `ActiveTunerTable` resolves the current engine-owned `TuneSession` catalog;
-  - deterministic current single-table default is the first catalog entry, with empty catalogs failing closed;
-  - `OfflineTunerFixture` remains only as a compatibility façade and delegates to the active catalog-driven path.
-
-Closed/superseded branches remain closed:
-
-- PR #39 — superseded duplicate;
-- PR #41 — superseded duplicate import/JNI path.
-
-All qualified heads above are immutable checkpoints. Never append cleanup/docs commits to a qualified head; branch the next slice from the exact qualified SHA.
+All qualified SHAs above are immutable checkpoints. Never append cleanup or handoff commits directly to a qualified head; branch the next slice from it.
 
 ---
 
 # Active branch
 
-`phase2/tuner-live-source-ui-integration`
+`phase2/tuner-controller-usb-connect-ui`
 
-Exact qualified checkpoint: PR #53 head `e72e6d072cc14e67b98cf2defdde2f5b65b8b597`.
+Base: exact qualified PR #61 head `0bdf02e74f59d79731c815bc3bd07494840435ca`.
 
-Current continuation after #53 qualification:
+The handoff refresh is the first commit on this branch. The intended implementation slice is the **explicit controller/USB connection presentation and permission flow**, consuming an already selected profile authority without merging profile selection and controller connection.
 
-1. branch from exact qualified #53;
-2. expose the qualified #52 live-source lifecycle state to app/tuner presentation;
-3. show clearly whether the current local tables are live/current, retained after disconnect, connected-but-not-loaded, loading, or failed;
-4. do not reintroduce source-specific table IDs or a second UI table model;
-5. keep the mature 2D/3D editor operating on the same engine-owned catalog/projection APIs;
-6. USB connection/permission controls may follow separately if they cannot be introduced without widening this UI-status slice;
-7. ECU RAM writes and Burn remain out of scope.
+Before coding, inspect current `LiveTuneConnectionOwner`, USB discovery/topology/channel/permission APIs, and any parallel PR #62+ work.
 
 ---
 
 # Product architecture authority
 
 ```text
-transport candidate
+explicit profile package selection
     ↓
-Android descriptor-resolved transport
+coherent compiled profile/protocol registry authority
+
+USB transport candidate
+    ↓
+descriptor-resolved CDC transport
+    ↓
+explicit permission/open action
     ↓
 read-only runtime identity probe
     ↓
-exact live signature
+exact full live signature
     ↓
-coherent compiled definition/profile/protocol bundle
+exact compiled bundle selection
     ↓
-bounded page-read planning
+read-only authoritative page acquisition
     ↓
-msEnvelope framing
-    ↓
-exact-length Android USB transaction
-    ↓
-native CRC/status/payload verification
-    ↓
-complete authoritative page set
+complete verified page set
     ↓
 compiled profile decode
     ↓
@@ -147,25 +100,22 @@ atomic LiveController TuneSnapshot install
     ↓
 engine-owned TuneSession / TuneDraft
     ↓
-active tune catalog / 2D+3D UI
+active tune catalog / 2D + 3D editor
 ```
 
-Keep these identities separate:
+Keep these concepts separate:
 
-1. **Transport candidate identity** — endpoint/adapter metadata only.
-2. **Runtime controller identity** — exact full live signature.
-3. **Resolved profile/bundle identity** — compiled definition + protocol authority.
-4. **Local tune source lifecycle** — whether current local data is live/current, retained/offline, loading, failed, or disconnected.
+1. **Profile package selection** — which definitions/bundles EpicHub is allowed to understand.
+2. **Transport candidate** — where a controller might be reachable.
+3. **Runtime controller identity** — exact full live signature read from the controller.
+4. **Resolved bundle authority** — exact definition/profile/protocol selected by that signature.
+5. **Local live-source lifecycle** — connected/loading/live/failed/disconnected-retained state.
 
-USB VID/PID, product strings, board labels, endpoint names, signature prefixes, and family names never grant profile/tune authority.
+USB VID/PID, product strings, board names, endpoint names, family names, and signature prefixes never grant profile/tune authority.
 
 ---
 
-# Qualified live-source lifecycle semantics
-
-A local `TuneSession` snapshot can remain useful after transport loss, but UI and logic must not pretend it remains live.
-
-Required semantics:
+# Live-source lifecycle semantics
 
 ```text
 Live + disconnect
@@ -184,74 +134,31 @@ Loading + successful current attempt
 Loading + failure
     -> LoadFailed(previous retained source may remain locally usable)
 
-stale attempt completion after disconnect/reconnect
+stale completion after disconnect/reconnect
     -> ignored
 ```
 
-Do not use retained local state as proof that the connected ECU still has identical calibration.
+Retained local tune data is useful offline but is never proof that a newly connected ECU still contains the same calibration.
 
 ---
 
-# Definition/compiler and protocol authority
-
-TunerStudio/rusEFI INI remains an **input/compiler source**, not runtime architecture to copy.
-
-Production direction is EpicHub-owned normalized compiled definitions/bundles with:
-
-- exact signature;
-- definition fingerprint/generation;
-- endianness and envelope;
-- page geometry;
-- per-page read/write/Burn templates;
-- scalar/array calibration metadata;
-- table/curve editor bindings;
-- explicit semantic bindings;
-- coherent protocol authority compiled from the same resolved definition.
-
-The hand-coded Mega144H7 resolver remains a compatibility/reference oracle only.
-
----
-
-# Tuner UI state after PR #53
-
-The Tuner editing path no longer depends on hardcoded offline table ID `7`.
-
-Current UI authority:
-
-```text
-NativeEngine current TuneSession
-    ↓
-TunerTableCatalog
-    ↓
-ActiveTunerTable.default/current table
-    ↓
-TunerSessionClient(handle, semantic table ID)
-    ↓
-projection / preview / apply / undo / redo
-```
-
-The current screen still presents one table at a time. Multi-table selection is future UI work; it should use the same catalog rather than another model.
-
-The next UI slice should surface live-source lifecycle/status without rewriting table interaction logic.
-
----
-
-# Proven tuning invariants
+# Proven invariants
 
 Do not regress:
 
 - one Rust semantic tuning authority;
 - one engine-owned `TuneSession` per engine instance;
 - immutable baseline + mutable `TuneDraft`;
-- Rust-owned revision guard and Undo/Redo;
-- 2D and 3D are peers over the same semantic table state;
+- Rust-owned revision/history/Undo/Redo;
+- 2D and 3D are peers over the same semantic state;
 - preview is non-mutating until Apply;
-- atomic source installation validates completely before session replacement;
-- failed source install preserves prior baseline/draft/revision/history;
-- stable semantic IDs are independent of raw byte offsets;
+- atomic source installation validates completely before replacement;
+- failed source/profile replacement preserves previous valid authority/session;
+- stable semantic IDs are not raw offsets;
 - no fabricated tune values;
-- source/profile/draft/write/Burn remain separate;
-- retained-after-disconnect != live/current.
+- retained-after-disconnect != live/current;
+- profile selection != transport connection;
+- transport candidate != runtime identity != profile authority.
 
 Critical invariant:
 
@@ -259,18 +166,18 @@ Critical invariant:
 TuneDraft Apply != ECU RAM write != Burn
 ```
 
+No qualified stage through PR #61 writes calibration RAM or issues Burn.
+
 Do not reintroduce `ReusableContentHost`.
 
 ---
 
-# Write/Burn boundary
+# Immediate next work
 
-No qualified stage through PR #53 writes calibration RAM or issues Burn.
-
-Current live chain is strictly:
-
-```text
-ECU read -> validate -> decode -> local TuneSession
-```
-
-Do not add calibration write or Burn implicitly while doing UI/session integration.
+1. Inspect the qualified Android USB discovery/topology/permission/channel APIs and `LiveTuneConnectionOwner`.
+2. Add an explicit controller connection action only when a profile package is selected and a USB candidate is chosen.
+3. Permission-required must remain an explicit UI state/action; do not silently auto-request/connect from profile selection.
+4. On successful read-only identity probe, pass exact signature to the selected profile connection owner; no VID/PID/family fallback.
+5. Present truthful connection/load state using the existing live-source lifecycle contract.
+6. Keep page load explicit and read-only unless the already-qualified owner intentionally composes probe+load.
+7. Keep ECU RAM write/Burn out of scope.
