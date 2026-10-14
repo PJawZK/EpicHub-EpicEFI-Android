@@ -122,9 +122,9 @@ fn resolve_text(
                         include_name.to_string(),
                     ));
                 }
-                let include_text = includes
-                    .get(include_name)
-                    .ok_or_else(|| DefinitionResolveError::IncludeNotFound(include_name.to_string()))?;
+                let include_text = includes.get(include_name).ok_or_else(|| {
+                    DefinitionResolveError::IncludeNotFound(include_name.to_string())
+                })?;
                 include_stack.push(include_name.to_string());
                 resolve_text(
                     include_text,
@@ -172,7 +172,9 @@ fn parse_define(value: &str) -> Result<(&str, &str), DefinitionResolveError> {
     };
     let name = name.trim();
     if name.is_empty()
-        || !name.chars().all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
+        || !name
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
         || name.as_bytes()[0].is_ascii_digit()
     {
         return Err(DefinitionResolveError::InvalidDefine(value.to_string()));
@@ -182,7 +184,10 @@ fn parse_define(value: &str) -> Result<(&str, &str), DefinitionResolveError> {
 
 fn parse_include_name(value: &str) -> Result<&str, DefinitionResolveError> {
     let value = value.trim();
-    if let Some(inner) = value.strip_prefix('"').and_then(|rest| rest.strip_suffix('"')) {
+    if let Some(inner) = value
+        .strip_prefix('"')
+        .and_then(|rest| rest.strip_suffix('"'))
+    {
         if !inner.is_empty() {
             return Ok(inner);
         }
