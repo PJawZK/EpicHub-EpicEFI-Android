@@ -8,17 +8,9 @@ use crate::tuning::{TuneSnapshot, TuneSnapshotOrigin};
 
 const MEGA144H7_PAGE_SIZES: [usize; 2] = [MEGA144H7_PAGE_1_SIZE, MEGA144H7_PAGE_2_SIZE];
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Mega144h7Profile {
     pub modes: Mega144h7ResolvedModes,
-}
-
-impl Default for Mega144h7Profile {
-    fn default() -> Self {
-        Self {
-            modes: Mega144h7ResolvedModes::default(),
-        }
-    }
 }
 
 impl ResolvedEcuProfile for Mega144h7Profile {
