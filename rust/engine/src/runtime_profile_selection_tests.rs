@@ -8,10 +8,9 @@ use crate::tune_source_install::install_imported_pages;
 use crate::tuning::TuneSnapshotOrigin;
 
 #[test]
-fn exact_runtime_identity_selects_compiled_profile_then_installs_atomically() {
-    let profile = mega_profile();
+fn exact_runtime_identity_selects_owned_compiled_profile_then_installs_atomically() {
     let mut registry = ProfileRegistry::new();
-    registry.register_profile(&profile).unwrap();
+    registry.register_profile(mega_profile()).unwrap();
 
     let runtime_identity = RuntimeControllerIdentity {
         signature: MEGA144H7_PROFILE_SIGNATURE.to_string(),
