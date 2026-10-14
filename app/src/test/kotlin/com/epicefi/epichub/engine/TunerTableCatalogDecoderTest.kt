@@ -2,9 +2,9 @@ package com.epicefi.epichub.engine
 
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertThrows
+import org.junit.Test
 
 class TunerTableCatalogDecoderTest {
     @Test
@@ -63,7 +63,7 @@ class TunerTableCatalogDecoderTest {
         buffer.putInt(64)
         buffer.putInt(1)
 
-        assertFailsWith<IllegalArgumentException> {
+        assertThrows(IllegalArgumentException::class.java) {
             TunerTableCatalogDecoder.decode(buffer)
         }
     }
