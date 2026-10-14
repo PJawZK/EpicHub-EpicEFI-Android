@@ -55,10 +55,7 @@ pub enum CalibrationCompileError {
     InvalidDimensions(String),
     InvalidNumber(String),
     InvalidDecimals(String),
-    MissingField {
-        name: String,
-        field: &'static str,
-    },
+    MissingField { name: String, field: &'static str },
 }
 
 pub fn compile_calibration_primitives(
@@ -135,12 +132,7 @@ fn parse_array(
         name: name.to_string(),
         storage_type: StorageType::parse(field(name, fields, 1, "storage type")?)?,
         offset: parse_usize(field(name, fields, 2, "offset")?)?,
-        shape: CalibrationShape::Array(parse_dimensions(field(
-            name,
-            fields,
-            3,
-            "dimensions",
-        )?)?),
+        shape: CalibrationShape::Array(parse_dimensions(field(name, fields, 3, "dimensions")?)?),
         units: unquote(field(name, fields, 4, "units")?).to_string(),
         scale: parse_f64(field(name, fields, 5, "scale")?)?,
         translate: parse_f64(field(name, fields, 6, "translate")?)?,
