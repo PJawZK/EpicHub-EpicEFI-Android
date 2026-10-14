@@ -189,10 +189,7 @@ fn parse_curve_header(value: &str) -> Result<PendingCurve, EditorCompileError> {
     })
 }
 
-fn parse_table_property(
-    table: &mut PendingTable,
-    line: &str,
-) -> Result<(), EditorCompileError> {
+fn parse_table_property(table: &mut PendingTable, line: &str) -> Result<(), EditorCompileError> {
     let Some((key, value)) = line.split_once('=') else {
         return Ok(());
     };
@@ -205,10 +202,7 @@ fn parse_table_property(
     Ok(())
 }
 
-fn parse_curve_property(
-    curve: &mut PendingCurve,
-    line: &str,
-) -> Result<(), EditorCompileError> {
+fn parse_curve_property(curve: &mut PendingCurve, line: &str) -> Result<(), EditorCompileError> {
     let Some((key, value)) = line.split_once('=') else {
         return Ok(());
     };
@@ -318,8 +312,16 @@ fn validate_table(
     table: &TableDescriptor,
     primitive_map: &HashMap<&str, &CalibrationPrimitive>,
 ) -> Result<(), EditorCompileError> {
-    let x = primitive(table.table_id.as_str(), &table.x_bins.primitive_name, primitive_map)?;
-    let y = primitive(table.table_id.as_str(), &table.y_bins.primitive_name, primitive_map)?;
+    let x = primitive(
+        table.table_id.as_str(),
+        &table.x_bins.primitive_name,
+        primitive_map,
+    )?;
+    let y = primitive(
+        table.table_id.as_str(),
+        &table.y_bins.primitive_name,
+        primitive_map,
+    )?;
     let z = primitive(table.table_id.as_str(), &table.z_bins, primitive_map)?;
 
     let x_len = one_dimensional_len(table.table_id.as_str(), x)?;
@@ -348,7 +350,11 @@ fn validate_curve(
     curve: &CurveDescriptor,
     primitive_map: &HashMap<&str, &CalibrationPrimitive>,
 ) -> Result<(), EditorCompileError> {
-    let x = primitive(curve.curve_id.as_str(), &curve.x_bins.primitive_name, primitive_map)?;
+    let x = primitive(
+        curve.curve_id.as_str(),
+        &curve.x_bins.primitive_name,
+        primitive_map,
+    )?;
     let y = primitive(curve.curve_id.as_str(), &curve.y_bins, primitive_map)?;
     let x_len = one_dimensional_len(curve.curve_id.as_str(), x)?;
     let y_len = one_dimensional_len(curve.curve_id.as_str(), y)?;
