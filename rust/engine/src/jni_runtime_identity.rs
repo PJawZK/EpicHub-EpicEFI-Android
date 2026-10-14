@@ -20,7 +20,7 @@ fn ffi_guard(operation: impl FnOnce() -> jint) -> jint {
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_epicefi_epichub_engine_NativeEngineBridge_validateRuntimeSignatureResponse(
+pub extern "system" fn Java_com_epicefi_epichub_engine_NativeRuntimeIdentityBridge_validateRuntimeSignatureResponse(
     env: JNIEnv,
     _object: JObject,
     buffer: JByteBuffer,
