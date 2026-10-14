@@ -187,10 +187,9 @@ fn parse_include_name(value: &str) -> Result<&str, DefinitionResolveError> {
     if let Some(inner) = value
         .strip_prefix('"')
         .and_then(|rest| rest.strip_suffix('"'))
+        .filter(|inner| !inner.is_empty())
     {
-        if !inner.is_empty() {
-            return Ok(inner);
-        }
+        return Ok(inner);
     }
     Err(DefinitionResolveError::UnsupportedDirective(format!(
         "#include {value}"
