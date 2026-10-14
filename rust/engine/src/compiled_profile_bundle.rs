@@ -6,7 +6,9 @@ use crate::ecu_definition_resolver::{
 };
 use crate::ecu_profile::ResolvedEcuProfile;
 use crate::ecu_protocol::{CompiledProtocol, ProtocolCompileError, compile_protocol};
-use crate::profile_import::{OwnedCompiledProfileImport, OwnedSemanticTableBindingSpec, compile_owned_profile_import};
+use crate::profile_import::{
+    OwnedCompiledProfileImport, OwnedSemanticTableBindingSpec, compile_owned_profile_import,
+};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OwnedDefinitionBundleImport {
@@ -31,7 +33,10 @@ pub enum CompiledProfileBundleError {
     Resolve(DefinitionResolveError),
     Profile(crate::compiled_ecu_profile::CompiledProfileBuildError),
     Protocol(ProtocolCompileError),
-    PageCountMismatch { profile_pages: usize, protocol_pages: usize },
+    PageCountMismatch {
+        profile_pages: usize,
+        protocol_pages: usize,
+    },
 }
 
 pub fn compile_definition_bundle(
@@ -51,9 +56,10 @@ pub fn compile_definition_bundle(
         resolved_definition: resolved_definition.text.clone(),
         semantic_tables: import.semantic_tables.clone(),
     };
-    let profile =
-        compile_owned_profile_import(&profile_import).map_err(CompiledProfileBundleError::Profile)?;
-    let protocol = compile_protocol(&resolved_definition.text).map_err(CompiledProfileBundleError::Protocol)?;
+    let profile = compile_owned_profile_import(&profile_import)
+        .map_err(CompiledProfileBundleError::Profile)?;
+    let protocol = compile_protocol(&resolved_definition.text)
+        .map_err(CompiledProfileBundleError::Protocol)?;
 
     let profile_pages = profile.page_sizes().len();
     let protocol_pages = protocol.pages.len();
@@ -131,13 +137,21 @@ table = bundleTable, bundleMap, "Bundle Table", 1
     fn one_resolution_compiles_profile_and_protocol_from_identical_text() {
         let bundle = compile_definition_bundle(&import(true)).unwrap();
 
-        assert_eq!(bundle.profile.identity().signature, "rusEFI bundle.generic.900");
+        assert_eq!(
+            bundle.profile.identity().signature,
+            "rusEFI bundle.generic.900"
+        );
         assert_eq!(bundle.profile.page_sizes(), &[32]);
         assert_eq!(bundle.protocol.pages.len(), 1);
         assert_eq!(bundle.protocol.pages[0].identifier, vec![0, 0]);
         assert_eq!(bundle.protocol.pages[0].read_command, "R%2i%2o%2c");
         assert!(bundle.resolved_definition.text.contains("R%2i%2o%2c"));
-        assert!(!bundle.resolved_definition.text.contains("R%2o%2c\"\n#endif"));
+        assert!(
+            !bundle
+                .resolved_definition
+                .text
+                .contains("R%2o%2c\"\n#endif")
+        );
     }
 
     #[test]
@@ -145,7 +159,10 @@ table = bundleTable, bundleMap, "Bundle Table", 1
         let indexed = compile_definition_bundle(&import(true)).unwrap();
         let plain = compile_definition_bundle(&import(false)).unwrap();
 
-        assert_eq!(indexed.profile.identity().signature, plain.profile.identity().signature);
+        assert_eq!(
+            indexed.profile.identity().signature,
+            plain.profile.identity().signature
+        );
         assert_eq!(indexed.protocol.pages[0].read_command, "R%2i%2o%2c");
         assert_eq!(plain.protocol.pages[0].read_command, "R%2o%2c");
     }
