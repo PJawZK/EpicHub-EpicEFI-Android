@@ -1,6 +1,5 @@
 package com.epicefi.epichub.platform.transport.usb
 
-import android.hardware.usb.UsbConstants
 import android.hardware.usb.UsbDevice
 
 object AndroidUsbTopologyInspection {
@@ -39,6 +38,4 @@ object AndroidUsbTopologyInspection {
 
     fun resolveCdc(device: UsbDevice): UsbCdcTopologyResolution =
         UsbCdcTopologyResolver.resolve(inspect(device))
-
-    internal fun isBulkEndpoint(type: Int): Boolean = type == UsbConstants.USB_ENDPOINT_XFER_BULK
 }
