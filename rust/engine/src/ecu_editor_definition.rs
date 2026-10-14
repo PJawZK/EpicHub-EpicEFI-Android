@@ -279,12 +279,10 @@ fn finish_table(table: PendingTable) -> Result<TableDescriptor, EditorCompileErr
                 descriptor: descriptor.clone(),
                 property: "yBins",
             })?,
-        z_bins: table
-            .z_bins
-            .ok_or_else(|| EditorCompileError::MissingProperty {
-                descriptor,
-                property: "zBins",
-            })?,
+        z_bins: table.z_bins.ok_or(EditorCompileError::MissingProperty {
+            descriptor,
+            property: "zBins",
+        })?,
     })
 }
 
@@ -299,12 +297,10 @@ fn finish_curve(curve: PendingCurve) -> Result<CurveDescriptor, EditorCompileErr
                 descriptor: descriptor.clone(),
                 property: "xBins",
             })?,
-        y_bins: curve
-            .y_bins
-            .ok_or_else(|| EditorCompileError::MissingProperty {
-                descriptor,
-                property: "yBins",
-            })?,
+        y_bins: curve.y_bins.ok_or(EditorCompileError::MissingProperty {
+            descriptor,
+            property: "yBins",
+        })?,
     })
 }
 
