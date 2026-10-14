@@ -18,6 +18,21 @@ impl From<EcuProfileResolveError> for TuneSourceInstallError {
     }
 }
 
+fn install_pages_with_origin(
+    handle: i64,
+    profile: &dyn ResolvedEcuProfile,
+    pages: &[&[u8]],
+    origin: TuneSnapshotOrigin,
+) -> Result<u64, TuneSourceInstallError> {
+    let snapshot = profile.resolve_pages(pages, origin)?;
+    let profile_generation = snapshot.profile_generation;
+    with_tune_session(handle, move |session| {
+        *session = TuneSession::from_snapshot(snapshot);
+    })
+    .ok_or(TuneSourceInstallError::InvalidHandle)?;
+    Ok(profile_generation)
+}
+
 /// Resolves and validates a complete profile source before taking mutation authority over the
 /// active engine session. A failed decode leaves the existing TuneSession untouched.
 pub fn install_imported_pages(
@@ -25,13 +40,18 @@ pub fn install_imported_pages(
     profile: &dyn ResolvedEcuProfile,
     pages: &[&[u8]],
 ) -> Result<u64, TuneSourceInstallError> {
-    let snapshot = profile.resolve_pages(pages, TuneSnapshotOrigin::ImportedFile)?;
-    let profile_generation = snapshot.profile_generation;
-    with_tune_session(handle, move |session| {
-        *session = TuneSession::from_snapshot(snapshot);
-    })
-    .ok_or(TuneSourceInstallError::InvalidHandle)?;
-    Ok(profile_generation)
+    install_pages_with_origin(handle, profile, pages, TuneSnapshotOrigin::ImportedFile)
+}
+
+/// Installs a complete page set acquired directly from the selected live controller. Decode and
+/// validation finish before the active TuneSession is replaced, so any failure preserves the
+/// previous baseline, draft, revision and history exactly.
+pub fn install_live_pages(
+    handle: i64,
+    profile: &dyn ResolvedEcuProfile,
+    pages: &[&[u8]],
+) -> Result<u64, TuneSourceInstallError> {
+    install_pages_with_origin(handle, profile, pages, TuneSnapshotOrigin::LiveController)
 }
 
 /// Compatibility adapter for the already-qualified Mega144H7 source boundary. New source-provider
@@ -211,6 +231,27 @@ mod tests {
             assert_eq!(session.baseline().profile_generation, 9_001);
             assert_eq!(session.baseline().origin, TuneSnapshotOrigin::ImportedFile);
             assert_eq!(session.revision(), 0);
+        })
+        .unwrap();
+        close_engine(handle);
+    }
+
+    #[test]
+    fn live_install_marks_controller_origin_and_resets_history_atomically() {
+        let handle = create_engine();
+        with_tune_session(handle, |session| {
+            session
+                .apply_rectangle_step(OFFLINE_SOURCE_PRIMARY_TABLE_ID, 0, 0, 0, 0, 1, 0)
+                .unwrap();
+        })
+        .unwrap();
+
+        let generation = install_live_pages(handle, &AlternateTestProfile, &[]).unwrap();
+        assert_eq!(generation, 9_001);
+        with_tune_session(handle, |session| {
+            assert_eq!(session.baseline().origin, TuneSnapshotOrigin::LiveController);
+            assert_eq!(session.revision(), 0);
+            assert!(session.undo().is_err());
         })
         .unwrap();
         close_engine(handle);
