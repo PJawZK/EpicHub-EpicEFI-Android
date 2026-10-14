@@ -129,15 +129,11 @@ pub extern "system" fn Java_com_epicefi_epichub_engine_NativeLiveTuneInstallBrid
         if !engine_is_alive(engine_handle) {
             return INSTALL_INVALID_ENGINE_HANDLE;
         }
-        let signature = match direct_bytes(
-            &env,
-            &signature_buffer,
-            signature_length,
-            signature_limit,
-        ) {
-            Ok(value) => value,
-            Err(status) => return status,
-        };
+        let signature =
+            match direct_bytes(&env, &signature_buffer, signature_length, signature_limit) {
+                Ok(value) => value,
+                Err(status) => return status,
+            };
         let Ok(signature_limit) = usize::try_from(signature_limit) else {
             return INSTALL_INVALID_LIMIT;
         };
