@@ -1,4 +1,5 @@
 mod channel_store;
+pub mod compiled_ecu_profile;
 mod diagnostics;
 pub mod ecu_calibration;
 pub mod ecu_compiled_snapshot;
