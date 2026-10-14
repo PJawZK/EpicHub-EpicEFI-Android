@@ -23,7 +23,15 @@ data class TunerTableCatalog(
     val draftRevision: Long,
     val origin: TuneSourceOrigin,
     val tables: List<TunerTableCatalogEntry>,
-)
+) {
+    /**
+     * The native catalog encoder sorts entries by semantic table ID. Until the UI exposes an
+     * explicit table selector, the first catalog entry is therefore the deterministic active table
+     * for the current single-table editor surface.
+     */
+    fun defaultTable(): TunerTableCatalogEntry =
+        tables.firstOrNull() ?: error("Active TuneSession does not expose any tunable tables.")
+}
 
 internal object TunerTableCatalogDecoder {
     private const val ABI_VERSION = 1
