@@ -7,6 +7,7 @@ import java.nio.charset.StandardCharsets
 enum class TuneSourceOrigin {
     OFFLINE_FIXTURE,
     IMPORTED_FILE,
+    LIVE_CONTROLLER,
 }
 
 data class TunerTableCatalogEntry(
@@ -43,6 +44,7 @@ internal object TunerTableCatalogDecoder {
         val origin = when (buffer.getInt(32)) {
             1 -> TuneSourceOrigin.OFFLINE_FIXTURE
             2 -> TuneSourceOrigin.IMPORTED_FILE
+            3 -> TuneSourceOrigin.LIVE_CONTROLLER
             else -> error("Unsupported tune source origin.")
         }
         val totalSize = buffer.getInt(36)
