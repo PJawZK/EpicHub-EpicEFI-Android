@@ -1,10 +1,7 @@
-use crate::tuning::{
-    TableDescriptor, TableSnapshot, TuneError, TuneSnapshot, TuneSnapshotOrigin,
-};
+use crate::tuning::{TableDescriptor, TableSnapshot, TuneError, TuneSnapshot, TuneSnapshotOrigin};
 
 pub const MEGA144H7_PROFILE_NAME: &str = "353";
-pub const MEGA144H7_PROFILE_SIGNATURE: &str =
-    "rusEFI master.2026.08.26.MEGA144H7.2273317132";
+pub const MEGA144H7_PROFILE_SIGNATURE: &str = "rusEFI master.2026.08.26.MEGA144H7.2273317132";
 pub const MEGA144H7_PROFILE_FINGERPRINT: &str =
     "1546186d795690b45b4fb5b064f1bd225a3e5f8b102bad28f54fb96afd6390fa";
 pub const MEGA144H7_PROFILE_GENERATION: u64 = 2_273_317_132;
@@ -79,7 +76,6 @@ fn decode_ve_table(
     page: &[u8],
     modes: Mega144h7ResolvedModes,
 ) -> Result<TableSnapshot, ProfileResolveError> {
-    const SCALE: f64 = 0.01;
     table_u16(
         page,
         TableSpec {
@@ -90,7 +86,7 @@ fn decode_ve_table(
             value_offset: 16_448,
             x_offset: 18_560,
             y_offset: 18_496,
-            value_scale: SCALE,
+            value_scale: 0.01,
             x_scale: 1.0,
             y_scale: 1.0,
             minimum: 0.0,
@@ -105,7 +101,6 @@ fn decode_ignition_table(
     page: &[u8],
     modes: Mega144h7ResolvedModes,
 ) -> Result<TableSnapshot, ProfileResolveError> {
-    const SCALE: f64 = 0.01;
     table_i16(
         page,
         TableSpec {
@@ -116,7 +111,7 @@ fn decode_ignition_table(
             value_offset: 14_272,
             x_offset: 16_384,
             y_offset: 16_320,
-            value_scale: SCALE,
+            value_scale: 0.01,
             x_scale: 1.0,
             y_scale: 1.0,
             minimum: -90.0,
@@ -143,12 +138,8 @@ fn decode_target_mixture_table(
         ("Target AFR Table", 0.1, 0.0, 25.0, 1)
     };
     let (minimum, maximum) = representable_bounds(minimum, maximum, scale);
-
     let rows = 32;
     let cols = 32;
-    let values = read_u8_scaled(page, 18_848, rows * cols, scale, "lambdaTable")?;
-    let x_axis = read_u8_scaled(page, 19_936, cols, 100.0, "lambdaRpmBins")?;
-    let y_axis = read_u16_scaled(page, 19_872, rows, 1.0, "lambdaLoadBins")?;
 
     Ok(TableSnapshot {
         descriptor: descriptor(
@@ -161,20 +152,16 @@ fn decode_target_mixture_table(
             scale,
             decimals,
         ),
-        x_axis,
-        y_axis,
-        values,
+        x_axis: read_u8_scaled(page, 19_936, cols, 100.0, "lambdaRpmBins")?,
+        y_axis: read_u16_scaled(page, 19_872, rows, 1.0, "lambdaLoadBins")?,
+        values: read_u8_scaled(page, 18_848, rows * cols, scale, "lambdaTable")?,
         editable: vec![true; rows * cols],
     })
 }
 
 fn decode_map_estimate_table(page: &[u8]) -> Result<TableSnapshot, ProfileResolveError> {
-    const SCALE: f64 = 0.01;
     let rows = 16;
     let cols = 16;
-    let values = read_u16_scaled(page, 13_152, rows * cols, SCALE, "mapEstimateTable")?;
-    let x_axis = read_u8_scaled(page, 13_680, cols, 100.0, "mapEstimateRpmBins")?;
-    let y_axis = read_u8_scaled(page, 13_664, rows, 0.5, "mapEstimateTpsBins")?;
 
     Ok(TableSnapshot {
         descriptor: descriptor(
@@ -184,12 +171,12 @@ fn decode_map_estimate_table(page: &[u8]) -> Result<TableSnapshot, ProfileResolv
             cols,
             0.0,
             650.0,
-            SCALE,
+            0.01,
             2,
         ),
-        x_axis,
-        y_axis,
-        values,
+        x_axis: read_u8_scaled(page, 13_680, cols, 100.0, "mapEstimateRpmBins")?,
+        y_axis: read_u8_scaled(page, 13_664, rows, 0.5, "mapEstimateTpsBins")?,
+        values: read_u16_scaled(page, 13_152, rows * cols, 0.01, "mapEstimateTable")?,
         editable: vec![true; rows * cols],
     })
 }
@@ -321,7 +308,10 @@ fn read_u8_scaled(
     let bytes = page
         .get(offset..end)
         .ok_or(ProfileResolveError::OutOfBounds(key))?;
-    Ok(bytes.iter().map(|value| f64::from(*value) * scale).collect())
+    Ok(bytes
+        .iter()
+        .map(|value| f64::from(*value) * scale)
+        .collect())
 }
 
 fn read_u16_scaled(
@@ -431,8 +421,8 @@ mod tests {
         put_u8(&mut page_1, 13_680, 25);
         put_u8(&mut page_1, 13_664, 80);
 
-        let snapshot = imported_snapshot(&page_1, &page_2, Mega144h7ResolvedModes::default())
-            .unwrap();
+        let snapshot =
+            imported_snapshot(&page_1, &page_2, Mega144h7ResolvedModes::default()).unwrap();
 
         assert_eq!(snapshot.origin, TuneSnapshotOrigin::ImportedFile);
         assert_eq!(snapshot.profile_generation, MEGA144H7_PROFILE_GENERATION);
@@ -492,8 +482,8 @@ mod tests {
     #[test]
     fn lambda_bounds_are_clamped_to_the_encoded_grid() {
         let (page_1, page_2) = pages();
-        let snapshot = imported_snapshot(&page_1, &page_2, Mega144h7ResolvedModes::default())
-            .unwrap();
+        let snapshot =
+            imported_snapshot(&page_1, &page_2, Mega144h7ResolvedModes::default()).unwrap();
         let target = &snapshot.tables[&TABLE_ID_TARGET_MIXTURE].descriptor;
         assert!(target.minimum >= 0.6);
         assert!(target.maximum <= 1.5);
@@ -506,8 +496,8 @@ mod tests {
     #[test]
     fn resolved_snapshot_is_accepted_by_existing_tune_draft() {
         let (page_1, page_2) = pages();
-        let snapshot = imported_snapshot(&page_1, &page_2, Mega144h7ResolvedModes::default())
-            .unwrap();
+        let snapshot =
+            imported_snapshot(&page_1, &page_2, Mega144h7ResolvedModes::default()).unwrap();
         let draft = TuneDraft::from_snapshot(&snapshot);
         let projection = draft.table_projection(TABLE_ID_VE).unwrap();
         assert_eq!(projection.descriptor.name, "VE Table");
