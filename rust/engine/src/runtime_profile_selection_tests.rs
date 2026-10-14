@@ -1,5 +1,4 @@
 use crate::compiled_ecu_profile::test_support::mega_profile;
-use crate::ecu_profile::ResolvedEcuProfile;
 use crate::ecu_profile_registry::{ProfileRegistry, RuntimeControllerIdentity};
 use crate::engine::{close_engine, create_engine, with_tune_session};
 use crate::resolved_profile_source::{
