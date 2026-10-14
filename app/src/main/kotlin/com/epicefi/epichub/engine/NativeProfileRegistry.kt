@@ -19,6 +19,7 @@ private const val PROFILE_IMPORT_INVALID_ARGUMENT = -2
 private const val PROFILE_IMPORT_BINDING_LENGTH_MISMATCH = -3
 private const val PROFILE_IMPORT_COMPILE_ERROR = -4
 private const val PROFILE_IMPORT_REGISTRY_ERROR = -5
+private const val PROFILE_IMPORT_INCLUDE_LENGTH_MISMATCH = -6
 
 data class SemanticTableImportBinding(
     val semanticId: Long,
@@ -30,6 +31,16 @@ data class CompiledProfileImport(
     val profileGeneration: Long,
     val definitionFingerprint: String?,
     val resolvedDefinition: String,
+    val semanticTables: List<SemanticTableImportBinding>,
+)
+
+data class DefinitionBundleImport(
+    val profileName: String,
+    val profileGeneration: Long,
+    val definitionFingerprint: String?,
+    val rootDefinition: String,
+    val enabledSymbols: Set<String> = emptySet(),
+    val includes: Map<String, String> = emptyMap(),
     val semanticTables: List<SemanticTableImportBinding>,
 )
 
@@ -48,6 +59,24 @@ sealed interface CompiledProfileImportResult {
     data class Rejected(
         val reason: CompiledProfileImportRejection,
     ) : CompiledProfileImportResult
+}
+
+enum class DefinitionBundleImportRejection {
+    InvalidHandle,
+    InvalidArgument,
+    BindingLengthMismatch,
+    IncludeLengthMismatch,
+    CompileFailure,
+    RegistryFailure,
+    NativeFailure,
+}
+
+sealed interface DefinitionBundleImportResult {
+    data object Imported : DefinitionBundleImportResult
+
+    data class Rejected(
+        val reason: DefinitionBundleImportRejection,
+    ) : DefinitionBundleImportResult
 }
 
 enum class RuntimeProfileSelectionRejection {
@@ -93,6 +122,19 @@ internal interface NativeProfileRegistryOps {
         editorTableIds: Array<String>,
     ): Int
 
+    fun registerDefinitionBundle(
+        handle: Long,
+        profileName: String,
+        profileGeneration: Long,
+        definitionFingerprint: String?,
+        rootDefinition: String,
+        enabledSymbols: Array<String>,
+        includeNames: Array<String>,
+        includeContents: Array<String>,
+        semanticIds: LongArray,
+        editorTableIds: Array<String>,
+    ): Int
+
     fun selectRuntimeProfileGeneration(
         handle: Long,
         buffer: ByteBuffer,
@@ -116,13 +158,12 @@ class NativeProfileRegistry internal constructor(
         if (currentHandle == 0L) {
             return CompiledProfileImportResult.Rejected(CompiledProfileImportRejection.InvalidHandle)
         }
-        if (
-            import.profileName.isEmpty() ||
-                import.profileGeneration <= 0L ||
-                import.resolvedDefinition.isEmpty() ||
-                import.semanticTables.any {
-                    it.semanticId < 0L || it.semanticId > 0xffff_ffffL || it.editorTableId.isEmpty()
-                }
+        if (!validCommonImportArguments(
+                import.profileName,
+                import.profileGeneration,
+                import.resolvedDefinition,
+                import.semanticTables,
+            )
         ) {
             return CompiledProfileImportResult.Rejected(CompiledProfileImportRejection.InvalidArgument)
         }
@@ -147,6 +188,56 @@ class NativeProfileRegistry internal constructor(
             PROFILE_IMPORT_COMPILE_ERROR -> rejectedImport(CompiledProfileImportRejection.CompileFailure)
             PROFILE_IMPORT_REGISTRY_ERROR -> rejectedImport(CompiledProfileImportRejection.RegistryFailure)
             else -> rejectedImport(CompiledProfileImportRejection.NativeFailure)
+        }
+    }
+
+    fun importDefinitionBundle(import: DefinitionBundleImport): DefinitionBundleImportResult {
+        val currentHandle = handle
+        if (currentHandle == 0L) {
+            return rejectedBundleImport(DefinitionBundleImportRejection.InvalidHandle)
+        }
+        if (
+            !validCommonImportArguments(
+                import.profileName,
+                import.profileGeneration,
+                import.rootDefinition,
+                import.semanticTables,
+            ) ||
+                import.enabledSymbols.any(String::isEmpty) ||
+                import.includes.keys.any(String::isEmpty)
+        ) {
+            return rejectedBundleImport(DefinitionBundleImportRejection.InvalidArgument)
+        }
+
+        val enabledSymbols = import.enabledSymbols.sorted().toTypedArray()
+        val includeEntries = import.includes.entries.sortedBy { it.key }
+        val includeNames = Array(includeEntries.size) { includeEntries[it].key }
+        val includeContents = Array(includeEntries.size) { includeEntries[it].value }
+        val semanticIds = LongArray(import.semanticTables.size) { import.semanticTables[it].semanticId }
+        val editorTableIds = Array(import.semanticTables.size) { import.semanticTables[it].editorTableId }
+
+        return when (
+            ops.registerDefinitionBundle(
+                currentHandle,
+                import.profileName,
+                import.profileGeneration,
+                import.definitionFingerprint,
+                import.rootDefinition,
+                enabledSymbols,
+                includeNames,
+                includeContents,
+                semanticIds,
+                editorTableIds,
+            )
+        ) {
+            PROFILE_IMPORT_OK -> DefinitionBundleImportResult.Imported
+            PROFILE_IMPORT_INVALID_HANDLE -> rejectedBundleImport(DefinitionBundleImportRejection.InvalidHandle)
+            PROFILE_IMPORT_INVALID_ARGUMENT -> rejectedBundleImport(DefinitionBundleImportRejection.InvalidArgument)
+            PROFILE_IMPORT_BINDING_LENGTH_MISMATCH -> rejectedBundleImport(DefinitionBundleImportRejection.BindingLengthMismatch)
+            PROFILE_IMPORT_INCLUDE_LENGTH_MISMATCH -> rejectedBundleImport(DefinitionBundleImportRejection.IncludeLengthMismatch)
+            PROFILE_IMPORT_COMPILE_ERROR -> rejectedBundleImport(DefinitionBundleImportRejection.CompileFailure)
+            PROFILE_IMPORT_REGISTRY_ERROR -> rejectedBundleImport(DefinitionBundleImportRejection.RegistryFailure)
+            else -> rejectedBundleImport(DefinitionBundleImportRejection.NativeFailure)
         }
     }
 
@@ -195,11 +286,27 @@ class NativeProfileRegistry internal constructor(
         }
     }
 
+    private fun validCommonImportArguments(
+        profileName: String,
+        profileGeneration: Long,
+        definition: String,
+        semanticTables: List<SemanticTableImportBinding>,
+    ): Boolean =
+        profileName.isNotEmpty() &&
+            profileGeneration > 0L &&
+            definition.isNotEmpty() &&
+            semanticTables.none {
+                it.semanticId < 0L || it.semanticId > 0xffff_ffffL || it.editorTableId.isEmpty()
+            }
+
     private fun rejected(reason: RuntimeProfileSelectionRejection) =
         RuntimeProfileSelectionResult.Rejected(reason)
 
     private fun rejectedImport(reason: CompiledProfileImportRejection) =
         CompiledProfileImportResult.Rejected(reason)
+
+    private fun rejectedBundleImport(reason: DefinitionBundleImportRejection) =
+        DefinitionBundleImportResult.Rejected(reason)
 }
 
 private object JniNativeProfileRegistryOps : NativeProfileRegistryOps {
@@ -226,6 +333,31 @@ private object JniNativeProfileRegistryOps : NativeProfileRegistryOps {
             profileGeneration,
             definitionFingerprint,
             resolvedDefinition,
+            semanticIds,
+            editorTableIds,
+        )
+
+    override fun registerDefinitionBundle(
+        handle: Long,
+        profileName: String,
+        profileGeneration: Long,
+        definitionFingerprint: String?,
+        rootDefinition: String,
+        enabledSymbols: Array<String>,
+        includeNames: Array<String>,
+        includeContents: Array<String>,
+        semanticIds: LongArray,
+        editorTableIds: Array<String>,
+    ): Int =
+        NativeProfileRegistryBridge.registerDefinitionBundle(
+            handle,
+            profileName,
+            profileGeneration,
+            definitionFingerprint,
+            rootDefinition,
+            enabledSymbols,
+            includeNames,
+            includeContents,
             semanticIds,
             editorTableIds,
         )
@@ -263,6 +395,19 @@ object NativeProfileRegistryBridge {
         profileGeneration: Long,
         definitionFingerprint: String?,
         resolvedDefinition: String,
+        semanticIds: LongArray,
+        editorTableIds: Array<String>,
+    ): Int
+
+    external fun registerDefinitionBundle(
+        handle: Long,
+        profileName: String,
+        profileGeneration: Long,
+        definitionFingerprint: String?,
+        rootDefinition: String,
+        enabledSymbols: Array<String>,
+        includeNames: Array<String>,
+        includeContents: Array<String>,
         semanticIds: LongArray,
         editorTableIds: Array<String>,
     ): Int
