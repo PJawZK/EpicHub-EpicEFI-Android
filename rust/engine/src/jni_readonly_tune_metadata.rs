@@ -4,6 +4,7 @@ use jni::JNIEnv;
 use jni::objects::{JByteBuffer, JObject};
 use jni::sys::jint;
 
+use crate::ecu_profile::ResolvedEcuProfile;
 use crate::profile_registry_store::{RegistryStoreError, with_selected_compiled_bundle};
 use crate::runtime_identity_probe::RuntimeProbeError;
 use crate::runtime_profile_authority::RuntimeProfileAuthorityError;
