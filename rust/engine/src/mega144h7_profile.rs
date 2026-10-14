@@ -14,7 +14,7 @@ pub struct Mega144h7Profile {
 }
 
 impl ResolvedEcuProfile for Mega144h7Profile {
-    fn identity(&self) -> ProfileIdentity {
+    fn identity(&self) -> ProfileIdentity<'_> {
         ProfileIdentity {
             profile_name: MEGA144H7_PROFILE_NAME,
             signature: MEGA144H7_PROFILE_SIGNATURE,
@@ -23,7 +23,7 @@ impl ResolvedEcuProfile for Mega144h7Profile {
         }
     }
 
-    fn page_sizes(&self) -> &'static [usize] {
+    fn page_sizes(&self) -> &[usize] {
         &MEGA144H7_PAGE_SIZES
     }
 
