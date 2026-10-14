@@ -291,10 +291,7 @@ pub extern "system" fn Java_com_epicefi_epichub_engine_NativeProfileRegistryBrid
             return IMPORT_INCLUDE_LENGTH_MISMATCH;
         }
         let mut includes = HashMap::with_capacity(include_name_values.len());
-        for (name, content) in include_name_values
-            .into_iter()
-            .zip(include_content_values)
-        {
+        for (name, content) in include_name_values.into_iter().zip(include_content_values) {
             if name.is_empty() || includes.insert(name, content).is_some() {
                 return IMPORT_INVALID_ARGUMENT;
             }
