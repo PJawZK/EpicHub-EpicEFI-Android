@@ -2,11 +2,11 @@ use std::collections::HashMap;
 
 use crate::ecu_calibration::{CalibrationPrimitive, CalibrationShape, StorageType};
 use crate::ecu_definition::Endianness;
-use crate::ecu_editor_definition::{CompiledEditorDescriptors, TableDescriptor as EditorTableDescriptor};
-use crate::ecu_page_codec::{PageCodecError, PagedCalibrationPrimitive, decode_primitive};
-use crate::tuning::{
-    TableDescriptor, TableSnapshot, TuneError, TuneSnapshot, TuneSnapshotOrigin,
+use crate::ecu_editor_definition::{
+    CompiledEditorDescriptors, TableDescriptor as EditorTableDescriptor,
 };
+use crate::ecu_page_codec::{PageCodecError, PagedCalibrationPrimitive, decode_primitive};
+use crate::tuning::{TableDescriptor, TableSnapshot, TuneError, TuneSnapshot, TuneSnapshotOrigin};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct SemanticTableBinding<'a> {
@@ -83,7 +83,8 @@ pub fn assemble_compiled_snapshot(
         )?);
     }
 
-    TuneSnapshot::new(profile_generation, origin, tables).map_err(CompiledSnapshotError::InvalidTune)
+    TuneSnapshot::new(profile_generation, origin, tables)
+        .map_err(CompiledSnapshotError::InvalidTune)
 }
 
 fn assemble_table(
@@ -232,8 +233,8 @@ mod tests {
     use crate::ecu_page_codec::compile_paged_calibration_primitives;
     use crate::resolved_profile_source::{
         MEGA144H7_PAGE_1_SIZE, MEGA144H7_PAGE_2_SIZE, MEGA144H7_PROFILE_GENERATION,
-        Mega144h7ResolvedModes, TABLE_ID_IGNITION, TABLE_ID_MAP_ESTIMATE,
-        TABLE_ID_TARGET_MIXTURE, TABLE_ID_VE, resolve_mega144h7_tune_pages,
+        Mega144h7ResolvedModes, TABLE_ID_IGNITION, TABLE_ID_MAP_ESTIMATE, TABLE_ID_TARGET_MIXTURE,
+        TABLE_ID_VE, resolve_mega144h7_tune_pages,
     };
 
     const MEGA_TABLE_DEFINITION: &str = r#"
