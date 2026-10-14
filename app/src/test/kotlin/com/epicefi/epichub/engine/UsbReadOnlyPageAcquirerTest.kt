@@ -172,8 +172,10 @@ class UsbReadOnlyPageAcquirerTest {
             pageIndex: Int,
         ): ReadOnlyPagePlanResult {
             planCalls += 1
-            return planRejection?.let(ReadOnlyPagePlanResult::Rejected)
-                ?: ReadOnlyPagePlanResult.Planned(transfers)
+            if (planRejection != null) {
+                return ReadOnlyPagePlanResult.Rejected(planRejection)
+            }
+            return ReadOnlyPagePlanResult.Planned(transfers)
         }
 
         override fun verifyChunk(
