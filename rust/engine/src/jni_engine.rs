@@ -174,7 +174,9 @@ pub extern "system" fn Java_com_epicefi_epichub_engine_NativeEngineBridge_instal
             lambda_targets: mode_flags & 0x4 != 0,
         };
         match install_mega144h7_imported_pages(handle, &page_1, &page_2, modes) {
-            Ok(profile_generation) => jlong::try_from(profile_generation).unwrap_or(SOURCE_RESULT_REJECTED),
+            Ok(profile_generation) => {
+                jlong::try_from(profile_generation).unwrap_or(SOURCE_RESULT_REJECTED)
+            }
             Err(TuneSourceInstallError::InvalidHandle) => SOURCE_RESULT_INVALID_HANDLE,
             Err(TuneSourceInstallError::Resolve(_)) => SOURCE_RESULT_REJECTED,
         }
