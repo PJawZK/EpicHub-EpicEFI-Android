@@ -68,10 +68,18 @@ pub fn probe_runtime_identity(
 mod tests {
     use super::*;
 
-    #[derive(Default)]
     struct FakeReadOnlyChannel {
         response: Result<Vec<u8>, String>,
         requests: Vec<(TransportCandidate, Vec<u8>, usize)>,
+    }
+
+    impl Default for FakeReadOnlyChannel {
+        fn default() -> Self {
+            Self {
+                response: Ok(Vec::new()),
+                requests: Vec::new(),
+            }
+        }
     }
 
     impl ReadOnlyProbeChannel for FakeReadOnlyChannel {
@@ -148,10 +156,7 @@ mod tests {
             Err(RuntimeProbeError::Transport("probe failed".to_string()))
         );
 
-        let mut empty = FakeReadOnlyChannel {
-            response: Ok(Vec::new()),
-            ..Default::default()
-        };
+        let mut empty = FakeReadOnlyChannel::default();
         assert_eq!(
             probe_runtime_identity(&mut empty, &candidate(), &plan()),
             Err(RuntimeProbeError::EmptySignature)
