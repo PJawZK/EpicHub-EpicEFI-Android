@@ -1,14 +1,16 @@
+use std::collections::{HashMap, HashSet};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use jni::JNIEnv;
 use jni::objects::{JByteBuffer, JLongArray, JObject, JObjectArray, JString};
 use jni::sys::{JNI_FALSE, JNI_TRUE, jboolean, jint, jlong};
 
+use crate::compiled_profile_bundle::OwnedDefinitionBundleImport;
 use crate::profile_import::{OwnedCompiledProfileImport, OwnedSemanticTableBindingSpec};
 use crate::profile_registry_store::{
     RegistryStoreError, active_profile_registry_count, close_profile_registry,
     create_profile_registry, profile_registry_is_alive, register_compiled_profile_import,
-    select_profile_summary_from_runtime_response,
+    register_definition_bundle_import, select_profile_summary_from_runtime_response,
 };
 use crate::runtime_identity_probe::RuntimeProbeError;
 use crate::runtime_profile_authority::RuntimeProfileAuthorityError;
@@ -31,6 +33,7 @@ const IMPORT_INVALID_ARGUMENT: jint = -2;
 const IMPORT_BINDING_LENGTH_MISMATCH: jint = -3;
 const IMPORT_COMPILE_ERROR: jint = -4;
 const IMPORT_REGISTRY_ERROR: jint = -5;
+const IMPORT_INCLUDE_LENGTH_MISMATCH: jint = -6;
 const IMPORT_PANIC: jint = -255;
 
 fn ffi_guard<T: Copy>(fallback: T, operation: impl FnOnce() -> T) -> T {
@@ -85,6 +88,57 @@ fn optional_string(env: &mut JNIEnv, value: JString) -> Result<Option<String>, (
     } else {
         required_string(env, value).map(Some)
     }
+}
+
+fn required_string_array(env: &mut JNIEnv, values: &JObjectArray) -> Result<Vec<String>, ()> {
+    let count = env.get_array_length(values).map_err(|_| ())?;
+    let mut result = Vec::with_capacity(count as usize);
+    for index in 0..count {
+        let object = env
+            .get_object_array_element(values, index)
+            .map_err(|_| ())?;
+        let value = required_string(env, JString::from(object))?;
+        result.push(value);
+    }
+    Ok(result)
+}
+
+fn semantic_bindings(
+    env: &mut JNIEnv,
+    semantic_ids: &JLongArray,
+    editor_table_ids: &JObjectArray,
+) -> Result<Vec<OwnedSemanticTableBindingSpec>, jint> {
+    let semantic_count = env
+        .get_array_length(semantic_ids)
+        .map_err(|_| IMPORT_INVALID_ARGUMENT)?;
+    let editor_count = env
+        .get_array_length(editor_table_ids)
+        .map_err(|_| IMPORT_INVALID_ARGUMENT)?;
+    if semantic_count != editor_count {
+        return Err(IMPORT_BINDING_LENGTH_MISMATCH);
+    }
+
+    let mut semantic_values = vec![0_i64; semantic_count as usize];
+    env.get_long_array_region(semantic_ids, 0, &mut semantic_values)
+        .map_err(|_| IMPORT_INVALID_ARGUMENT)?;
+
+    let mut semantic_tables = Vec::with_capacity(semantic_count as usize);
+    for (index, semantic_id) in semantic_values.into_iter().enumerate() {
+        let semantic_id = u32::try_from(semantic_id).map_err(|_| IMPORT_INVALID_ARGUMENT)?;
+        let editor_object = env
+            .get_object_array_element(editor_table_ids, index as i32)
+            .map_err(|_| IMPORT_INVALID_ARGUMENT)?;
+        let editor_table_id = required_string(env, JString::from(editor_object))
+            .map_err(|_| IMPORT_INVALID_ARGUMENT)?;
+        if editor_table_id.is_empty() {
+            return Err(IMPORT_INVALID_ARGUMENT);
+        }
+        semantic_tables.push(OwnedSemanticTableBindingSpec {
+            semantic_id,
+            editor_table_id,
+        });
+    }
+    Ok(semantic_tables)
 }
 
 #[unsafe(no_mangle)]
@@ -162,45 +216,10 @@ pub extern "system" fn Java_com_epicefi_epichub_engine_NativeProfileRegistryBrid
             return IMPORT_INVALID_ARGUMENT;
         }
 
-        let Ok(semantic_count) = env.get_array_length(&semantic_ids) else {
-            return IMPORT_INVALID_ARGUMENT;
+        let semantic_tables = match semantic_bindings(&mut env, &semantic_ids, &editor_table_ids) {
+            Ok(bindings) => bindings,
+            Err(status) => return status,
         };
-        let Ok(editor_count) = env.get_array_length(&editor_table_ids) else {
-            return IMPORT_INVALID_ARGUMENT;
-        };
-        if semantic_count != editor_count {
-            return IMPORT_BINDING_LENGTH_MISMATCH;
-        }
-
-        let mut semantic_values = vec![0_i64; semantic_count as usize];
-        if env
-            .get_long_array_region(&semantic_ids, 0, &mut semantic_values)
-            .is_err()
-        {
-            return IMPORT_INVALID_ARGUMENT;
-        }
-
-        let mut semantic_tables = Vec::with_capacity(semantic_count as usize);
-        for (index, semantic_id) in semantic_values.into_iter().enumerate() {
-            let Ok(semantic_id) = u32::try_from(semantic_id) else {
-                return IMPORT_INVALID_ARGUMENT;
-            };
-            let Ok(editor_object) = env.get_object_array_element(&editor_table_ids, index as i32)
-            else {
-                return IMPORT_INVALID_ARGUMENT;
-            };
-            let editor_string = JString::from(editor_object);
-            let Ok(editor_table_id) = required_string(&mut env, editor_string) else {
-                return IMPORT_INVALID_ARGUMENT;
-            };
-            if editor_table_id.is_empty() {
-                return IMPORT_INVALID_ARGUMENT;
-            }
-            semantic_tables.push(OwnedSemanticTableBindingSpec {
-                semantic_id,
-                editor_table_id,
-            });
-        }
 
         let import = OwnedCompiledProfileImport {
             profile_name,
@@ -210,6 +229,92 @@ pub extern "system" fn Java_com_epicefi_epichub_engine_NativeProfileRegistryBrid
             semantic_tables,
         };
         match register_compiled_profile_import(handle, &import) {
+            Ok(()) => IMPORT_OK,
+            Err(error) => map_import_error(error),
+        }
+    })
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_epicefi_epichub_engine_NativeProfileRegistryBridge_registerDefinitionBundle(
+    mut env: JNIEnv,
+    _object: JObject,
+    handle: jlong,
+    profile_name: JString,
+    profile_generation: jlong,
+    definition_fingerprint: JString,
+    root_definition: JString,
+    enabled_symbols: JObjectArray,
+    include_names: JObjectArray,
+    include_contents: JObjectArray,
+    semantic_ids: JLongArray,
+    editor_table_ids: JObjectArray,
+) -> jint {
+    ffi_guard(IMPORT_PANIC, || {
+        if !profile_registry_is_alive(handle) {
+            return IMPORT_INVALID_HANDLE;
+        }
+        let Ok(profile_generation) = u64::try_from(profile_generation) else {
+            return IMPORT_INVALID_ARGUMENT;
+        };
+        if profile_generation == 0 {
+            return IMPORT_INVALID_ARGUMENT;
+        }
+        let Ok(profile_name) = required_string(&mut env, profile_name) else {
+            return IMPORT_INVALID_ARGUMENT;
+        };
+        let Ok(definition_fingerprint) = optional_string(&mut env, definition_fingerprint) else {
+            return IMPORT_INVALID_ARGUMENT;
+        };
+        let Ok(root_definition) = required_string(&mut env, root_definition) else {
+            return IMPORT_INVALID_ARGUMENT;
+        };
+        if profile_name.is_empty() || root_definition.is_empty() {
+            return IMPORT_INVALID_ARGUMENT;
+        }
+
+        let Ok(symbol_values) = required_string_array(&mut env, &enabled_symbols) else {
+            return IMPORT_INVALID_ARGUMENT;
+        };
+        if symbol_values.iter().any(String::is_empty) {
+            return IMPORT_INVALID_ARGUMENT;
+        }
+        let enabled_symbols = symbol_values.into_iter().collect::<HashSet<_>>();
+
+        let Ok(include_name_values) = required_string_array(&mut env, &include_names) else {
+            return IMPORT_INVALID_ARGUMENT;
+        };
+        let Ok(include_content_values) = required_string_array(&mut env, &include_contents) else {
+            return IMPORT_INVALID_ARGUMENT;
+        };
+        if include_name_values.len() != include_content_values.len() {
+            return IMPORT_INCLUDE_LENGTH_MISMATCH;
+        }
+        let mut includes = HashMap::with_capacity(include_name_values.len());
+        for (name, content) in include_name_values
+            .into_iter()
+            .zip(include_content_values.into_iter())
+        {
+            if name.is_empty() || includes.insert(name, content).is_some() {
+                return IMPORT_INVALID_ARGUMENT;
+            }
+        }
+
+        let semantic_tables = match semantic_bindings(&mut env, &semantic_ids, &editor_table_ids) {
+            Ok(bindings) => bindings,
+            Err(status) => return status,
+        };
+
+        let import = OwnedDefinitionBundleImport {
+            profile_name,
+            profile_generation,
+            definition_fingerprint,
+            root_definition,
+            enabled_symbols,
+            includes,
+            semantic_tables,
+        };
+        match register_definition_bundle_import(handle, &import) {
             Ok(()) => IMPORT_OK,
             Err(error) => map_import_error(error),
         }
