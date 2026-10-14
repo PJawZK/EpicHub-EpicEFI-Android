@@ -48,7 +48,8 @@ pub fn runtime_identity_from_response(
     if response.is_empty() {
         return Err(RuntimeProbeError::EmptySignature);
     }
-    let signature = String::from_utf8(response.to_vec()).map_err(|_| RuntimeProbeError::InvalidUtf8)?;
+    let signature =
+        String::from_utf8(response.to_vec()).map_err(|_| RuntimeProbeError::InvalidUtf8)?;
     if signature.is_empty() {
         return Err(RuntimeProbeError::EmptySignature);
     }
