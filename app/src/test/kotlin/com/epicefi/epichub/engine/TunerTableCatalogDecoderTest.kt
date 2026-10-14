@@ -46,6 +46,25 @@ class TunerTableCatalogDecoderTest {
     }
 
     @Test
+    fun decodesLiveControllerOriginCode() {
+        val buffer = ByteBuffer.allocate(40).order(ByteOrder.LITTLE_ENDIAN)
+        buffer.putInt(1)
+        buffer.putInt(40)
+        buffer.putInt(24)
+        buffer.putInt(0)
+        buffer.putLong(4_242L)
+        buffer.putLong(0L)
+        buffer.putInt(3)
+        buffer.putInt(40)
+
+        val catalog = TunerTableCatalogDecoder.decode(buffer)
+
+        assertEquals(4_242L, catalog.profileGeneration)
+        assertEquals(TuneSourceOrigin.LIVE_CONTROLLER, catalog.origin)
+        assertEquals(emptyList<TunerTableCatalogEntry>(), catalog.tables)
+    }
+
+    @Test
     fun rejectsNameRangeOutsideCatalog() {
         val buffer = ByteBuffer.allocate(64).order(ByteOrder.LITTLE_ENDIAN)
         buffer.putInt(1)
