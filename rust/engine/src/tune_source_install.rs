@@ -249,7 +249,10 @@ mod tests {
         let generation = install_live_pages(handle, &AlternateTestProfile, &[]).unwrap();
         assert_eq!(generation, 9_001);
         with_tune_session(handle, |session| {
-            assert_eq!(session.baseline().origin, TuneSnapshotOrigin::LiveController);
+            assert_eq!(
+                session.baseline().origin,
+                TuneSnapshotOrigin::LiveController
+            );
             assert_eq!(session.revision(), 0);
             assert!(session.undo().is_err());
         })
