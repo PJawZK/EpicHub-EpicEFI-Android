@@ -2,6 +2,7 @@ package com.epicefi.epichub.ui.settings
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -9,6 +10,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -33,6 +35,9 @@ private val groups = listOf(
 @Composable
 fun SettingsScreen(
     onClose: () -> Unit,
+    profilePackages: ProfilePackageSettingsState = ProfilePackageSettingsState(),
+    onSelectProfilePackages: () -> Unit = {},
+    onClearProfilePackages: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier.fillMaxSize()) {
@@ -63,6 +68,39 @@ fun SettingsScreen(
                         else -> "Settings surface reserved for this responsibility group."
                     }
                     Text(purpose)
+
+                    if (group == "Connections") {
+                        Text("ECU profile packages", style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            when {
+                                profilePackages.busy -> "Updating profile package selection…"
+                                profilePackages.hasSelection ->
+                                    "${profilePackages.selectedDocumentCount} profile document(s) selected."
+                                else -> "No profile package selected."
+                            },
+                        )
+                        Text(
+                            "Profile packages establish definition/profile authority only. Selecting one does not connect to USB or load an ECU tune.",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(
+                                enabled = !profilePackages.busy,
+                                onClick = onSelectProfilePackages,
+                            ) {
+                                Text(if (profilePackages.hasSelection) "Replace packages" else "Select packages")
+                            }
+                            OutlinedButton(
+                                enabled = !profilePackages.busy && profilePackages.hasSelection,
+                                onClick = onClearProfilePackages,
+                            ) {
+                                Text("Clear")
+                            }
+                        }
+                        profilePackages.message?.let { message ->
+                            Text(message, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
                 }
             }
         }
