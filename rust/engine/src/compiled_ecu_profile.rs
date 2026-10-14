@@ -3,9 +3,7 @@ use std::collections::HashSet;
 use crate::ecu_calibration::{
     CalibrationCompileError, CalibrationPrimitive, compile_calibration_primitives,
 };
-use crate::ecu_compiled_snapshot::{
-    CompiledSnapshotError, SemanticTableBinding, assemble_compiled_snapshot,
-};
+use crate::ecu_compiled_snapshot::{SemanticTableBinding, assemble_compiled_snapshot};
 use crate::ecu_definition::{
     CompiledEcuDefinition, DefinitionCompileError, DefinitionCompileRequest, compile_definition,
 };
