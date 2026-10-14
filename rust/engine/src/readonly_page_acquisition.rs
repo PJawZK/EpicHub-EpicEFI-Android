@@ -106,12 +106,14 @@ pub fn assemble_complete_page(
     chunks: &[VerifiedPageChunk],
 ) -> Result<Vec<u8>, ReadOnlyPageAcquisitionError> {
     let page_sizes = bundle.profile.page_sizes();
-    let page_size = *page_sizes.get(page_index).ok_or(
-        ReadOnlyPageAcquisitionError::Planner(PageReadPlanError::PageOutOfRange {
-            page_index,
-            page_count: page_sizes.len(),
-        }),
-    )?;
+    let page_size = *page_sizes
+        .get(page_index)
+        .ok_or(ReadOnlyPageAcquisitionError::Planner(
+            PageReadPlanError::PageOutOfRange {
+                page_index,
+                page_count: page_sizes.len(),
+            },
+        ))?;
 
     let mut page = Vec::with_capacity(page_size);
     let mut expected_offset = 0usize;
