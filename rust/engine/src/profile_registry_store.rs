@@ -3,7 +3,9 @@ use std::sync::{LazyLock, Mutex};
 
 use crate::ecu_profile::ResolvedEcuProfile;
 use crate::ecu_profile_registry::{OwnedProfileRegistry, ProfileRegistryError};
-use crate::runtime_profile_authority::{RuntimeProfileAuthorityError, select_profile_from_runtime_response};
+use crate::runtime_profile_authority::{
+    RuntimeProfileAuthorityError, select_profile_from_runtime_response,
+};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct SelectedProfileSummary {
@@ -59,11 +61,7 @@ impl ProfileRegistryStore {
         true
     }
 
-    pub fn register_profile<P>(
-        &mut self,
-        handle: i64,
-        profile: P,
-    ) -> Result<(), RegistryStoreError>
+    pub fn register_profile<P>(&mut self, handle: i64, profile: P) -> Result<(), RegistryStoreError>
     where
         P: ResolvedEcuProfile + 'static,
     {
@@ -274,9 +272,7 @@ mod tests {
         assert_eq!(
             store.register_profile(handle, profile("alias", "rusEFI duplicate.500", 999)),
             Err(RegistryStoreError::Registry(
-                ProfileRegistryError::DuplicateProfileSignature(
-                    "rusEFI duplicate.500".to_string(),
-                ),
+                ProfileRegistryError::DuplicateProfileSignature("rusEFI duplicate.500".to_string(),),
             ))
         );
     }
