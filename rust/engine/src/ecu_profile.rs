@@ -2,14 +2,14 @@ use crate::resolved_profile_source::ProfileResolveError;
 use crate::tuning::{TuneSnapshot, TuneSnapshotOrigin};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct ProfileIdentity {
-    pub profile_name: &'static str,
-    pub signature: &'static str,
+pub struct ProfileIdentity<'a> {
+    pub profile_name: &'a str,
+    pub signature: &'a str,
     pub profile_generation: u64,
-    pub definition_fingerprint: Option<&'static str>,
+    pub definition_fingerprint: Option<&'a str>,
 }
 
-impl ProfileIdentity {
+impl ProfileIdentity<'_> {
     pub fn exact_signature_matches(&self, live_signature: &str) -> bool {
         self.signature == live_signature
     }
@@ -27,14 +27,9 @@ impl From<ProfileResolveError> for EcuProfileResolveError {
     }
 }
 
-/// Definition-resolved ECU profile contract.
-///
-/// Transport discovery and board-name recognition are intentionally absent here. A profile owns
-/// exact firmware/profile identity, raw source geometry and the conversion from validated source
-/// pages into EpicHub's semantic TuneSnapshot model.
 pub trait ResolvedEcuProfile {
-    fn identity(&self) -> ProfileIdentity;
-    fn page_sizes(&self) -> &'static [usize];
+    fn identity(&self) -> ProfileIdentity<'_>;
+    fn page_sizes(&self) -> &[usize];
 
     fn resolve_pages(
         &self,
@@ -57,16 +52,25 @@ mod tests {
     use super::*;
 
     struct TestProfile {
-        identity: ProfileIdentity,
+        profile_name: String,
+        signature: String,
+        profile_generation: u64,
+        fingerprint: Option<String>,
+        page_sizes: Vec<usize>,
     }
 
     impl ResolvedEcuProfile for TestProfile {
-        fn identity(&self) -> ProfileIdentity {
-            self.identity
+        fn identity(&self) -> ProfileIdentity<'_> {
+            ProfileIdentity {
+                profile_name: &self.profile_name,
+                signature: &self.signature,
+                profile_generation: self.profile_generation,
+                definition_fingerprint: self.fingerprint.as_deref(),
+            }
         }
 
-        fn page_sizes(&self) -> &'static [usize] {
-            &[]
+        fn page_sizes(&self) -> &[usize] {
+            &self.page_sizes
         }
 
         fn resolve_pages(
@@ -74,46 +78,42 @@ mod tests {
             pages: &[&[u8]],
             origin: TuneSnapshotOrigin,
         ) -> Result<TuneSnapshot, EcuProfileResolveError> {
-            if !pages.is_empty() {
+            if pages.len() != self.page_sizes.len() {
                 return Err(EcuProfileResolveError::InvalidPageCount {
-                    expected: 0,
+                    expected: self.page_sizes.len(),
                     actual: pages.len(),
                 });
             }
-            TuneSnapshot::new(self.identity.profile_generation, origin, [])
+            TuneSnapshot::new(self.profile_generation, origin, [])
                 .map_err(ProfileResolveError::InvalidTune)
                 .map_err(EcuProfileResolveError::Profile)
         }
     }
 
-    const FIRST: TestProfile = TestProfile {
-        identity: ProfileIdentity {
-            profile_name: "profile-a",
-            signature: "firmware-a.100",
-            profile_generation: 100,
-            definition_fingerprint: Some("fingerprint-a"),
-        },
-    };
-
-    const SECOND: TestProfile = TestProfile {
-        identity: ProfileIdentity {
-            profile_name: "profile-b",
-            signature: "firmware-b.200",
-            profile_generation: 200,
-            definition_fingerprint: Some("fingerprint-b"),
-        },
-    };
+    fn profile(name: &str, signature: &str, generation: u64) -> TestProfile {
+        TestProfile {
+            profile_name: name.to_string(),
+            signature: signature.to_string(),
+            profile_generation: generation,
+            fingerprint: None,
+            page_sizes: Vec::new(),
+        }
+    }
 
     #[test]
-    fn exact_signature_match_selects_between_profiles_without_board_switching() {
-        let profiles: [&dyn ResolvedEcuProfile; 2] = [&FIRST, &SECOND];
+    fn exact_signature_match_supports_runtime_owned_profiles() {
+        let first = profile("profile-a", "firmware-a.100", 100);
+        let second = profile("profile-b", "firmware-b.200", 200);
+        let profiles: [&dyn ResolvedEcuProfile; 2] = [&first, &second];
         let matched = find_exact_profile("firmware-b.200", profiles).unwrap();
         assert_eq!(matched.identity().profile_name, "profile-b");
     }
 
     #[test]
     fn signature_prefix_or_near_match_does_not_authorize_a_profile() {
-        let profiles: [&dyn ResolvedEcuProfile; 2] = [&FIRST, &SECOND];
+        let first = profile("profile-a", "firmware-a.100", 100);
+        let second = profile("profile-b", "firmware-b.200", 200);
+        let profiles: [&dyn ResolvedEcuProfile; 2] = [&first, &second];
         assert!(find_exact_profile("firmware-b", profiles).is_none());
         assert!(find_exact_profile("firmware-b.201", profiles).is_none());
         assert!(find_exact_profile("FIRMWARE-B.200", profiles).is_none());
