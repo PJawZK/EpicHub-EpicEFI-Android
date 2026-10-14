@@ -39,10 +39,14 @@ internal fun interface DefinitionBundleRegistryFactory {
 }
 
 class DefinitionBundleRegistryOwner private constructor(
-    internal val registry: NativeProfileRegistry,
+    private val registry: DefinitionBundleRegistry,
 ) : AutoCloseable {
     val isAlive: Boolean
         get() = registry.isAlive
+
+    internal fun requireNativeRegistry(): NativeProfileRegistry =
+        (registry as? NativeDefinitionBundleRegistry)?.registry
+            ?: error("This definition-bundle registry owner is not backed by a native registry.")
 
     override fun close() {
         registry.close()
@@ -60,18 +64,14 @@ class DefinitionBundleRegistryOwner private constructor(
                 try {
                     catalog.bundles()
                 } catch (error: Exception) {
-                    return DefinitionBundleCatalogOpenResult.CatalogFailure(
-                        error.message ?: error::class.java.simpleName,
-                    )
+                    return catalogFailure(error)
                 }
 
             val candidate =
                 try {
                     factory.create()
                 } catch (error: Exception) {
-                    return DefinitionBundleCatalogOpenResult.CatalogFailure(
-                        error.message ?: error::class.java.simpleName,
-                    )
+                    return catalogFailure(error)
                 }
 
             if (!candidate.isAlive) {
@@ -82,7 +82,15 @@ class DefinitionBundleRegistryOwner private constructor(
             }
 
             bundles.forEachIndexed { index, bundle ->
-                when (val imported = candidate.importDefinitionBundle(bundle)) {
+                val imported =
+                    try {
+                        candidate.importDefinitionBundle(bundle)
+                    } catch (error: Exception) {
+                        candidate.close()
+                        return catalogFailure(error)
+                    }
+
+                when (imported) {
                     DefinitionBundleImportResult.Imported -> Unit
                     is DefinitionBundleImportResult.Rejected -> {
                         candidate.close()
@@ -91,18 +99,16 @@ class DefinitionBundleRegistryOwner private constructor(
                 }
             }
 
-            val native = candidate as? NativeDefinitionBundleRegistry
-                ?: run {
-                    candidate.close()
-                    return DefinitionBundleCatalogOpenResult.CatalogFailure(
-                        "Production catalog opening requires a native registry owner.",
-                    )
-                }
             return DefinitionBundleCatalogOpenResult.Opened(
-                registry = DefinitionBundleRegistryOwner(native.registry),
+                registry = DefinitionBundleRegistryOwner(candidate),
                 importedBundleCount = bundles.size,
             )
         }
+
+        private fun catalogFailure(error: Exception) =
+            DefinitionBundleCatalogOpenResult.CatalogFailure(
+                error.message ?: error::class.java.simpleName,
+            )
 
         private val nativeRegistryFactory = DefinitionBundleRegistryFactory {
             NativeDefinitionBundleRegistry(NativeProfileRegistry())
