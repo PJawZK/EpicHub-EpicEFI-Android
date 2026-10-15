@@ -207,20 +207,20 @@ fn verify_expected_payload(
                     actual: response.payload.len(),
                 }
             }
-            VerificationPhase::Readback => {
-                ReconciliationTransactionError::ReadbackLengthMismatch {
-                    expected: expected.len(),
-                    actual: response.payload.len(),
-                }
-            }
+            VerificationPhase::Readback => ReconciliationTransactionError::ReadbackLengthMismatch {
+                expected: expected.len(),
+                actual: response.payload.len(),
+            },
         });
     }
     if response.payload != expected {
         return Err(match phase {
-            VerificationPhase::Precondition => ReconciliationTransactionError::PreconditionMismatch {
-                expected: expected.to_vec(),
-                actual: response.payload,
-            },
+            VerificationPhase::Precondition => {
+                ReconciliationTransactionError::PreconditionMismatch {
+                    expected: expected.to_vec(),
+                    actual: response.payload,
+                }
+            }
             VerificationPhase::Readback => ReconciliationTransactionError::ReadbackMismatch {
                 expected: expected.to_vec(),
                 actual: response.payload,
@@ -343,7 +343,10 @@ pageChunkWrite = "C%2i%2o%2c%v"
         .unwrap()
         .remove(0);
 
-        assert_eq!(verify_write_ack(&bundle, &transaction, &response(0, &[])), Ok(()));
+        assert_eq!(
+            verify_write_ack(&bundle, &transaction, &response(0, &[])),
+            Ok(())
+        );
         assert_eq!(
             verify_readback(&bundle, &transaction, &response(0, &[3, 9])),
             Err(ReconciliationTransactionError::ReadbackMismatch {
@@ -372,7 +375,10 @@ pageChunkWrite = "C%2i%2o%2c%v"
             verify_precondition(&bundle, &transaction, &response(0, &[0x10, 0x20])),
             Ok(())
         );
-        assert_eq!(verify_write_ack(&bundle, &transaction, &response(0, &[])), Ok(()));
+        assert_eq!(
+            verify_write_ack(&bundle, &transaction, &response(0, &[])),
+            Ok(())
+        );
         assert_eq!(
             verify_readback(&bundle, &transaction, &response(0, &[0xaa, 0xbb])),
             Ok(())
@@ -396,9 +402,11 @@ pageChunkWrite = "C%2i%2o%2c%v"
             transactions.last().unwrap().offset + transactions.last().unwrap().after.len(),
             65_536
         );
-        assert!(transactions.iter().all(|transaction| {
-            transaction.write.request_frame.len() <= u16::MAX as usize + 6
-        }));
+        assert!(
+            transactions.iter().all(|transaction| {
+                transaction.write.request_frame.len() <= u16::MAX as usize + 6
+            })
+        );
     }
 
     #[test]
