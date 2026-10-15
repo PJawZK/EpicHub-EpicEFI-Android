@@ -153,14 +153,8 @@ pageReadCommand = "R%2i%2o%2c"
         let registry = create_profile_registry();
         register_definition_bundle_import(registry, &bundle_import()).unwrap();
         let first_page = [0x31_u8; 8];
-        install_selected_live_pages(
-            engine,
-            registry,
-            SIGNATURE.as_bytes(),
-            256,
-            &[&first_page],
-        )
-        .unwrap();
+        install_selected_live_pages(engine, registry, SIGNATURE.as_bytes(), 256, &[&first_page])
+            .unwrap();
 
         let short_page = [0_u8; 7];
         assert!(
