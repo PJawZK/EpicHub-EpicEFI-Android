@@ -11,6 +11,11 @@ class AndroidUsbCandidateDiscovery(
         usbManager.deviceList.values
             .map { device -> UsbTransportCandidateMapper.map(device.toFacts()) }
             .sortedBy(TransportCandidate::endpointId)
+
+    fun findDevice(endpointId: String): UsbDevice? =
+        usbManager.deviceList.values.firstOrNull { device ->
+            UsbTransportCandidateMapper.map(device.toFacts()).endpointId == endpointId
+        }
 }
 
 private fun UsbDevice.toFacts(): UsbDeviceFacts =
