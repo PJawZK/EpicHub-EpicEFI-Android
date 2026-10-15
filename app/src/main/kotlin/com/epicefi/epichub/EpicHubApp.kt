@@ -36,6 +36,7 @@ import com.epicefi.epichub.platform.diagnostics.ProcessPerformanceSampler
 import com.epicefi.epichub.platform.profile.AndroidLiveTuneProfileDocumentSelectionOwner
 import com.epicefi.epichub.platform.profile.EPICHUB_PROFILE_MIME_TYPE
 import com.epicefi.epichub.platform.transport.usb.AndroidUsbCandidateDiscovery
+import com.epicefi.epichub.platform.transport.usb.AndroidUsbLiveConnectionSessionOwner
 import com.epicefi.epichub.platform.transport.usb.AndroidUsbPermissionRequestOwner
 import com.epicefi.epichub.ui.EpicHubShell
 import com.epicefi.epichub.ui.diagnostics.DiagnosticsTab
@@ -50,6 +51,9 @@ private const val RECENT_PROBLEM_POST_TRIGGER_NANOS = 3_000_000_000L
 private const val DIAGNOSTICS_ENTRY_SETTLE_MS = 400L
 private const val DIAGNOSTICS_ONE_SHOT_SETTLE_MS = 150L
 private const val BYTES_PER_KIBIBYTE = 1024.0
+private const val LIVE_USB_SIGNATURE_LIMIT_BYTES = 256
+private const val LIVE_USB_CONNECT_TIMEOUT_MS = 1_000
+private const val LIVE_USB_PAGE_TIMEOUT_MS = 2_000
 
 private val destinationPayloads = AppDestination.entries.associateWith { destination ->
     DiagnosticPayload.DestinationChanged(destination.id)
@@ -105,6 +109,11 @@ fun EpicHubApp(
         }
     }
     val usbDiscovery = remember(usbManager) { AndroidUsbCandidateDiscovery(usbManager) }
+    val usbLiveSession = remember(usbManager, profileDocuments) {
+        AndroidUsbLiveConnectionSessionOwner(usbManager) {
+            profileDocuments.connectionOwner
+        }
+    }
     val nativeDiagnostics = remember { NativeDiagnosticIngestor() }
     val processPerformanceSampler = remember { ProcessPerformanceSampler() }
     val nativeEngineOwnerId = remember(nativeEngineGeneration) {
@@ -231,7 +240,11 @@ fun EpicHubApp(
     val profilePackagePicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenMultipleDocuments(),
     ) { uris ->
-        if (uris.isNotEmpty()) {
+        if (uris.isNotEmpty() && !usbController.operationBusy) {
+            usbLiveSession.disconnect()
+            usbController = usbController.disconnected(
+                "Controller disconnected before replacing profile packages.",
+            )
             profilePackages = profilePackages.beginOperation()
             scope.launch {
                 val result = withContext(Dispatchers.IO) {
@@ -285,6 +298,7 @@ fun EpicHubApp(
     DisposableEffect(
         engine,
         profileDocuments,
+        usbLiveSession,
         usbPermissionOwner,
         diagnostics,
         nativeEngineOwnerId,
@@ -297,6 +311,7 @@ fun EpicHubApp(
         )
 
         onDispose {
+            usbLiveSession.close()
             usbPermissionOwner.close()
             profileDocuments.close()
             engine.close()
@@ -424,12 +439,18 @@ fun EpicHubApp(
             activeEngineCount = NativeEngine.activeCount(),
             profilePackages = profilePackages,
             onSelectProfilePackages = {
-                profilePackagePicker.launch(
-                    arrayOf(EPICHUB_PROFILE_MIME_TYPE, "application/zip"),
-                )
+                if (!usbController.operationBusy) {
+                    profilePackagePicker.launch(
+                        arrayOf(EPICHUB_PROFILE_MIME_TYPE, "application/zip"),
+                    )
+                }
             },
             onClearProfilePackages = {
-                if (!profilePackages.busy) {
+                if (!profilePackages.busy && !usbController.operationBusy) {
+                    usbLiveSession.disconnect()
+                    usbController = usbController.disconnected(
+                        "Controller disconnected before clearing profile authority.",
+                    )
                     profilePackages = profilePackages.beginOperation()
                     scope.launch {
                         val result = withContext(Dispatchers.IO) {
@@ -441,7 +462,7 @@ fun EpicHubApp(
             },
             usbController = usbController,
             onRefreshUsbCandidates = {
-                if (!usbController.permissionPending) {
+                if (!usbController.operationBusy) {
                     scope.launch {
                         val candidates = withContext(Dispatchers.Default) {
                             usbDiscovery.discover()
@@ -451,7 +472,7 @@ fun EpicHubApp(
                 }
             },
             onSelectUsbCandidate = { endpointId ->
-                if (!usbController.permissionPending) {
+                if (!usbController.operationBusy) {
                     usbController = usbController.select(endpointId)
                 }
             },
@@ -460,12 +481,52 @@ fun EpicHubApp(
                 if (
                     selected != null &&
                     profilePackages.hasSelection &&
-                    !usbController.permissionPending
+                    !usbController.operationBusy
                 ) {
                     usbController =
                         usbController.permissionStarted(
                             usbPermissionOwner.request(selected),
                         )
+                }
+            },
+            onConnectUsbController = {
+                val selected = usbController.selectedCandidate
+                if (
+                    selected != null &&
+                    profilePackages.hasSelection &&
+                    !usbController.operationBusy
+                ) {
+                    usbController = usbController.connectionStarted()
+                    scope.launch {
+                        val result = withContext(Dispatchers.IO) {
+                            usbLiveSession.connect(
+                                endpointId = selected.endpointId,
+                                maxResponseBytes = LIVE_USB_SIGNATURE_LIMIT_BYTES,
+                                timeoutMs = LIVE_USB_CONNECT_TIMEOUT_MS,
+                            )
+                        }
+                        usbController = usbController.connectionCompleted(result)
+                    }
+                }
+            },
+            onDisconnectUsbController = {
+                if (!usbController.operationBusy) {
+                    usbLiveSession.disconnect()
+                    usbController = usbController.disconnected()
+                }
+            },
+            onLoadUsbTune = {
+                if (usbController.connected && !usbController.operationBusy) {
+                    usbController = usbController.loadStarted()
+                    scope.launch {
+                        val result = withContext(Dispatchers.IO) {
+                            usbLiveSession.loadCurrentController(
+                                signatureLimit = LIVE_USB_SIGNATURE_LIMIT_BYTES,
+                                timeoutMs = LIVE_USB_PAGE_TIMEOUT_MS,
+                            )
+                        }
+                        usbController = usbController.loadCompleted(result)
+                    }
                 }
             },
             benchmarkPlaceholderContent = benchmarkPlaceholderContent,
