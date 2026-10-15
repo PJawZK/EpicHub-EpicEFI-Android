@@ -48,6 +48,7 @@ pub mod tuning;
 mod tuning_brush_pull;
 mod tuning_interpolation;
 mod tuning_smoothing;
+pub mod write_envelope_plan;
 pub mod write_reconciliation_plan;
 
 #[cfg(test)]
