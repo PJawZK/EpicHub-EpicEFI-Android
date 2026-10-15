@@ -135,9 +135,9 @@ impl EngineRegistry {
         handle: i64,
         operation: impl FnOnce(&TuneSession, Option<&TuneSourcePageImage>) -> T,
     ) -> Option<T> {
-        self.engines.get(&handle).map(|engine| {
-            operation(&engine.tune_session, engine.tune_source_image.as_ref())
-        })
+        self.engines
+            .get(&handle)
+            .map(|engine| operation(&engine.tune_session, engine.tune_source_image.as_ref()))
     }
 
     fn replace_tune_source(
