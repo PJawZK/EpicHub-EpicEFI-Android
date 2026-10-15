@@ -99,22 +99,19 @@ pub fn plan_semantic_table_value_patch(
         .paged_calibration()
         .iter()
         .find(|paged| paged.primitive.name == editor.z_bins)
-        .ok_or_else(|| WriteReconciliationPlanError::MissingValuePrimitive(editor.z_bins.clone()))?;
+        .ok_or_else(|| {
+            WriteReconciliationPlanError::MissingValuePrimitive(editor.z_bins.clone())
+        })?;
 
     let page_index = paged.page - 1;
     let protocol = &bundle.protocol.pages[page_index];
     if protocol.chunk_write_command.is_none() {
-        return Err(WriteReconciliationPlanError::MissingChunkWriteCapability {
-            page: paged.page,
-        });
+        return Err(WriteReconciliationPlanError::MissingChunkWriteCapability { page: paged.page });
     }
 
     let before_pages = source.pages().to_vec();
     let mut after_pages = before_pages.clone();
-    let mut mutable_pages: Vec<&mut [u8]> = after_pages
-        .iter_mut()
-        .map(Vec::as_mut_slice)
-        .collect();
+    let mut mutable_pages: Vec<&mut [u8]> = after_pages.iter_mut().map(Vec::as_mut_slice).collect();
     encode_primitive(
         &mut mutable_pages,
         paged,
@@ -263,13 +260,9 @@ table = valuesTable, valuesMap, "Values", 1
         let source_bytes = source_page();
         let source = TuneSourcePageImage::from_pages(&[&source_bytes]);
 
-        let plan = plan_semantic_table_value_patch(
-            &bundle,
-            &source,
-            42,
-            &[101.0, 200.0, 300.0, 401.0],
-        )
-        .unwrap();
+        let plan =
+            plan_semantic_table_value_patch(&bundle, &source, 42, &[101.0, 200.0, 300.0, 401.0])
+                .unwrap();
 
         assert_eq!(source.page(0), Some(source_bytes.as_slice()));
         assert_eq!(plan.semantic_table_id, 42);
@@ -299,13 +292,9 @@ table = valuesTable, valuesMap, "Values", 1
         let source_bytes = source_page();
         let source = TuneSourcePageImage::from_pages(&[&source_bytes]);
 
-        let plan = plan_semantic_table_value_patch(
-            &bundle,
-            &source,
-            42,
-            &[100.0, 200.0, 300.0, 400.0],
-        )
-        .unwrap();
+        let plan =
+            plan_semantic_table_value_patch(&bundle, &source, 42, &[100.0, 200.0, 300.0, 400.0])
+                .unwrap();
 
         assert!(plan.patches.is_empty());
     }
@@ -345,12 +334,7 @@ table = valuesTable, valuesMap, "Values", 1
         let source = TuneSourcePageImage::from_pages(&[&source_bytes]);
 
         assert!(matches!(
-            plan_semantic_table_value_patch(
-                &bundle,
-                &source,
-                42,
-                &[100.0, 200.0, 300.0, 5000.0],
-            ),
+            plan_semantic_table_value_patch(&bundle, &source, 42, &[100.0, 200.0, 300.0, 5000.0],),
             Err(WriteReconciliationPlanError::Codec(
                 PageCodecError::OutsideDeclaredRange { .. }
             ))
