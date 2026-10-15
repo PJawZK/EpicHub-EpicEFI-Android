@@ -30,6 +30,36 @@ sealed interface LiveTuneConnectResult {
     data object OwnerClosed : LiveTuneConnectResult
 }
 
+sealed interface DefinitionDrivenLiveTuneConnectResult {
+    data class Connected(
+        val identity: ValidatedRuntimeIdentity,
+        val profileGeneration: Long,
+        val queryIndex: Int,
+    ) : DefinitionDrivenLiveTuneConnectResult
+
+    data class ProbePlanRejected(
+        val bundleIndex: Int,
+        val reason: DefinitionProbeQueryRejection,
+    ) : DefinitionDrivenLiveTuneConnectResult
+
+    data class ProfileAuthorityRejected(
+        val identity: ValidatedRuntimeIdentity,
+        val reason: RuntimeProfileSelectionRejection,
+    ) : DefinitionDrivenLiveTuneConnectResult
+
+    data class NoAuthorizedController(
+        val attemptedQueries: Int,
+        val lastProbeResult: UsbRuntimeIdentityProbeResult?,
+        val lastProfileRejection: RuntimeProfileSelectionRejection?,
+    ) : DefinitionDrivenLiveTuneConnectResult
+
+    data class InvalidConfiguration(
+        val reason: String,
+    ) : DefinitionDrivenLiveTuneConnectResult
+
+    data object OwnerClosed : DefinitionDrivenLiveTuneConnectResult
+}
+
 sealed interface LiveTuneOwnerLoadResult {
     data class Completed(
         val result: UsbReadOnlyTuneLoadResult,
@@ -47,6 +77,17 @@ internal fun interface RuntimeIdentityProbeOperation {
         channel: UsbReadOnlyTransactionChannel,
         plan: RuntimeIdentityProbePlan,
     ): UsbRuntimeIdentityProbeResult
+}
+
+internal fun interface RuntimeProfileSelectionOperation {
+    fun select(
+        response: ByteArray,
+        maxResponseBytes: Int,
+    ): RuntimeProfileSelectionResult
+}
+
+internal fun interface DefinitionProbeQueryCompileOperation {
+    fun compile(import: DefinitionBundleImport): DefinitionProbeQueryCompileResult
 }
 
 internal interface LiveTuneLifecycleControl {
@@ -90,6 +131,9 @@ class LiveTuneConnectionOwner internal constructor(
     private val registryAlive: () -> Boolean,
     private val lifecycle: LiveTuneLifecycleControl,
     private val identityProbe: RuntimeIdentityProbeOperation,
+    private val definitionBundles: List<DefinitionBundleImport> = emptyList(),
+    private val profileSelector: RuntimeProfileSelectionOperation? = null,
+    private val probeQueryCompiler: DefinitionProbeQueryCompileOperation? = null,
 ) : AutoCloseable {
     @Volatile
     private var closed = false
@@ -116,6 +160,110 @@ class LiveTuneConnectionOwner internal constructor(
 
             else -> LiveTuneConnectResult.ProbeRejected(probed)
         }
+    }
+
+    fun connectUsingDefinitionQueries(
+        channel: UsbReadOnlyTransactionChannel,
+        maxResponseBytes: Int,
+        timeoutMs: Int,
+    ): DefinitionDrivenLiveTuneConnectResult {
+        if (!isAlive) {
+            return DefinitionDrivenLiveTuneConnectResult.OwnerClosed
+        }
+        if (maxResponseBytes <= 0) {
+            return DefinitionDrivenLiveTuneConnectResult.InvalidConfiguration(
+                "response limit must be positive",
+            )
+        }
+        if (timeoutMs <= 0) {
+            return DefinitionDrivenLiveTuneConnectResult.InvalidConfiguration(
+                "timeout must be positive",
+            )
+        }
+        val selector = profileSelector
+            ?: return DefinitionDrivenLiveTuneConnectResult.InvalidConfiguration(
+                "profile selector is unavailable",
+            )
+        val compiler = probeQueryCompiler
+            ?: return DefinitionDrivenLiveTuneConnectResult.InvalidConfiguration(
+                "definition probe compiler is unavailable",
+            )
+
+        val queries = ArrayList<ByteArray>()
+        definitionBundles.forEachIndexed { bundleIndex, bundle ->
+            when (val compiled = compiler.compile(bundle)) {
+                is DefinitionProbeQueryCompileResult.Compiled -> {
+                    if (queries.none { existing -> existing.contentEquals(compiled.query) }) {
+                        queries += compiled.query
+                    }
+                }
+
+                is DefinitionProbeQueryCompileResult.Rejected -> {
+                    return DefinitionDrivenLiveTuneConnectResult.ProbePlanRejected(
+                        bundleIndex = bundleIndex,
+                        reason = compiled.reason,
+                    )
+                }
+            }
+        }
+        if (queries.isEmpty()) {
+            return DefinitionDrivenLiveTuneConnectResult.InvalidConfiguration(
+                "selected profile catalog contains no runtime probe queries",
+            )
+        }
+
+        lifecycle.onDisconnected()
+        var lastProbe: UsbRuntimeIdentityProbeResult? = null
+        var lastProfileRejection: RuntimeProfileSelectionRejection? = null
+        queries.forEachIndexed { queryIndex, query ->
+            val probed =
+                identityProbe.probe(
+                    channel,
+                    RuntimeIdentityProbePlan(
+                        query = query,
+                        maxResponseBytes = maxResponseBytes,
+                        timeoutMs = timeoutMs,
+                    ),
+                )
+            lastProbe = probed
+            if (probed !is UsbRuntimeIdentityProbeResult.Identified) {
+                return@forEachIndexed
+            }
+
+            val signatureResponse = probed.identity.signature.toByteArray(Charsets.UTF_8)
+            when (val selected = selector.select(signatureResponse, maxResponseBytes)) {
+                is RuntimeProfileSelectionResult.Selected -> {
+                    lifecycle.onConnected(probed.identity)
+                    return DefinitionDrivenLiveTuneConnectResult.Connected(
+                        identity = probed.identity,
+                        profileGeneration = selected.profileGeneration,
+                        queryIndex = queryIndex,
+                    )
+                }
+
+                is RuntimeProfileSelectionResult.Rejected -> {
+                    lastProfileRejection = selected.reason
+                    when (selected.reason) {
+                        RuntimeProfileSelectionRejection.UnknownController,
+                        RuntimeProfileSelectionRejection.RecognizedControllerWithoutProfile,
+                        -> Unit
+
+                        else -> {
+                            return DefinitionDrivenLiveTuneConnectResult.ProfileAuthorityRejected(
+                                identity = probed.identity,
+                                reason = selected.reason,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        return DefinitionDrivenLiveTuneConnectResult.NoAuthorizedController(
+            attemptedQueries = queries.size,
+            lastProbeResult = lastProbe,
+            lastProfileRejection = lastProfileRejection,
+        )
     }
 
     fun loadCurrentController(
@@ -160,6 +308,7 @@ class LiveTuneConnectionOwner internal constructor(
                             LiveTuneSourceLifecycle(engine, nativeRegistry),
                         )
                     val probe = UsbRuntimeIdentityProbe()
+                    val probeCompiler = DefinitionDrivenRuntimeProbePlanCompiler()
                     LiveTuneConnectionOwnerOpenResult.Opened(
                         owner =
                             LiveTuneConnectionOwner(
@@ -167,6 +316,9 @@ class LiveTuneConnectionOwner internal constructor(
                                 registryAlive = registryOwner::isAlive,
                                 lifecycle = lifecycle,
                                 identityProbe = RuntimeIdentityProbeOperation(probe::probe),
+                                definitionBundles = registryOwner.definitionBundles(),
+                                profileSelector = RuntimeProfileSelectionOperation(nativeRegistry::select),
+                                probeQueryCompiler = DefinitionProbeQueryCompileOperation(probeCompiler::compile),
                             ),
                         importedBundleCount = opened.importedBundleCount,
                     )
