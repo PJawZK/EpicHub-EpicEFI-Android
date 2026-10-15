@@ -71,31 +71,18 @@ data class GuardedWriteBatchMetadata(
 )
 
 sealed interface GuardedWriteBatchCreateResult {
-    data class Created(
-        val batch: NativeGuardedWriteBatch,
-    ) : GuardedWriteBatchCreateResult
-
-    data class Rejected(
-        val reason: GuardedWriteBatchRejection,
-    ) : GuardedWriteBatchCreateResult
+    data class Created(val batch: NativeGuardedWriteBatch) : GuardedWriteBatchCreateResult
+    data class Rejected(val reason: GuardedWriteBatchRejection) : GuardedWriteBatchCreateResult
 }
 
-sealed interface GuardedWriteBatchStageResult {
-    data class Planned(
-        val plan: GuardedRamWriteStagePlan,
-    ) : GuardedWriteBatchStageResult
-
-    data class Rejected(
-        val reason: GuardedWriteBatchRejection,
-    ) : GuardedWriteBatchStageResult
+internal sealed interface GuardedWriteBatchStageResult {
+    data class Planned(val plan: GuardedRamWriteStagePlan) : GuardedWriteBatchStageResult
+    data class Rejected(val reason: GuardedWriteBatchRejection) : GuardedWriteBatchStageResult
 }
 
-sealed interface GuardedWriteBatchVerifyResult {
+internal sealed interface GuardedWriteBatchVerifyResult {
     data object Verified : GuardedWriteBatchVerifyResult
-
-    data class Rejected(
-        val reason: GuardedWriteBatchRejection,
-    ) : GuardedWriteBatchVerifyResult
+    data class Rejected(val reason: GuardedWriteBatchRejection) : GuardedWriteBatchVerifyResult
 }
 
 internal interface NativeGuardedWriteBatchOps {
@@ -109,15 +96,10 @@ internal interface NativeGuardedWriteBatchOps {
     ): Long
 
     fun close(handle: Long)
-
     fun isAlive(handle: Long): Boolean
-
     fun activeCount(): Int
-
     fun profileGeneration(handle: Long): Long
-
     fun draftRevision(handle: Long): Long
-
     fun transactionCount(handle: Long): Int
 
     fun fillStage(
@@ -161,7 +143,7 @@ class NativeGuardedWriteBatch private constructor(
         get() = handle > 0L && ops.isAlive(handle)
 
     @Synchronized
-    fun stagePlan(
+    internal fun stagePlan(
         transactionIndex: Int,
         stage: GuardedRamWriteStage,
     ): GuardedWriteBatchStageResult {
@@ -170,8 +152,11 @@ class NativeGuardedWriteBatch private constructor(
             return GuardedWriteBatchStageResult.Rejected(GuardedWriteBatchRejection.InvalidHandle)
         }
         if (transactionIndex < 0) {
-            return GuardedWriteBatchStageResult.Rejected(GuardedWriteBatchRejection.InvalidTransactionIndex)
+            return GuardedWriteBatchStageResult.Rejected(
+                GuardedWriteBatchRejection.InvalidTransactionIndex,
+            )
         }
+
         val output = ByteBuffer.allocateDirect(MAX_GUARDED_BATCH_REQUEST_BYTES)
         val packed =
             ops.fillStage(
@@ -188,6 +173,7 @@ class NativeGuardedWriteBatch private constructor(
         if (packed <= 0L) {
             return GuardedWriteBatchStageResult.Rejected(mapStatus(packed.toInt()))
         }
+
         val requestLength = (packed ushr 32).toInt()
         val expectedResponseBytes = (packed and 0xffff_ffffL).toInt()
         if (
@@ -196,6 +182,7 @@ class NativeGuardedWriteBatch private constructor(
         ) {
             return GuardedWriteBatchStageResult.Rejected(GuardedWriteBatchRejection.NativeFailure)
         }
+
         output.position(0)
         val request = ByteArray(requestLength)
         output.get(request)
@@ -205,7 +192,7 @@ class NativeGuardedWriteBatch private constructor(
     }
 
     @Synchronized
-    fun verifyStage(
+    internal fun verifyStage(
         transactionIndex: Int,
         stage: GuardedRamWriteStage,
         responseFrame: ByteArray,
@@ -215,11 +202,14 @@ class NativeGuardedWriteBatch private constructor(
             return GuardedWriteBatchVerifyResult.Rejected(GuardedWriteBatchRejection.InvalidHandle)
         }
         if (transactionIndex < 0) {
-            return GuardedWriteBatchVerifyResult.Rejected(GuardedWriteBatchRejection.InvalidTransactionIndex)
+            return GuardedWriteBatchVerifyResult.Rejected(
+                GuardedWriteBatchRejection.InvalidTransactionIndex,
+            )
         }
         if (responseFrame.isEmpty() || responseFrame.size > MAX_GUARDED_BATCH_RESPONSE_BYTES) {
             return GuardedWriteBatchVerifyResult.Rejected(GuardedWriteBatchRejection.InvalidArgument)
         }
+
         val status =
             ops.verifyStage(
                 currentHandle,
@@ -280,11 +270,13 @@ class NativeGuardedWriteBatch private constructor(
             ) {
                 return GuardedWriteBatchCreateResult.Rejected(GuardedWriteBatchRejection.InvalidArgument)
             }
+
             val engineHandle = engineHandleProvider()
             val registryHandle = registryHandleProvider()
             if (engineHandle <= 0L || registryHandle <= 0L) {
                 return GuardedWriteBatchCreateResult.Rejected(GuardedWriteBatchRejection.InvalidHandle)
             }
+
             val handle =
                 ops.create(
                     engineHandle,
@@ -303,12 +295,13 @@ class NativeGuardedWriteBatch private constructor(
             val count = ops.transactionCount(handle)
             if (generation <= 0L || revision < 0L || count < 0) {
                 ops.close(handle)
-                val status = when {
-                    generation < 0L -> generation.toInt()
-                    revision < 0L -> revision.toInt()
-                    count < 0 -> count
-                    else -> BATCH_INVALID_ARGUMENT
-                }
+                val status =
+                    when {
+                        generation < 0L -> generation.toInt()
+                        revision < 0L -> revision.toInt()
+                        count < 0 -> count
+                        else -> BATCH_INVALID_ARGUMENT
+                    }
                 return GuardedWriteBatchCreateResult.Rejected(mapStatus(status))
             }
 
@@ -393,15 +386,10 @@ private object JniNativeGuardedWriteBatchOps : NativeGuardedWriteBatchOps {
         )
 
     override fun close(handle: Long) = NativeGuardedWriteBatchBridge.close(handle)
-
     override fun isAlive(handle: Long): Boolean = NativeGuardedWriteBatchBridge.isAlive(handle)
-
     override fun activeCount(): Int = NativeGuardedWriteBatchBridge.activeCount()
-
     override fun profileGeneration(handle: Long): Long = NativeGuardedWriteBatchBridge.profileGeneration(handle)
-
     override fun draftRevision(handle: Long): Long = NativeGuardedWriteBatchBridge.draftRevision(handle)
-
     override fun transactionCount(handle: Long): Int = NativeGuardedWriteBatchBridge.transactionCount(handle)
 
     override fun fillStage(
@@ -468,15 +456,10 @@ object NativeGuardedWriteBatchBridge {
     ): Long
 
     external fun close(handle: Long)
-
     external fun isAlive(handle: Long): Boolean
-
     external fun activeCount(): Int
-
     external fun profileGeneration(handle: Long): Long
-
     external fun draftRevision(handle: Long): Long
-
     external fun transactionCount(handle: Long): Int
 
     external fun fillStage(
