@@ -4,15 +4,14 @@ use jni::JNIEnv;
 use jni::objects::{JByteBuffer, JObject};
 use jni::sys::{jint, jlong};
 
-use crate::ms_envelope_codec::EnvelopeCodecError;
 use crate::profile_registry_store::{RegistryStoreError, with_selected_compiled_bundle};
 use crate::runtime_identity_probe::RuntimeProbeError;
 use crate::runtime_profile_authority::RuntimeProfileAuthorityError;
 use crate::write_envelope_plan::WriteEnvelopePlanError;
 use crate::write_reconciliation_plan::PageBytePatch;
 use crate::write_reconciliation_transaction::{
-    GuardedRamWriteTransaction, ReconciliationTransactionError, plan_guarded_ram_write_transactions,
-    verify_precondition, verify_readback, verify_write_ack,
+    GuardedRamWriteTransaction, ReconciliationTransactionError,
+    plan_guarded_ram_write_transactions, verify_precondition, verify_readback, verify_write_ack,
 };
 
 const WRITE_INVALID_HANDLE: jint = -1;
@@ -41,9 +40,14 @@ const STAGE_PRECONDITION: jint = 0;
 const STAGE_WRITE: jint = 1;
 const STAGE_READBACK: jint = 2;
 const MAX_PATCH_BYTES: jint = 65_536;
+const MAX_RESPONSE_BYTES: jint = 65_536;
 
 fn ffi_guard<T: Copy>(fallback: T, operation: impl FnOnce() -> T) -> T {
     catch_unwind(AssertUnwindSafe(operation)).unwrap_or(fallback)
+}
+
+fn valid_stage(stage: jint) -> bool {
+    matches!(stage, STAGE_PRECONDITION | STAGE_WRITE | STAGE_READBACK)
 }
 
 fn map_store_error(error: RegistryStoreError) -> jint {
@@ -157,6 +161,7 @@ fn output_buffer<'a>(
     Ok((slice, capacity))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn patch_from_buffers(
     env: &JNIEnv,
     page: jint,
@@ -196,7 +201,6 @@ fn patch_from_buffers(
     })
 }
 
-#[allow(clippy::too_many_arguments)]
 fn plan_for_index(
     handle: jlong,
     signature: &[u8],
@@ -204,11 +208,12 @@ fn plan_for_index(
     patch: &PageBytePatch,
     plan_index: usize,
 ) -> Result<GuardedRamWriteTransaction, jint> {
-    let transactions = with_selected_compiled_bundle(handle, signature, signature_limit, |bundle| {
-        plan_guarded_ram_write_transactions(bundle, patch)
-    })
-    .map_err(map_store_error)?
-    .map_err(map_plan_error)?;
+    let transactions =
+        with_selected_compiled_bundle(handle, signature, signature_limit, |bundle| {
+            plan_guarded_ram_write_transactions(bundle, patch)
+        })
+        .map_err(map_store_error)?
+        .map_err(map_plan_error)?;
     transactions
         .get(plan_index)
         .cloned()
@@ -307,6 +312,9 @@ pub extern "system" fn Java_com_epicefi_epichub_engine_NativeGuardedRamWriteBrid
     request_output: JByteBuffer,
 ) -> jlong {
     ffi_guard(i64::from(WRITE_PANIC), || {
+        if !valid_stage(stage) {
+            return i64::from(WRITE_INVALID_ARGUMENT);
+        }
         let signature = match direct_bytes(
             &env,
             &signature_buffer,
@@ -335,16 +343,11 @@ pub extern "system" fn Java_com_epicefi_epichub_engine_NativeGuardedRamWriteBrid
         let Ok(plan_index) = usize::try_from(plan_index) else {
             return i64::from(WRITE_INVALID_ARGUMENT);
         };
-        let transaction = match plan_for_index(
-            handle,
-            &signature,
-            signature_limit,
-            &patch,
-            plan_index,
-        ) {
-            Ok(value) => value,
-            Err(status) => return i64::from(status),
-        };
+        let transaction =
+            match plan_for_index(handle, &signature, signature_limit, &patch, plan_index) {
+                Ok(value) => value,
+                Err(status) => return i64::from(status),
+            };
         let (request, expected_response_size) = match stage_request(&transaction, stage) {
             Ok(value) => value,
             Err(status) => return i64::from(status),
@@ -388,6 +391,9 @@ pub extern "system" fn Java_com_epicefi_epichub_engine_NativeGuardedRamWriteBrid
     response_length: jint,
 ) -> jint {
     ffi_guard(WRITE_PANIC, || {
+        if !valid_stage(stage) {
+            return WRITE_INVALID_ARGUMENT;
+        }
         let signature = match direct_bytes(
             &env,
             &signature_buffer,
@@ -420,38 +426,31 @@ pub extern "system" fn Java_com_epicefi_epichub_engine_NativeGuardedRamWriteBrid
             &env,
             &response_buffer,
             response_length,
-            65_536,
+            MAX_RESPONSE_BYTES,
             WRITE_INVALID_LENGTH,
         ) {
             Ok(value) => value,
             Err(status) => return status,
         };
-        let transaction = match plan_for_index(
+        let transaction =
+            match plan_for_index(handle, &signature, signature_limit, &patch, plan_index) {
+                Ok(value) => value,
+                Err(status) => return status,
+            };
+
+        let result = with_selected_compiled_bundle(
             handle,
             &signature,
             signature_limit,
-            &patch,
-            plan_index,
-        ) {
-            Ok(value) => value,
-            Err(status) => return status,
-        };
-
-        let result = with_selected_compiled_bundle(handle, &signature, signature_limit, |bundle| {
-            match stage {
+            |bundle| match stage {
                 STAGE_PRECONDITION => verify_precondition(bundle, &transaction, &response),
                 STAGE_WRITE => verify_write_ack(bundle, &transaction, &response),
                 STAGE_READBACK => verify_readback(bundle, &transaction, &response),
-                _ => return Err(ReconciliationTransactionError::Envelope(
-                    EnvelopeCodecError::ResponseTooShort(0),
-                )),
-            }
-        });
+                _ => unreachable!(),
+            },
+        );
         match result {
             Ok(Ok(())) => 0,
-            Ok(Err(error)) if stage != STAGE_PRECONDITION && stage != STAGE_WRITE && stage != STAGE_READBACK => {
-                WRITE_INVALID_ARGUMENT
-            }
             Ok(Err(error)) => map_verify_error(stage, error),
             Err(error) => map_store_error(error),
         }
