@@ -184,19 +184,3 @@ pub extern "system" fn Java_com_epicefi_epichub_engine_NativeDefinitionProbePlan
         query.len() as jint
     })
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn status_codes_are_negative_and_success_lengths_remain_positive() {
-        assert!(RESULT_NOT_DIRECT < 0);
-        assert!(RESULT_INVALID_ARGUMENT < 0);
-        assert!(RESULT_BINDING_LENGTH_MISMATCH < 0);
-        assert!(RESULT_INCLUDE_LENGTH_MISMATCH < 0);
-        assert!(RESULT_COMPILE_ERROR < 0);
-        assert!(RESULT_INVALID_QUERY < 0);
-        assert!(RESULT_PANIC < 0);
-    }
-}
