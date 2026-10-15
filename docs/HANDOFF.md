@@ -2,13 +2,13 @@
 
 ## Continuation instruction
 
-Read this file first, then verify the exact current head/PR/Foundation state before changing anything.
+Read this file first, then verify the exact current head / PR / Foundation state before changing anything.
 
 Repository: `PJawZK/EpicHub-EpicEFI-Android`
 
-Active direction: **definition-driven multi-ECU tuning with explicit profile authority, exact runtime identity, read-only live acquisition, atomic local TuneSession installation, and explicit Android USB connection/load ownership**.
+Active direction: **definition-driven multi-ECU tuning with explicit profile authority, exact runtime identity, read-only live acquisition, atomic local TuneSession installation, explicit Android USB connection/load ownership, and retained exact source-page authority for future safe write/reconciliation work**.
 
-Do not return to Mega144H7-specific routing, USB metadata as profile authority, or any design that conflates local TuneDraft edits with ECU RAM write/Burn.
+Do not return to Mega144H7-specific routing, USB metadata as profile authority, or any design that conflates local `TuneDraft` edits with ECU RAM write/Burn.
 
 Historical pre-generic Phase 2 detail remains in `docs/HANDOFF_PHASE2_PRE_GENERIC_PROFILE.md`; preserve it.
 
@@ -34,7 +34,12 @@ Historical pre-generic Phase 2 detail remains in `docs/HANDOFF_PHASE2_PRE_GENERI
 
 ## Qualified UI/profile/Android ownership chain
 
-- PR #53 — active tune catalog drives current Tuner editor: `e72e6d072cc14e67b98cf2defdde2f5b65b8b597`, run `38615751170`.
+- PR #53 — active tune catalog drives current Tuner editor: `e72e6d072cc14e67b98cf2defdde2f5b65b8b597`.
+  - removes the hardcoded offline semantic table ID from the editor path;
+  - adds catalog-driven `ActiveTunerTable` over the single engine-owned `TuneSession`;
+  - retains `OfflineTunerFixture` only as a compatibility alias delegating to `ActiveTunerTable`;
+  - deterministic default table selection comes from the native catalog's semantic-ID ordering;
+  - the mature 2D/3D preview/apply/undo/redo engine remains unchanged.
 - PR #54 — truthful live-source status contract: `9a89bbf8cef87d1b1566f043a0cae0fae96f688a`, run `38622688005`.
 - PR #55 — transactional definition-bundle catalog ownership: `8e823b4544fb504f72b9ed1f6bc74db71c007cc6`, run `38624214366`.
 - PR #56 — live connection/profile ownership: `6f01927d87f77f7696bcfcd6791fb6e0d729eca1`, run `38625907509`.
@@ -49,12 +54,38 @@ Historical pre-generic Phase 2 detail remains in `docs/HANDOFF_PHASE2_PRE_GENERI
 - PR #65 — exact profile authority for definition-driven connect: `214f278090b66ffaff6af7a973880e2415255060`, run `38686491511`.
 - PR #66 — Android USB authorized connection-session owner: `5afd1c8f628d4f1f56ca047b20707365e78c2881`, run `38687259217`.
 - PR #67 — explicit Settings Connect / Disconnect / read-only Load UI, **including app-level callback/session wiring**: `68b401ff45349b88129ab08d08bfbfccd9fda78b`, run `38695474141`.
+- PR #68 — retained authoritative live source-page images: `fbf8a5e6b1016e708a576b21ca1af47b1d353e2a`, run `38698255601`.
+  - `TuneSourcePageImage` owns an exact deep copy of the complete verified source page set;
+  - `EngineState` owns that raw source authority beside the semantic `TuneSession`, not inside the semantic table model;
+  - live install validates/decodes completely before atomically replacing both semantic session and source page image;
+  - failed decode, unknown signature, invalid engine handle, or caller-buffer mutation cannot partially replace or mutate retained authority;
+  - initial offline/synthetic sessions have no source-page authority;
+  - source-page mutation/inspection is not exposed as a production write API in this checkpoint.
 
 PR #39 and PR #41 remain closed/superseded duplicate paths.
 
 All qualified SHAs above are immutable checkpoints. Never append cleanup or handoff commits directly to them; branch from the exact qualified SHA.
 
-### Important #67 qualification note
+---
+
+# Reconciled earlier UI-integration snapshot
+
+The earlier continuation snapshot around:
+
+- qualified PR #51 `73587501ee40e1a8abbb14c57f3ee75507abfa57`;
+- qualified PR #52 `b913873dde5d3b9c1da0c9612a6859263baa372a`;
+- `phase2/tuner-live-source-ui-integration` at handoff-only commit `52a0bd0a0b6eac691972cf5a069c1aaa7ba1dade`;
+- the observation that `TunerScreen` still called `OfflineTunerFixture`;
+
+is valid historical context but is **not** the current continuation point.
+
+That branch advanced and qualified as PR #53. The editor path is now catalog-driven through `ActiveTunerTable`; `OfflineTunerFixture` remains only as a compatibility name for callers/tests and delegates to the active engine-owned session. PR #54 then added the truthful UI-facing live-source status contract, and PR #55-#67 completed profile-package ownership, Android SAF/USB permission, exact-authorized connection ownership, and explicit Connect / Disconnect / Load presentation.
+
+Do not redo the old “replace hardcoded offline table identity” work or create a second 2D/3D table model.
+
+---
+
+## Important #67 qualification note
 
 An earlier #67 head `1a7e137f4f2f0c5dfbe01cb54a3e2608da089204` passed CI but was found during review to expose Connect/Disconnect/Load buttons whose `EpicHubApp` callbacks were still omitted, meaning the buttons used shell no-op defaults. It is **not** the qualified checkpoint.
 
@@ -70,15 +101,15 @@ Qualified #67 head `68b401ff...` fixes this by:
 
 # Current continuation branch
 
-`phase2/tuner-live-load-editor-refresh`
+`phase2/tuner-write-reconciliation-foundation`
 
-Base: exact qualified PR #67 head `68b401ff45349b88129ab08d08bfbfccd9fda78b`.
+Base: exact qualified PR #68 head `fbf8a5e6b1016e708a576b21ca1af47b1d353e2a`.
 
-The first commit on this branch refreshes this handoff only.
+The first commit on this branch refreshes this handoff only. Treat PR #68 as the immutable source-page-image ownership checkpoint.
 
-A source-refresh audit was performed before adding code: no special `TunerScreen` source epoch is currently required. `Load tune` is available only inside Settings; while Settings is open, `TunerScreen` is removed from composition. Closing Settings therefore constructs a fresh Tuner editor against the newly installed engine-owned `TuneSession`. Do not add an epoch/reset mechanism unless a future load path can replace the tune source while Tuner remains composed.
+The read-only live path, active editor source, profile/package ownership, Android USB permission/connect/load UI, and retained exact source page image are already qualified. Do not reopen those boundaries unless a concrete defect is found.
 
-Before implementing the next slice, inspect for parallel PR #68+ work and choose a proven gap rather than re-solving already-qualified read/connection behavior.
+The next work is a **write-to-RAM/readback/reconciliation design foundation**, not immediate write execution.
 
 ---
 
@@ -111,11 +142,13 @@ read-only authoritative page acquisition
     ↓
 complete verified page set
     ↓
+retain exact TuneSourcePageImage
+    +
 compiled profile decode
     ↓
-atomic LiveController `TuneSnapshot` install
+atomic LiveController TuneSnapshot + source-image install
     ↓
-engine-owned `TuneSession` / `TuneDraft`
+engine-owned TuneSession / TuneDraft
     ↓
 active tune catalog / 2D + 3D editor
 ```
@@ -130,8 +163,10 @@ Keep these concepts separate:
 6. **Physical connection ownership** — retained authorized read-only USB channel.
 7. **Tune load** — separate explicit complete read/decode/atomic local install.
 8. **Local live-source lifecycle** — connected/loading/live/failed/disconnected-retained truth.
+9. **Retained source-page authority** — exact bytes from the successful live load that produced the current semantic session.
+10. **Local draft state** — semantic edits in `TuneDraft`; not proof of ECU RAM state and not proof of persisted/Burned state.
 
-USB VID/PID, product strings, board names, endpoint names, family names, and signature prefixes never grant profile/tune authority.
+USB VID/PID, product strings, board names, endpoint names, family names, and signature prefixes never grant profile/tune/write authority.
 
 ---
 
@@ -179,7 +214,10 @@ Do not regress:
 - retained-after-disconnect != live/current;
 - profile selection != USB permission != transport connection != tune load;
 - transport candidate != runtime identity != profile authority;
-- changing/clearing profile authority disconnects any retained controller channel first.
+- changing/clearing profile authority disconnects any retained controller channel first;
+- exact retained source pages are owned beside, not inside, the semantic `TuneSession`;
+- raw source-page authority is replaced only together with a successfully decoded live source;
+- caller-owned page buffers cannot mutate retained source authority after install.
 
 Critical invariant:
 
@@ -187,21 +225,30 @@ Critical invariant:
 TuneDraft Apply != ECU RAM write != Burn
 ```
 
-No qualified stage through PR #67 writes calibration RAM or issues Burn.
+No qualified stage through PR #68 writes calibration RAM or issues Burn.
 
 Do not reintroduce `ReusableContentHost`.
 
 ---
 
-# Next architecture work
+# Immediate next work — write/reconciliation foundation
 
-The generic read-only path and explicit Android connection/load path are now end-to-end qualified. The next major tuning boundary should be designed separately rather than inferred from the read path:
+Do **not** begin by sending a write command. First establish the authority and reconciliation model.
 
-1. Audit what source bytes/raw-page state must be retained to support safe calibration RAM writes without fabricating unrelated page contents.
-2. Define capability/lifecycle separation for **local draft**, **write-to-ECU-RAM**, **readback/reconciliation**, and **Burn/persist**.
-3. Use compiled definition protocol commands only after exact live bundle authority; never route writes by board/family/VID/PID.
-4. Fail closed when a definition/profile lacks sufficient write/readback/Burn capability.
-5. Preserve retained/disconnected semantics: a local draft must never be considered written or burned merely because it was applied locally.
-6. Before adding live writes, prove a reconciliation/readback design that can distinguish local draft, ECU RAM state, and persisted ECU state.
+1. Audit the compiled definition/protocol write capabilities already available per exact bundle: page write command shape, page geometry, endianness, Burn/persist capability, and any readback command requirements. Missing capability must fail closed.
+2. Define a page patch/diff model that starts from the retained exact `TuneSourcePageImage` and changes only definition-owned bytes corresponding to intentional semantic `TuneDraft` changes. Untouched bytes must remain byte-for-byte from the authoritative source image; never reconstruct/fabricate unknown page contents.
+3. Reuse the existing validated page codec for bounded primitive encoding. Do not make raw offsets or UI table coordinates into write authority.
+4. Define explicit state separation for:
+   - local semantic `TuneDraft`;
+   - retained source page image from the last successful load/readback;
+   - planned ECU RAM patch;
+   - ECU RAM state confirmed by readback/reconciliation;
+   - persisted/Burned ECU state.
+5. Design write-to-RAM as a separate explicit action/capability from local Apply. A local Apply must remain local even when connected.
+6. Require a post-write readback/reconciliation path before treating ECU RAM as synchronized. Define how partial write failure, disconnect, stale runtime identity, CRC/status failure, and readback mismatch invalidate synchronization.
+7. Keep Burn/persist as a later, separate explicit capability/action. Do not infer persisted state from a successful RAM write.
+8. Exact runtime identity + exact coherent bundle authority must be revalidated for any write-capable operation; never authorize writes by VID/PID, board/family name, product string, endpoint, or signature prefix.
+9. Preserve current disconnect semantics. Retained local draft/source data may remain usable offline, but any RAM/persist synchronization claim must become stale/unknown when the controller session is lost unless reconciliation proves otherwise after reconnect.
+10. Add no automatic write/Burn side effects to existing 2D/3D editor operations.
 
-Do not implement calibration write or Burn as a side effect of existing `TuneDraft Apply`.
+The first implementation slice should preferably remain pure planning/authority code with tests over retained page images and compiled definitions before any Android USB write execution is introduced.
