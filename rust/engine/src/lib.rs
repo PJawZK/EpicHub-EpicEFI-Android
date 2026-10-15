@@ -20,6 +20,7 @@ pub mod guarded_write_batch_store;
 mod jni_definition_probe_plan;
 mod jni_engine;
 mod jni_guarded_ram_write;
+mod jni_guarded_write_batch;
 mod jni_live_tune_install;
 mod jni_profile_registry;
 mod jni_readonly_page_acquisition;
