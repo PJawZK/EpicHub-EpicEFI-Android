@@ -20,6 +20,7 @@ class DefinitionBundleCatalogTest {
         val opened = result as DefinitionBundleCatalogOpenResult.Opened
         assertEquals(2, opened.importedBundleCount)
         assertEquals(listOf("first", "second"), registry.imported.map { it.profileName })
+        assertEquals(listOf("first", "second"), opened.registry.definitionBundles().map { it.profileName })
         assertTrue(opened.registry.isAlive)
         assertFalse(registry.closed)
 
@@ -128,6 +129,7 @@ class DefinitionBundleCatalogTest {
         val opened = result as DefinitionBundleCatalogOpenResult.Opened
         assertEquals(0, opened.importedBundleCount)
         assertTrue(registry.imported.isEmpty())
+        assertTrue(opened.registry.definitionBundles().isEmpty())
         assertTrue(opened.registry.isAlive)
     }
 
