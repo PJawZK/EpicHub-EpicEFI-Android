@@ -41,6 +41,7 @@ mod runtime_snapshot;
 mod table_projection_abi;
 mod tune_catalog_abi;
 mod tune_session;
+pub mod tune_source_image;
 mod tune_source_install;
 pub mod tuning;
 mod tuning_brush_pull;
