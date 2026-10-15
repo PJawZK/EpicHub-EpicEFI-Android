@@ -400,7 +400,7 @@ pageChunkWrite = "{chunk_write}"
             after: vec![2],
         };
 
-        let unknown = bundle("little", 8, r#"\x00\x00"#, "C%2o%2c%q%v");
+        let unknown = bundle("little", 8, r#"\x00\x00"#, "C%2o%2c%2q%v");
         assert_eq!(
             plan_page_patch_writes(&unknown, &patch),
             Err(PageWritePlanError::UnsupportedTemplateToken(
