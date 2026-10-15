@@ -1,11 +1,11 @@
+use crate::ecu_profile::ResolvedEcuProfile;
 use crate::engine::with_tune_source_authority;
 use crate::profile_registry_store::{RegistryStoreError, with_selected_compiled_bundle};
 use crate::session_write_intent::{SessionWriteIntentError, plan_session_ram_write_intent};
 use crate::tune_source_image::TuneSourcePageImage;
 use crate::tuning::TuneSnapshotOrigin;
 use crate::write_reconciliation_transaction::{
-    GuardedRamWriteTransaction, ReconciliationTransactionError,
-    plan_guarded_ram_write_transactions,
+    GuardedRamWriteTransaction, ReconciliationTransactionError, plan_guarded_ram_write_transactions,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -327,7 +327,11 @@ table = valuesTable, valuesMap, "Values", 1
             registry,
             SIGNATURE.as_bytes(),
             256,
-            |bundle| bundle.profile.resolve_pages(&[&new_page], TuneSnapshotOrigin::LiveController),
+            |bundle| {
+                bundle
+                    .profile
+                    .resolve_pages(&[&new_page], TuneSnapshotOrigin::LiveController)
+            },
         )
         .unwrap()
         .unwrap();
