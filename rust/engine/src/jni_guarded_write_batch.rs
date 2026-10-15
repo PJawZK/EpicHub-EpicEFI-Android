@@ -288,13 +288,14 @@ pub extern "system" fn Java_com_epicefi_epichub_engine_NativeGuardedWriteBatchBr
     _object: JObject,
     handle: jlong,
 ) -> jlong {
-    ffi_guard(i64::from(BATCH_PANIC), || {
-        match guarded_write_batch_summary(handle) {
+    ffi_guard(
+        i64::from(BATCH_PANIC),
+        || match guarded_write_batch_summary(handle) {
             Ok(summary) => jlong::try_from(summary.profile_generation)
                 .unwrap_or(i64::from(BATCH_INVALID_ARGUMENT)),
             Err(error) => i64::from(map_store_error(error)),
-        }
-    })
+        },
+    )
 }
 
 #[unsafe(no_mangle)]
@@ -303,13 +304,15 @@ pub extern "system" fn Java_com_epicefi_epichub_engine_NativeGuardedWriteBatchBr
     _object: JObject,
     handle: jlong,
 ) -> jlong {
-    ffi_guard(i64::from(BATCH_PANIC), || {
-        match guarded_write_batch_summary(handle) {
-            Ok(summary) => jlong::try_from(summary.draft_revision)
-                .unwrap_or(i64::from(BATCH_INVALID_ARGUMENT)),
+    ffi_guard(
+        i64::from(BATCH_PANIC),
+        || match guarded_write_batch_summary(handle) {
+            Ok(summary) => {
+                jlong::try_from(summary.draft_revision).unwrap_or(i64::from(BATCH_INVALID_ARGUMENT))
+            }
             Err(error) => i64::from(map_store_error(error)),
-        }
-    })
+        },
+    )
 }
 
 #[unsafe(no_mangle)]
