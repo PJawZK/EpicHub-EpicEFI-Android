@@ -147,8 +147,8 @@ internal interface NativeGuardedWriteBatchOps {
 }
 
 class NativeGuardedWriteBatch private constructor(
-    private val engine: NativeEngine,
-    private val registry: NativeProfileRegistry,
+    private val engineHandleProvider: () -> Long,
+    private val registryHandleProvider: () -> Long,
     signatureResponse: ByteArray,
     private val signatureLimit: Int,
     private val ops: NativeGuardedWriteBatchOps,
@@ -166,17 +166,19 @@ class NativeGuardedWriteBatch private constructor(
         stage: GuardedRamWriteStage,
     ): GuardedWriteBatchStageResult {
         val currentHandle = handle
-        if (currentHandle <= 0L || transactionIndex < 0) {
+        if (currentHandle <= 0L) {
             return GuardedWriteBatchStageResult.Rejected(GuardedWriteBatchRejection.InvalidHandle)
         }
+        if (transactionIndex < 0) {
+            return GuardedWriteBatchStageResult.Rejected(GuardedWriteBatchRejection.InvalidTransactionIndex)
+        }
         val output = ByteBuffer.allocateDirect(MAX_GUARDED_BATCH_REQUEST_BYTES)
-        val signature = directBuffer(signatureResponse)
         val packed =
             ops.fillStage(
                 currentHandle,
-                engine.requireNativeHandle(),
-                registry.readOnlyRegistryHandle(),
-                signature,
+                engineHandleProvider(),
+                registryHandleProvider(),
+                directBuffer(signatureResponse),
                 signatureResponse.size,
                 signatureLimit,
                 transactionIndex,
@@ -209,17 +211,20 @@ class NativeGuardedWriteBatch private constructor(
         responseFrame: ByteArray,
     ): GuardedWriteBatchVerifyResult {
         val currentHandle = handle
-        if (
-            currentHandle <= 0L || transactionIndex < 0 || responseFrame.isEmpty() ||
-                responseFrame.size > MAX_GUARDED_BATCH_RESPONSE_BYTES
-        ) {
+        if (currentHandle <= 0L) {
+            return GuardedWriteBatchVerifyResult.Rejected(GuardedWriteBatchRejection.InvalidHandle)
+        }
+        if (transactionIndex < 0) {
+            return GuardedWriteBatchVerifyResult.Rejected(GuardedWriteBatchRejection.InvalidTransactionIndex)
+        }
+        if (responseFrame.isEmpty() || responseFrame.size > MAX_GUARDED_BATCH_RESPONSE_BYTES) {
             return GuardedWriteBatchVerifyResult.Rejected(GuardedWriteBatchRejection.InvalidArgument)
         }
         val status =
             ops.verifyStage(
                 currentHandle,
-                engine.requireNativeHandle(),
-                registry.readOnlyRegistryHandle(),
+                engineHandleProvider(),
+                registryHandleProvider(),
                 directBuffer(signatureResponse),
                 signatureResponse.size,
                 signatureLimit,
@@ -253,17 +258,17 @@ class NativeGuardedWriteBatch private constructor(
             expectedDraftRevision: Long,
         ): GuardedWriteBatchCreateResult =
             createWithOps(
-                engine,
-                registry,
-                signatureResponse,
-                signatureLimit,
-                expectedDraftRevision,
-                JniNativeGuardedWriteBatchOps,
+                engineHandleProvider = engine::requireNativeHandle,
+                registryHandleProvider = registry::readOnlyRegistryHandle,
+                signatureResponse = signatureResponse,
+                signatureLimit = signatureLimit,
+                expectedDraftRevision = expectedDraftRevision,
+                ops = JniNativeGuardedWriteBatchOps,
             )
 
         internal fun createWithOps(
-            engine: NativeEngine,
-            registry: NativeProfileRegistry,
+            engineHandleProvider: () -> Long,
+            registryHandleProvider: () -> Long,
             signatureResponse: ByteArray,
             signatureLimit: Int,
             expectedDraftRevision: Long,
@@ -275,10 +280,15 @@ class NativeGuardedWriteBatch private constructor(
             ) {
                 return GuardedWriteBatchCreateResult.Rejected(GuardedWriteBatchRejection.InvalidArgument)
             }
+            val engineHandle = engineHandleProvider()
+            val registryHandle = registryHandleProvider()
+            if (engineHandle <= 0L || registryHandle <= 0L) {
+                return GuardedWriteBatchCreateResult.Rejected(GuardedWriteBatchRejection.InvalidHandle)
+            }
             val handle =
                 ops.create(
-                    engine.requireNativeHandle(),
-                    registry.readOnlyRegistryHandle(),
+                    engineHandle,
+                    registryHandle,
                     directBuffer(signatureResponse),
                     signatureResponse.size,
                     signatureLimit,
@@ -304,8 +314,8 @@ class NativeGuardedWriteBatch private constructor(
 
             return GuardedWriteBatchCreateResult.Created(
                 NativeGuardedWriteBatch(
-                    engine = engine,
-                    registry = registry,
+                    engineHandleProvider = engineHandleProvider,
+                    registryHandleProvider = registryHandleProvider,
                     signatureResponse = signatureResponse,
                     signatureLimit = signatureLimit,
                     ops = ops,
