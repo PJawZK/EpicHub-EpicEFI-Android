@@ -14,6 +14,7 @@ pub mod ecu_profile;
 pub mod ecu_profile_registry;
 pub mod ecu_protocol;
 mod engine;
+pub mod engine_session_write_intent;
 mod jni_definition_probe_plan;
 mod jni_engine;
 mod jni_guarded_ram_write;
