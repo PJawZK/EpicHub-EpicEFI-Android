@@ -57,7 +57,6 @@ mod tests {
     use crate::profile_registry_store::{
         close_profile_registry, create_profile_registry, register_definition_bundle_import,
     };
-    use crate::runtime_identity_probe::RuntimeProbeError;
     use crate::runtime_profile_authority::RuntimeProfileAuthorityError;
 
     const SIGNATURE: &str = "rusEFI engine-session-write-intent.test.1";
@@ -216,24 +215,18 @@ table = valuesTable, valuesMap, "Values", 1
     #[test]
     fn unknown_signature_never_reaches_engine_source_authority() {
         let (engine, registry, _) = live_engine();
-        let error = plan_selected_engine_ram_write_intent(
-            engine,
-            registry,
-            b"unknown.signature",
-            256,
-            0,
-        )
-        .unwrap_err();
-        assert!(matches!(
-            error,
-            EngineSessionWriteIntentError::ProfileAuthority(
-                RegistryStoreError::Authority(RuntimeProfileAuthorityError::Selection(_))
-            ) | EngineSessionWriteIntentError::ProfileAuthority(
-                RegistryStoreError::Authority(RuntimeProfileAuthorityError::Probe(
-                    RuntimeProbeError::InvalidUtf8
-                ))
-            )
-        ));
+        assert_eq!(
+            plan_selected_engine_ram_write_intent(
+                engine,
+                registry,
+                b"unknown.signature",
+                256,
+                0,
+            ),
+            Err(EngineSessionWriteIntentError::ProfileAuthority(
+                RegistryStoreError::Authority(RuntimeProfileAuthorityError::UnknownController)
+            ))
+        );
 
         close_profile_registry(registry);
         close_engine(engine);
