@@ -10,6 +10,7 @@ use crate::diagnostics::{
 use crate::offline_tune_source::offline_source_snapshot;
 use crate::runtime_snapshot::{RUNTIME_SNAPSHOT_SIZE, RuntimeSnapshot};
 use crate::tune_session::TuneSession;
+use crate::tune_source_image::TuneSourcePageImage;
 
 struct EngineState {
     started_at: Instant,
@@ -17,6 +18,7 @@ struct EngineState {
     channels: ChannelStore,
     diagnostics: EngineDiagnostics,
     tune_session: TuneSession,
+    tune_source_image: Option<TuneSourcePageImage>,
 }
 
 impl EngineState {
@@ -33,6 +35,7 @@ impl EngineState {
             channels: ChannelStore::new_synthetic(),
             diagnostics: EngineDiagnostics::new(u64::try_from(handle).unwrap_or(0)),
             tune_session,
+            tune_source_image: None,
         }
     }
 
@@ -126,6 +129,30 @@ impl EngineRegistry {
             .get_mut(&handle)
             .map(|engine| operation(&mut engine.tune_session))
     }
+
+    fn replace_tune_source(
+        &mut self,
+        handle: i64,
+        session: TuneSession,
+        source_image: TuneSourcePageImage,
+    ) -> bool {
+        let Some(engine) = self.engines.get_mut(&handle) else {
+            return false;
+        };
+        engine.tune_session = session;
+        engine.tune_source_image = Some(source_image);
+        true
+    }
+
+    fn tune_source_image<T>(
+        &mut self,
+        handle: i64,
+        operation: impl FnOnce(Option<&TuneSourcePageImage>) -> T,
+    ) -> Option<T> {
+        self.engines
+            .get(&handle)
+            .map(|engine| operation(engine.tune_source_image.as_ref()))
+    }
 }
 
 static ENGINE_REGISTRY: LazyLock<Mutex<EngineRegistry>> =
@@ -169,6 +196,21 @@ pub(crate) fn with_tune_session<T>(
     with_registry(|registry| registry.tune_session(handle, operation))
 }
 
+pub(crate) fn replace_tune_source(
+    handle: i64,
+    session: TuneSession,
+    source_image: TuneSourcePageImage,
+) -> bool {
+    with_registry(|registry| registry.replace_tune_source(handle, session, source_image))
+}
+
+pub(crate) fn with_tune_source_image<T>(
+    handle: i64,
+    operation: impl FnOnce(Option<&TuneSourcePageImage>) -> T,
+) -> Option<T> {
+    with_registry(|registry| registry.tune_source_image(handle, operation))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -176,7 +218,7 @@ mod tests {
         DIAGNOSTIC_BATCH_ABI_VERSION, DIAGNOSTIC_CODE_ENGINE_CREATED,
         DIAGNOSTIC_CODE_RUNTIME_SNAPSHOT_PUBLISHED,
     };
-    use crate::offline_tune_source::OFFLINE_SOURCE_PRIMARY_TABLE_ID;
+    use crate::offline_tune_source::{OFFLINE_SOURCE_PRIMARY_TABLE_ID, offline_source_snapshot};
     use crate::runtime_snapshot::{RUNTIME_SNAPSHOT_ABI_VERSION, RUNTIME_SNAPSHOT_SIZE};
     use crate::table_projection_abi::TABLE_PROJECTION_ABI_VERSION;
 
@@ -278,6 +320,30 @@ mod tests {
     }
 
     #[test]
+    fn source_image_is_absent_until_a_page_backed_source_is_installed() {
+        let mut registry = EngineRegistry::new();
+        let handle = registry.create();
+
+        assert_eq!(
+            registry.tune_source_image(handle, |image| image.cloned()),
+            Some(None),
+        );
+
+        let source_image = TuneSourcePageImage::from_pages(&[&[1_u8, 2, 3]]);
+        assert!(registry.replace_tune_source(
+            handle,
+            TuneSession::from_snapshot(offline_source_snapshot()),
+            source_image,
+        ));
+        assert_eq!(
+            registry
+                .tune_source_image(handle, |image| image.unwrap().page(0).unwrap().to_vec())
+                .unwrap(),
+            vec![1, 2, 3],
+        );
+    }
+
+    #[test]
     fn closed_or_unknown_handle_cannot_publish_state() {
         let mut registry = EngineRegistry::new();
         let handle = registry.create();
@@ -290,6 +356,7 @@ mod tests {
                 .tune_session(handle, |session| session.revision())
                 .is_none()
         );
+        assert!(registry.tune_source_image(handle, |_| ()).is_none());
         assert!(registry.snapshot(i64::MAX).is_none());
         assert!(registry.diagnostic_batch(i64::MAX).is_none());
         assert!(
@@ -297,5 +364,6 @@ mod tests {
                 .tune_session(i64::MAX, |session| session.revision())
                 .is_none()
         );
+        assert!(registry.tune_source_image(i64::MAX, |_| ()).is_none());
     }
 }
