@@ -50,6 +50,7 @@ mod tuning_interpolation;
 mod tuning_smoothing;
 pub mod write_envelope_plan;
 pub mod write_reconciliation_plan;
+pub mod write_reconciliation_transaction;
 
 #[cfg(test)]
 mod tuning_fixture {
