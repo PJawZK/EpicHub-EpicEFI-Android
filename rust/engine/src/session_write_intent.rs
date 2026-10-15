@@ -20,15 +20,30 @@ pub struct SessionRamWriteIntent {
 #[derive(Clone, Debug, PartialEq)]
 pub enum SessionWriteIntentError {
     NonLiveControllerSource(TuneSnapshotOrigin),
-    ProfileGenerationMismatch { session: u64, bundle: u64 },
+    ProfileGenerationMismatch {
+        session: u64,
+        bundle: u64,
+    },
     Projection(TuneError),
     ProjectionTooShort(usize),
     ProjectionAbiVersion(u32),
-    ProjectionSizeMismatch { declared: usize, actual: usize },
-    ProjectionProfileGenerationMismatch { expected: u64, actual: u64 },
-    ProjectionRevisionMismatch { expected: u64, actual: u64 },
+    ProjectionSizeMismatch {
+        declared: usize,
+        actual: usize,
+    },
+    ProjectionProfileGenerationMismatch {
+        expected: u64,
+        actual: u64,
+    },
+    ProjectionRevisionMismatch {
+        expected: u64,
+        actual: u64,
+    },
     ProjectionOriginMismatch(u32),
-    ProjectionTableMismatch { expected: u32, actual: u32 },
+    ProjectionTableMismatch {
+        expected: u32,
+        actual: u32,
+    },
     ProjectionShapeOverflow,
     ProjectionValuesOutOfBounds,
     Planning(WriteReconciliationPlanError),
@@ -74,12 +89,7 @@ pub fn plan_session_ram_write_intent(
         let projection = session
             .projection_bytes(table_id)
             .map_err(SessionWriteIntentError::Projection)?;
-        let values = decode_projection_values(
-            &projection,
-            session_generation,
-            revision,
-            table_id,
-        )?;
+        let values = decode_projection_values(&projection, session_generation, revision, table_id)?;
         let plan = plan_semantic_table_value_patch(bundle, source, table_id, &values)?;
 
         for patch in plan.patches {
@@ -120,10 +130,12 @@ fn decode_projection_values(
 
     let generation = read_u64(bytes, 8)?;
     if generation != expected_generation {
-        return Err(SessionWriteIntentError::ProjectionProfileGenerationMismatch {
-            expected: expected_generation,
-            actual: generation,
-        });
+        return Err(
+            SessionWriteIntentError::ProjectionProfileGenerationMismatch {
+                expected: expected_generation,
+                actual: generation,
+            },
+        );
     }
     let revision = read_u64(bytes, 16)?;
     if revision != expected_revision {
