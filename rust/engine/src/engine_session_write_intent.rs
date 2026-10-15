@@ -132,14 +132,9 @@ table = valuesTable, valuesMap, "Values", 1
         })
         .unwrap();
 
-        let intent = plan_selected_engine_ram_write_intent(
-            engine,
-            registry,
-            SIGNATURE.as_bytes(),
-            256,
-            1,
-        )
-        .unwrap();
+        let intent =
+            plan_selected_engine_ram_write_intent(engine, registry, SIGNATURE.as_bytes(), 256, 1)
+                .unwrap();
         assert_eq!(intent.profile_generation, 77);
         assert_eq!(intent.draft_revision, 1);
         assert_eq!(intent.patches.len(), 1);
@@ -163,13 +158,7 @@ table = valuesTable, valuesMap, "Values", 1
         .unwrap();
 
         assert_eq!(
-            plan_selected_engine_ram_write_intent(
-                engine,
-                registry,
-                SIGNATURE.as_bytes(),
-                256,
-                0,
-            ),
+            plan_selected_engine_ram_write_intent(engine, registry, SIGNATURE.as_bytes(), 256, 0,),
             Err(EngineSessionWriteIntentError::StaleDraftRevision {
                 expected: 0,
                 actual: 1,
@@ -187,25 +176,13 @@ table = valuesTable, valuesMap, "Values", 1
         let engine = create_engine();
 
         assert_eq!(
-            plan_selected_engine_ram_write_intent(
-                engine,
-                registry,
-                SIGNATURE.as_bytes(),
-                256,
-                0,
-            ),
+            plan_selected_engine_ram_write_intent(engine, registry, SIGNATURE.as_bytes(), 256, 0,),
             Err(EngineSessionWriteIntentError::MissingSourceImage)
         );
         close_engine(engine);
 
         assert_eq!(
-            plan_selected_engine_ram_write_intent(
-                engine,
-                registry,
-                SIGNATURE.as_bytes(),
-                256,
-                0,
-            ),
+            plan_selected_engine_ram_write_intent(engine, registry, SIGNATURE.as_bytes(), 256, 0,),
             Err(EngineSessionWriteIntentError::InvalidEngineHandle)
         );
 
@@ -216,13 +193,7 @@ table = valuesTable, valuesMap, "Values", 1
     fn unknown_signature_never_reaches_engine_source_authority() {
         let (engine, registry, _) = live_engine();
         assert_eq!(
-            plan_selected_engine_ram_write_intent(
-                engine,
-                registry,
-                b"unknown.signature",
-                256,
-                0,
-            ),
+            plan_selected_engine_ram_write_intent(engine, registry, b"unknown.signature", 256, 0,),
             Err(EngineSessionWriteIntentError::ProfileAuthority(
                 RegistryStoreError::Authority(RuntimeProfileAuthorityError::UnknownController)
             ))
