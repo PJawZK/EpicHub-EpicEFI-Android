@@ -40,6 +40,7 @@ pub mod runtime_profile_authority;
 #[cfg(test)]
 mod runtime_profile_selection_tests;
 mod runtime_snapshot;
+pub mod session_write_intent;
 mod table_projection_abi;
 mod tune_catalog_abi;
 mod tune_session;
