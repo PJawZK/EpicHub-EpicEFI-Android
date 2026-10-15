@@ -438,17 +438,18 @@ pub extern "system" fn Java_com_epicefi_epichub_engine_NativeGuardedRamWriteBrid
                 Err(status) => return status,
             };
 
-        let result = with_selected_compiled_bundle(
-            handle,
-            &signature,
-            signature_limit,
-            |bundle| match stage {
-                STAGE_PRECONDITION => verify_precondition(bundle, &transaction, &response),
-                STAGE_WRITE => verify_write_ack(bundle, &transaction, &response),
-                STAGE_READBACK => verify_readback(bundle, &transaction, &response),
-                _ => unreachable!(),
-            },
-        );
+        let result =
+            with_selected_compiled_bundle(
+                handle,
+                &signature,
+                signature_limit,
+                |bundle| match stage {
+                    STAGE_PRECONDITION => verify_precondition(bundle, &transaction, &response),
+                    STAGE_WRITE => verify_write_ack(bundle, &transaction, &response),
+                    STAGE_READBACK => verify_readback(bundle, &transaction, &response),
+                    _ => unreachable!(),
+                },
+            );
         match result {
             Ok(Ok(())) => 0,
             Ok(Err(error)) => map_verify_error(stage, error),
