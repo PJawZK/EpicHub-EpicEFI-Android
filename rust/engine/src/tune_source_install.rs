@@ -1,9 +1,10 @@
 use crate::ecu_profile::{EcuProfileResolveError, ResolvedEcuProfile};
-use crate::engine::with_tune_session;
+use crate::engine::{replace_tune_source, with_tune_session};
 use crate::mega144h7_profile::Mega144h7Profile;
 use crate::resolved_profile_source::Mega144h7ResolvedModes;
 use crate::tune_catalog_abi;
 use crate::tune_session::TuneSession;
+use crate::tune_source_image::TuneSourcePageImage;
 use crate::tuning::TuneSnapshotOrigin;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -44,14 +45,20 @@ pub fn install_imported_pages(
 }
 
 /// Installs a complete page set acquired directly from the selected live controller. Decode and
-/// validation finish before the active TuneSession is replaced, so any failure preserves the
-/// previous baseline, draft, revision and history exactly.
+/// validation finish before the active semantic TuneSession and exact source-page image are
+/// replaced together, so any failure preserves both authorities exactly.
 pub fn install_live_pages(
     handle: i64,
     profile: &dyn ResolvedEcuProfile,
     pages: &[&[u8]],
 ) -> Result<u64, TuneSourceInstallError> {
-    install_pages_with_origin(handle, profile, pages, TuneSnapshotOrigin::LiveController)
+    let snapshot = profile.resolve_pages(pages, TuneSnapshotOrigin::LiveController)?;
+    let profile_generation = snapshot.profile_generation;
+    let source_image = TuneSourcePageImage::from_pages(pages);
+    if !replace_tune_source(handle, TuneSession::from_snapshot(snapshot), source_image) {
+        return Err(TuneSourceInstallError::InvalidHandle);
+    }
+    Ok(profile_generation)
 }
 
 /// Compatibility adapter for the already-qualified Mega144H7 source boundary. New source-provider
