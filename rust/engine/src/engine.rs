@@ -130,6 +130,16 @@ impl EngineRegistry {
             .map(|engine| operation(&mut engine.tune_session))
     }
 
+    fn tune_source_authority<T>(
+        &self,
+        handle: i64,
+        operation: impl FnOnce(&TuneSession, Option<&TuneSourcePageImage>) -> T,
+    ) -> Option<T> {
+        self.engines.get(&handle).map(|engine| {
+            operation(&engine.tune_session, engine.tune_source_image.as_ref())
+        })
+    }
+
     fn replace_tune_source(
         &mut self,
         handle: i64,
@@ -195,6 +205,13 @@ pub(crate) fn with_tune_session<T>(
     operation: impl FnOnce(&mut TuneSession) -> T,
 ) -> Option<T> {
     with_registry(|registry| registry.tune_session(handle, operation))
+}
+
+pub(crate) fn with_tune_source_authority<T>(
+    handle: i64,
+    operation: impl FnOnce(&TuneSession, Option<&TuneSourcePageImage>) -> T,
+) -> Option<T> {
+    with_registry(|registry| registry.tune_source_authority(handle, operation))
 }
 
 pub(crate) fn replace_tune_source(
@@ -346,6 +363,28 @@ mod tests {
     }
 
     #[test]
+    fn source_authority_view_observes_session_and_source_under_one_registry_access() {
+        let mut registry = EngineRegistry::new();
+        let handle = registry.create();
+        let source_image = TuneSourcePageImage::from_pages(&[&[9_u8, 8, 7]]);
+        assert!(registry.replace_tune_source(
+            handle,
+            TuneSession::from_snapshot(offline_source_snapshot()),
+            source_image,
+        ));
+
+        assert_eq!(
+            registry.tune_source_authority(handle, |session, source| {
+                (
+                    session.revision(),
+                    source.unwrap().page(0).unwrap().to_vec(),
+                )
+            }),
+            Some((0, vec![9, 8, 7])),
+        );
+    }
+
+    #[test]
     fn closed_or_unknown_handle_cannot_publish_state() {
         let mut registry = EngineRegistry::new();
         let handle = registry.create();
@@ -358,12 +397,18 @@ mod tests {
                 .tune_session(handle, |session| session.revision())
                 .is_none()
         );
+        assert!(registry.tune_source_authority(handle, |_, _| ()).is_none());
         assert!(registry.tune_source_image(handle, |_| ()).is_none());
         assert!(registry.snapshot(i64::MAX).is_none());
         assert!(registry.diagnostic_batch(i64::MAX).is_none());
         assert!(
             registry
                 .tune_session(i64::MAX, |session| session.revision())
+                .is_none()
+        );
+        assert!(
+            registry
+                .tune_source_authority(i64::MAX, |_, _| ())
                 .is_none()
         );
         assert!(registry.tune_source_image(i64::MAX, |_| ()).is_none());
