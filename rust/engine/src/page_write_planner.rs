@@ -76,14 +76,15 @@ pub fn plan_page_patch_writes(
             page: patch.page,
             page_count: page_sizes.len(),
         })?;
-    let protocol = bundle
-        .protocol
-        .pages
-        .get(page_index)
-        .ok_or(PageWritePlanError::PageOutOfRange {
-            page: patch.page,
-            page_count: bundle.protocol.pages.len(),
-        })?;
+    let protocol =
+        bundle
+            .protocol
+            .pages
+            .get(page_index)
+            .ok_or(PageWritePlanError::PageOutOfRange {
+                page: patch.page,
+                page_count: bundle.protocol.pages.len(),
+            })?;
     let template = protocol
         .chunk_write_command
         .as_deref()
