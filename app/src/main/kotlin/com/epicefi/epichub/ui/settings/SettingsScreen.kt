@@ -42,6 +42,9 @@ fun SettingsScreen(
     onRefreshUsbCandidates: () -> Unit = {},
     onSelectUsbCandidate: (String) -> Unit = {},
     onRequestUsbPermission: () -> Unit = {},
+    onConnectUsbController: () -> Unit = {},
+    onDisconnectUsbController: () -> Unit = {},
+    onLoadUsbTune: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier.fillMaxSize()) {
@@ -66,7 +69,7 @@ fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     val purpose = when (group) {
-                        "Connections" -> "Persistent connection policy/preferences live here; live connect/reconnect actions belong to the connection owner."
+                        "Connections" -> "Profile authority, transport access, controller connection and read-only tune loading remain explicit separate steps."
                         "Warnings & alerts" -> "Rule definitions, thresholds, debounce/cooldown and enablement live here; active incidents/history remain observable elsewhere."
                         "Diagnostics & privacy" -> "Diagnostic capture/export/privacy policy only; diagnostics do not own subsystem control."
                         else -> "Settings surface reserved for this responsibility group."
@@ -89,13 +92,16 @@ fun SettingsScreen(
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Button(
-                                enabled = !profilePackages.busy,
+                                enabled = !profilePackages.busy && !usbController.operationBusy,
                                 onClick = onSelectProfilePackages,
                             ) {
                                 Text(if (profilePackages.hasSelection) "Replace packages" else "Select packages")
                             }
                             OutlinedButton(
-                                enabled = !profilePackages.busy && profilePackages.hasSelection,
+                                enabled =
+                                    !profilePackages.busy &&
+                                        !usbController.operationBusy &&
+                                        profilePackages.hasSelection,
                                 onClick = onClearProfilePackages,
                             ) {
                                 Text("Clear")
@@ -107,21 +113,22 @@ fun SettingsScreen(
 
                         Text("USB controller access", style = MaterialTheme.typography.titleSmall)
                         Text(
-                            "USB discovery and permission identify only a transport endpoint. Exact ECU identity is probed later before any tune is loaded.",
+                            "USB selection and permission identify only a transport endpoint. Connect probes definition-authorized queries and requires an exact installed profile match. Load tune is a separate read-only action.",
                             style = MaterialTheme.typography.bodySmall,
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedButton(
-                                enabled = !usbController.permissionPending,
+                                enabled = !usbController.operationBusy,
                                 onClick = onRefreshUsbCandidates,
                             ) {
                                 Text("Refresh USB")
                             }
-                            Button(
+                            OutlinedButton(
                                 enabled =
                                     profilePackages.hasSelection &&
                                         usbController.selectedCandidate != null &&
-                                        !usbController.permissionPending,
+                                        !usbController.operationBusy &&
+                                        !usbController.connected,
                                 onClick = onRequestUsbPermission,
                             ) {
                                 Text("Request access")
@@ -133,14 +140,16 @@ fun SettingsScreen(
                         } else {
                             usbController.candidates.forEach { candidate ->
                                 val selected = candidate.endpointId == usbController.selectedEndpointId
+                                val connected = candidate.endpointId == usbController.connectedEndpointId
                                 OutlinedButton(
-                                    enabled = !usbController.permissionPending,
+                                    enabled = !usbController.operationBusy && !connected,
                                     onClick = { onSelectUsbCandidate(candidate.endpointId) },
                                     modifier = Modifier.fillMaxWidth(),
                                 ) {
                                     Text(
                                         buildString {
-                                            if (selected) append("Selected · ")
+                                            if (connected) append("Connected · ")
+                                            else if (selected) append("Selected · ")
                                             append(candidate.displayName ?: candidate.endpointId)
                                         },
                                     )
@@ -148,9 +157,49 @@ fun SettingsScreen(
                             }
                         }
 
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (usbController.connected) {
+                                OutlinedButton(
+                                    enabled = !usbController.operationBusy,
+                                    onClick = onDisconnectUsbController,
+                                ) {
+                                    Text("Disconnect")
+                                }
+                                Button(
+                                    enabled = !usbController.operationBusy,
+                                    onClick = onLoadUsbTune,
+                                ) {
+                                    Text(if (usbController.loadBusy) "Loading…" else "Load tune")
+                                }
+                            } else {
+                                Button(
+                                    enabled =
+                                        profilePackages.hasSelection &&
+                                            usbController.selectedCandidate != null &&
+                                            !usbController.operationBusy,
+                                    onClick = onConnectUsbController,
+                                ) {
+                                    Text(if (usbController.connectionBusy) "Connecting…" else "Connect")
+                                }
+                            }
+                        }
+
+                        usbController.connectedSignature?.let { signature ->
+                            Text(
+                                "Authorized controller: $signature",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                        usbController.connectedProfileGeneration?.let { generation ->
+                            Text(
+                                "Profile generation: $generation",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+
                         if (!profilePackages.hasSelection) {
                             Text(
-                                "Select at least one ECU profile package before requesting controller access.",
+                                "Select at least one ECU profile package before requesting access or connecting.",
                                 style = MaterialTheme.typography.bodySmall,
                             )
                         }
