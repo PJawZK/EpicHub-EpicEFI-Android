@@ -144,6 +144,7 @@ impl EngineRegistry {
         true
     }
 
+    #[cfg(test)]
     fn tune_source_image<T>(
         &mut self,
         handle: i64,
@@ -178,7 +179,7 @@ pub fn engine_is_alive(handle: i64) -> bool {
 }
 
 pub fn active_engine_count() -> i32 {
-    with_registry(|registry| registry.active_count())
+    with_registry(EngineRegistry::active_count)
 }
 
 pub fn runtime_snapshot(handle: i64) -> Option<[u8; RUNTIME_SNAPSHOT_SIZE]> {
@@ -204,6 +205,7 @@ pub(crate) fn replace_tune_source(
     with_registry(|registry| registry.replace_tune_source(handle, session, source_image))
 }
 
+#[cfg(test)]
 pub(crate) fn with_tune_source_image<T>(
     handle: i64,
     operation: impl FnOnce(Option<&TuneSourcePageImage>) -> T,
