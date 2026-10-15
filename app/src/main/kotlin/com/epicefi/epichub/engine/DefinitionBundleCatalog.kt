@@ -40,6 +40,7 @@ internal fun interface DefinitionBundleRegistryFactory {
 
 class DefinitionBundleRegistryOwner private constructor(
     private val registry: DefinitionBundleRegistry,
+    private val selectedBundles: List<DefinitionBundleImport>,
 ) : AutoCloseable {
     val isAlive: Boolean
         get() = registry.isAlive
@@ -47,6 +48,8 @@ class DefinitionBundleRegistryOwner private constructor(
     internal fun requireNativeRegistry(): NativeProfileRegistry =
         (registry as? NativeDefinitionBundleRegistry)?.registry
             ?: error("This definition-bundle registry owner is not backed by a native registry.")
+
+    internal fun definitionBundles(): List<DefinitionBundleImport> = selectedBundles
 
     override fun close() {
         registry.close()
@@ -62,7 +65,7 @@ class DefinitionBundleRegistryOwner private constructor(
         ): DefinitionBundleCatalogOpenResult {
             val bundles =
                 try {
-                    catalog.bundles()
+                    catalog.bundles().toList()
                 } catch (error: Exception) {
                     return catalogFailure(error)
                 }
@@ -100,7 +103,7 @@ class DefinitionBundleRegistryOwner private constructor(
             }
 
             return DefinitionBundleCatalogOpenResult.Opened(
-                registry = DefinitionBundleRegistryOwner(candidate),
+                registry = DefinitionBundleRegistryOwner(candidate, bundles),
                 importedBundleCount = bundles.size,
             )
         }
