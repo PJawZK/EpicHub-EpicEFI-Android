@@ -1,7 +1,12 @@
 package com.epicefi.epichub.ui.settings
 
+import com.epicefi.epichub.engine.LiveTuneOwnerLoadResult
+import com.epicefi.epichub.engine.UsbReadOnlyTuneLoadResult
+import com.epicefi.epichub.engine.ValidatedRuntimeIdentity
 import com.epicefi.epichub.platform.transport.TransportCandidate
 import com.epicefi.epichub.platform.transport.TransportKind
+import com.epicefi.epichub.platform.transport.usb.AndroidUsbLiveConnectResult
+import com.epicefi.epichub.platform.transport.usb.AndroidUsbLiveLoadResult
 import com.epicefi.epichub.platform.transport.usb.UsbPermissionRequestCompletion
 import com.epicefi.epichub.platform.transport.usb.UsbPermissionRequestStartResult
 import com.epicefi.epichub.platform.transport.usb.UsbPermissionTarget
@@ -32,6 +37,7 @@ class UsbControllerSettingsStateTest {
         assertEquals(2, state.candidates.size)
         assertNull(state.selectedCandidate)
         assertFalse(state.permissionPending)
+        assertFalse(state.connected)
     }
 
     @Test
@@ -75,8 +81,78 @@ class UsbControllerSettingsStateTest {
             ).permissionCompleted(UsbPermissionRequestCompletion.Granted(target))
 
         assertFalse(state.permissionPending)
+        assertFalse(state.connected)
         assertEquals(first, state.selectedCandidate)
-        assertTrue(state.message.orEmpty().contains("separate action"))
+        assertTrue(state.message.orEmpty().contains("Use Connect"))
+    }
+
+    @Test
+    fun successfulConnectTracksExactEndpointIdentityAndProfileWithoutClaimingTuneLoad() {
+        val state =
+            UsbControllerSettingsState(candidates = listOf(first), selectedEndpointId = first.endpointId)
+                .connectionStarted()
+                .connectionCompleted(
+                    AndroidUsbLiveConnectResult.Connected(
+                        endpointId = first.endpointId,
+                        identity = ValidatedRuntimeIdentity("exact.signature"),
+                        profileGeneration = 42L,
+                    ),
+                )
+
+        assertTrue(state.connected)
+        assertEquals(first.endpointId, state.connectedEndpointId)
+        assertEquals("exact.signature", state.connectedSignature)
+        assertEquals(42L, state.connectedProfileGeneration)
+        assertFalse(state.connectionBusy)
+        assertFalse(state.loadBusy)
+        assertTrue(state.message.orEmpty().contains("not loaded yet"))
+    }
+
+    @Test
+    fun successfulLoadKeepsConnectionAndReportsAtomicPageInstall() {
+        val connected =
+            UsbControllerSettingsState(
+                candidates = listOf(first),
+                selectedEndpointId = first.endpointId,
+                connectedEndpointId = first.endpointId,
+                connectedSignature = "exact.signature",
+                connectedProfileGeneration = 42L,
+            )
+
+        val loaded =
+            connected.loadStarted().loadCompleted(
+                AndroidUsbLiveLoadResult.Completed(
+                    LiveTuneOwnerLoadResult.Completed(
+                        UsbReadOnlyTuneLoadResult.Loaded(
+                            profileGeneration = 42L,
+                            pageCount = 2,
+                        ),
+                    ),
+                ),
+            )
+
+        assertTrue(loaded.connected)
+        assertFalse(loaded.loadBusy)
+        assertTrue(loaded.message.orEmpty().contains("2 page(s)"))
+    }
+
+    @Test
+    fun disconnectClearsOnlyLiveConnectionMetadata() {
+        val state =
+            UsbControllerSettingsState(
+                candidates = listOf(first),
+                selectedEndpointId = first.endpointId,
+                connectedEndpointId = first.endpointId,
+                connectedSignature = "exact.signature",
+                connectedProfileGeneration = 42L,
+                message = "old",
+            ).disconnected()
+
+        assertFalse(state.connected)
+        assertEquals(first.endpointId, state.selectedEndpointId)
+        assertNull(state.connectedSignature)
+        assertNull(state.connectedProfileGeneration)
+        assertTrue(state.message.orEmpty().contains("detached"))
     }
 
     @Test
