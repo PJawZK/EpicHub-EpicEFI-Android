@@ -1,10 +1,5 @@
-use crate::ecu_profile::ResolvedEcuProfile;
-use crate::engine::replace_tune_source;
 use crate::profile_registry_store::{RegistryStoreError, with_selected_compiled_bundle};
-use crate::tune_session::TuneSession;
-use crate::tune_source_image::TuneSourcePageImage;
-use crate::tune_source_install::TuneSourceInstallError;
-use crate::tuning::TuneSnapshotOrigin;
+use crate::tune_source_install::{TuneSourceInstallError, install_live_pages};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum LiveTuneInstallError {
@@ -23,22 +18,7 @@ pub fn install_selected_live_pages(
         registry_handle,
         runtime_signature_response,
         max_signature_response_bytes,
-        |bundle| {
-            let snapshot = bundle
-                .profile
-                .resolve_pages(pages, TuneSnapshotOrigin::LiveController)
-                .map_err(TuneSourceInstallError::Resolve)?;
-            let profile_generation = snapshot.profile_generation;
-            let source_image = TuneSourcePageImage::from_pages(pages);
-            if !replace_tune_source(
-                engine_handle,
-                TuneSession::from_snapshot(snapshot),
-                source_image,
-            ) {
-                return Err(TuneSourceInstallError::InvalidHandle);
-            }
-            Ok(profile_generation)
-        },
+        |bundle| install_live_pages(engine_handle, &bundle.profile, pages),
     )
     .map_err(LiveTuneInstallError::ProfileAuthority)?
     .map_err(LiveTuneInstallError::Install)
@@ -103,6 +83,7 @@ pageReadCommand = "R%2i%2o%2c"
             install_selected_live_pages(engine, registry, SIGNATURE.as_bytes(), 256, &[&page])
                 .unwrap();
         page[7] = 0x5A;
+        assert_eq!(page[7], 0x5A);
 
         assert_eq!(generation, 4_242);
         with_tune_session(engine, |session| {
@@ -127,7 +108,7 @@ pageReadCommand = "R%2i%2o%2c"
     }
 
     #[test]
-    fn local_draft_edits_do_not_mutate_the_retained_source_image() {
+    fn retained_source_image_is_stable_after_install() {
         let engine = create_engine();
         let registry = create_profile_registry();
         register_definition_bundle_import(registry, &bundle_import()).unwrap();
