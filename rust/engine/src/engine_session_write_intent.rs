@@ -20,7 +20,7 @@ pub fn plan_selected_engine_ram_write_intent(
     max_signature_response_bytes: usize,
     expected_draft_revision: u64,
 ) -> Result<SessionRamWriteIntent, EngineSessionWriteIntentError> {
-    let planned = with_selected_compiled_bundle(
+    with_selected_compiled_bundle(
         registry_handle,
         runtime_signature_response,
         max_signature_response_bytes,
@@ -40,9 +40,7 @@ pub fn plan_selected_engine_ram_write_intent(
             .ok_or(EngineSessionWriteIntentError::InvalidEngineHandle)?
         },
     )
-    .map_err(EngineSessionWriteIntentError::ProfileAuthority)?;
-
-    planned
+    .map_err(EngineSessionWriteIntentError::ProfileAuthority)?
 }
 
 #[cfg(test)]
