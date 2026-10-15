@@ -179,7 +179,7 @@ pub fn engine_is_alive(handle: i64) -> bool {
 }
 
 pub fn active_engine_count() -> i32 {
-    with_registry(EngineRegistry::active_count)
+    with_registry(|registry| registry.active_count())
 }
 
 pub fn runtime_snapshot(handle: i64) -> Option<[u8; RUNTIME_SNAPSHOT_SIZE]> {
