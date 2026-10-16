@@ -8,6 +8,8 @@ private const val TABLE_PROJECTION_ABI_VERSION = 1
 private const val TABLE_PROJECTION_HEADER_SIZE = 112
 const val TABLE_PROJECTION_FLAG_OFFLINE = 1 shl 0
 const val TABLE_PROJECTION_FLAG_FIXTURE = 1 shl 1
+private const val TABLE_PROJECTION_KNOWN_FLAGS =
+    TABLE_PROJECTION_FLAG_OFFLINE or TABLE_PROJECTION_FLAG_FIXTURE
 
 internal const val NATIVE_BUFFER_STATUS_OK = 0
 
@@ -33,6 +35,22 @@ data class TunerTableProjection(
 ) {
     val isOffline: Boolean get() = flags and TABLE_PROJECTION_FLAG_OFFLINE != 0
     val isFixture: Boolean get() = flags and TABLE_PROJECTION_FLAG_FIXTURE != 0
+}
+
+internal fun validateTunerProjectionOrigin(originCode: Int, flags: Int) {
+    require(flags and TABLE_PROJECTION_KNOWN_FLAGS.inv() == 0) {
+        "Table projection carries unsupported flags 0x${flags.toUInt().toString(16)}."
+    }
+    val expectedFlags =
+        when (originCode) {
+            1 -> TABLE_PROJECTION_FLAG_OFFLINE or TABLE_PROJECTION_FLAG_FIXTURE
+            2 -> TABLE_PROJECTION_FLAG_OFFLINE
+            3 -> 0
+            else -> throw IllegalArgumentException("Table projection origin $originCode is unknown.")
+        }
+    require(flags == expectedFlags) {
+        "Table projection origin $originCode conflicts with flags 0x${flags.toUInt().toString(16)}."
+    }
 }
 
 internal object TunerTableProjectionDecoder {
@@ -69,6 +87,7 @@ internal object TunerTableProjectionDecoder {
         val valuesOffset = buffer.getInt(104)
         val editableOffset = buffer.getInt(108)
 
+        validateTunerProjectionOrigin(originCode, flags)
         require(rows > 0 && cols > 0) { "Invalid table dimensions $rows x $cols." }
         require(displayDecimals in 0..9) { "Invalid display precision $displayDecimals." }
         require(nameLength >= 0) { "Negative table name length." }
