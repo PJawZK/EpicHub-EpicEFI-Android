@@ -44,6 +44,13 @@ class NativeEngine private constructor(initialHandle: Long) : Closeable {
     fun readTuneCatalog(): TunerTableCatalog = tuneCatalogBuffer.read(requireNativeHandle())
 
     @Synchronized
+    fun readTuneSessionEpoch(): Long {
+        val epoch = NativeEngineBridge.tuneSessionEpoch(requireNativeHandle())
+        check(epoch > 0L) { "Native TuneSession epoch is unavailable." }
+        return epoch
+    }
+
+    @Synchronized
     fun readRamSynchronizationState(): RamSynchronizationState? =
         ramSynchronizationStateBuffer.read(requireNativeHandle())
 
@@ -127,6 +134,7 @@ object NativeEngineBridge {
     external fun fillRuntimeSnapshot(handle: Long, buffer: ByteBuffer): Int
     external fun fillDiagnosticEvents(handle: Long, buffer: ByteBuffer): Int
     external fun fillRamSourceState(handle: Long, buffer: ByteBuffer): Int
+    external fun tuneSessionEpoch(handle: Long): Long
 
     external fun installMega144h7ImportedTunePages(
         handle: Long,
