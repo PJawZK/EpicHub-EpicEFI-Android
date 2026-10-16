@@ -145,12 +145,9 @@ impl EngineRegistry {
         handle: i64,
         operation: impl FnOnce(&TuneSession, Option<&mut TuneSourcePageImage>) -> T,
     ) -> Option<T> {
-        self.engines.get_mut(&handle).map(|engine| {
-            operation(
-                &engine.tune_session,
-                engine.tune_source_image.as_mut(),
-            )
-        })
+        self.engines
+            .get_mut(&handle)
+            .map(|engine| operation(&engine.tune_session, engine.tune_source_image.as_mut()))
     }
 
     fn replace_tune_source(
@@ -451,7 +448,11 @@ mod tests {
                 .is_none()
         );
         assert!(registry.tune_source_authority(handle, |_, _| ()).is_none());
-        assert!(registry.tune_source_authority_mut(handle, |_, _| ()).is_none());
+        assert!(
+            registry
+                .tune_source_authority_mut(handle, |_, _| ())
+                .is_none()
+        );
         assert!(registry.tune_source_image(handle, |_| ()).is_none());
         assert!(registry.snapshot(i64::MAX).is_none());
         assert!(registry.diagnostic_batch(i64::MAX).is_none());
