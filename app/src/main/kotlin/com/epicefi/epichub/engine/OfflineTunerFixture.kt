@@ -338,7 +338,7 @@ internal class TunerSessionClient(
         rectangle: TunerRectangle,
         step: TunerCellStep,
         expectedRevision: Long,
-    ): TunerTableProjection = applied(
+    ): TunerTableProjection = mutate("rectangle edit") {
         NativeEngineBridge.applyTuneRectangleStep(
             handle,
             tableId,
@@ -348,9 +348,8 @@ internal class TunerSessionClient(
             rectangle.focusCol,
             step.nativeCode,
             expectedRevision,
-        ),
-        "rectangle edit",
-    )
+        )
+    }
 
     fun previewRectangleNumeric(
         rectangle: TunerRectangle,
@@ -375,7 +374,7 @@ internal class TunerSessionClient(
         operation: TunerNumericOperation,
         operand: String,
         expectedRevision: Long,
-    ): TunerTableProjection = applied(
+    ): TunerTableProjection = mutate("numeric edit") {
         NativeEngineBridge.applyTuneRectangleNumeric(
             handle,
             tableId,
@@ -386,9 +385,8 @@ internal class TunerSessionClient(
             operation.nativeCode,
             operand,
             expectedRevision,
-        ),
-        "numeric edit",
-    )
+        )
+    }
 
     fun previewInterpolation(
         rectangle: TunerRectangle,
@@ -410,7 +408,7 @@ internal class TunerSessionClient(
         rectangle: TunerRectangle,
         mode: TunerInterpolationMode,
         expectedRevision: Long,
-    ): TunerTableProjection = applied(
+    ): TunerTableProjection = mutate("interpolation") {
         NativeEngineBridge.applyTuneInterpolation(
             handle,
             tableId,
@@ -420,9 +418,8 @@ internal class TunerSessionClient(
             rectangle.focusCol,
             mode.nativeCode,
             expectedRevision,
-        ),
-        "interpolation",
-    )
+        )
+    }
 
     fun previewSmoothing(
         rectangle: TunerRectangle,
@@ -444,7 +441,7 @@ internal class TunerSessionClient(
         rectangle: TunerRectangle,
         strengthPercent: String,
         expectedRevision: Long,
-    ): TunerTableProjection = applied(
+    ): TunerTableProjection = mutate("smoothing") {
         NativeEngineBridge.applyTuneSmoothing(
             handle,
             tableId,
@@ -454,9 +451,8 @@ internal class TunerSessionClient(
             rectangle.focusCol,
             strengthPercent,
             expectedRevision,
-        ),
-        "smoothing",
-    )
+        )
+    }
 
     fun previewBrushPull(
         rectangle: TunerRectangle,
@@ -490,7 +486,7 @@ internal class TunerSessionClient(
         strengthPercent: String,
         falloffExponent: String,
         expectedRevision: Long,
-    ): TunerTableProjection = applied(
+    ): TunerTableProjection = mutate("Brush/Pull edit") {
         NativeEngineBridge.applyTuneBrushPull(
             handle,
             tableId,
@@ -504,9 +500,8 @@ internal class TunerSessionClient(
             strengthPercent,
             falloffExponent,
             expectedRevision,
-        ),
-        "Brush/Pull edit",
-    )
+        )
+    }
 
     fun previewBrushPath(
         path: List<TunerBrushPathPoint>,
@@ -534,7 +529,7 @@ internal class TunerSessionClient(
         strengthPercent: String,
         falloffExponent: String,
         expectedRevision: Long,
-    ): TunerTableProjection = applied(
+    ): TunerTableProjection = mutate("Brush path edit") {
         NativeEngineBridge.applyTuneBrushPath(
             handle,
             tableId,
@@ -544,19 +539,16 @@ internal class TunerSessionClient(
             strengthPercent,
             falloffExponent,
             expectedRevision,
-        ),
-        "Brush path edit",
-    )
+        )
+    }
 
-    fun undoProjection(): TunerTableProjection = applied(
-        NativeEngineBridge.undoTune(handle),
-        "undo",
-    )
+    fun undoProjection(): TunerTableProjection = mutate("undo") {
+        NativeEngineBridge.undoTune(handle)
+    }
 
-    fun redoProjection(): TunerTableProjection = applied(
-        NativeEngineBridge.redoTune(handle),
-        "redo",
-    )
+    fun redoProjection(): TunerTableProjection = mutate("redo") {
+        NativeEngineBridge.redoTune(handle)
+    }
 
     private fun preview(nativeCall: (ByteBuffer) -> Int): TunerTableProjection {
         val buffer = projectionBuffer()
@@ -566,6 +558,14 @@ internal class TunerSessionClient(
         }
         return TunerTableProjectionDecoder.decode(buffer)
     }
+
+    private fun mutate(
+        operation: String,
+        nativeCall: () -> Long,
+    ): TunerTableProjection =
+        EngineAuthoritySerialization.exclusive {
+            applied(nativeCall(), operation)
+        }
 
     private fun applied(revision: Long, operation: String): TunerTableProjection {
         check(revision >= 0L) { "TuneSession $operation was rejected or stale." }
