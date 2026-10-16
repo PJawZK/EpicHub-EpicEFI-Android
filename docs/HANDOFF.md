@@ -20,11 +20,11 @@ Every meaningful `current-work` checkpoint must pass the complete Foundation wor
 
 The latest fully qualified implementation checkpoint before this handoff update is:
 
-`a5ea66476561390e6f70775449c28c013fbdf7ce`
+`2a8032ca22200184fa294f544b95f9843feb5b99`
 
 Foundation quality run:
 
-`38895119391`
+`38899348184`
 
 That exact SHA passed the complete Foundation gate:
 
@@ -43,11 +43,20 @@ That exact SHA passed the complete Foundation gate:
 
 `main` was advanced to that exact qualified SHA before this documentation update.
 
-The preceding qualified boundaries that matter to this slice are:
+The preceding qualified boundary for the visible volatile-RAM workflow remains:
 
-- `0837b8840791507f53ae69e9b829dd6b3118cbf6`, Foundation `38883369329` — high-level current-draft RAM-write orchestration through the retained authorized USB channel;
-- `1c0d58bdc8fb628f1e229a138aa84076f8601848`, Foundation `38893329201` — app-facing `RamWriteControlState` and exact outcome mapping;
 - `a5ea66476561390e6f70775449c28c013fbdf7ce`, Foundation `38895119391` — visible Tuner RAM status/control workflow wired end to end.
+
+The current qualified source-presentation slice adds:
+
+- source-aware Tuner Authority presentation derived from the native table projection rather than hardcoded offline labels;
+- explicit presentation for verified live-controller source, imported tune source, offline fixture, and unavailable TuneSession;
+- direct `TunerScreen` use of `ActiveTunerTable` rather than the legacy `OfflineTunerFixture` compatibility name;
+- fail-closed Kotlin ABI validation for the Rust-defined projection `originCode` + source-flag combinations;
+- rejection of unknown source origins, unknown flag bits, and contradictory origin/flag combinations before the UI can label a source;
+- focused JVM tests for source presentation and ABI validation.
+
+A failed intermediate run (`38898814313`) is historical evidence only: production Kotlin compiled, but the newly added tests initially used `kotlin.test` while this project uses JUnit. The test imports were corrected; the final exact SHA above is the qualified authority.
 
 This handoff update creates a newer `current-work` SHA. It must pass Foundation before `main` advances again.
 
@@ -77,6 +86,10 @@ verified live page acquisition
 exact retained TuneSourcePageImage + RAM provenance
     +
 atomic semantic TuneSession install
+    ↓
+native tune catalog + source-aware table projection ABI
+    ↓
+ActiveTunerTable / TunerScreen
     ↓
 engine-owned TuneDraft / 2D + 3D editor
     ↓
@@ -123,6 +136,33 @@ The visible RAM workflow changes only volatile ECU RAM. It does not Burn/persist
 
 ---
 
+# Tune source presentation authority
+
+The Tuner must not infer source authority from USB VID/PID, family labels, table names, or connection-looking UI state.
+
+The active table projection ABI carries the Rust-owned TuneSession origin:
+
+- origin `1` + `OFFLINE | FIXTURE` = offline fixture;
+- origin `2` + `OFFLINE` = imported file;
+- origin `3` + no source flags = verified live-controller TuneSession.
+
+Kotlin validates those exact combinations before exposing `TunerTableProjection`. Unknown origins, unknown source bits, or contradictory combinations fail closed.
+
+`TunerAuthorityPresentation` then maps only the validated projection into user-facing wording. It does not create authority.
+
+Current presentation semantics:
+
+- live controller: verified live-controller source, but local Apply still changes only the semantic draft;
+- imported tune: local/offline source with no live RAM authority implied;
+- fixture: test/local source only;
+- unavailable projection: no active TuneSession claim.
+
+The table subtitle uses the same validated source presentation.
+
+`OfflineTunerFixture` still exists only as a compatibility alias for older callers/tests. New Tuner UI code should use `ActiveTunerTable` or a future catalog/table-selection owner, not add new dependencies on the compatibility name.
+
+---
+
 # Generic ECU / authority invariants
 
 Do not regress these:
@@ -139,7 +179,8 @@ Do not regress these:
 - exact retained pages remain raw byte authority beside the semantic session;
 - write geometry comes from the exact selected definition/bundle, never Android/UI offsets;
 - Android cannot construct arbitrary page/offset writes;
-- stale profile generation, draft revision, or retained source fails closed.
+- stale profile generation, draft revision, or retained source fails closed;
+- source presentation must be derived from validated native semantic authority, not transport heuristics.
 
 ---
 
@@ -167,18 +208,11 @@ Important rules:
 - mandatory readback remains the confirmation authority;
 - Burn/persistence is not implied by any RAM state.
 
-The Tuner RAM panel is deliberately gated by both:
-
-- an active connected USB session; and
-- `LiveTuneSourceLifecycleState.Live` after a fresh load.
-
-Therefore disconnect/reconnect cannot re-expose retained RAM provenance as current live state until the controller has been freshly exact-authorized and loaded again.
+The Tuner RAM panel is deliberately gated by both an active connected USB session and `LiveTuneSourceLifecycleState.Live` after a fresh load. Disconnect/reconnect therefore cannot re-expose retained RAM provenance as current live state until the controller has been freshly exact-authorized and loaded again.
 
 ---
 
 # Qualified user-facing Write-to-RAM workflow
-
-The first explicit volatile RAM workflow is now present in the Tuner workspace.
 
 Ownership path:
 
@@ -195,20 +229,12 @@ Tuner panel
 
 The UI never receives raw page numbers, offsets, write request bytes, or definition geometry.
 
-The control behavior is intentionally contextual:
+Control behavior:
 
 - fresh/current confirmed RAM state: action disabled and presented as RAM current;
 - local draft ahead of confirmed RAM: `Write draft to RAM`;
 - partial or zero-prefix interrupted write: `Retry write to RAM`;
-- no verified live RAM authority: write action unavailable;
-- while a write is active, settings/profile/USB control actions that could compete with it are blocked at the app workflow boundary.
-
-The result presentation preserves native/transport truth:
-
-- complete reconciliation reports exact verified transaction count;
-- interrupted writes report the reconciled verified prefix and original transport/authority failure;
-- reconciliation rejection reports its exact native reason;
-- unavailable post-write RAM state makes no synchronization claim.
+- no verified live RAM authority: write action unavailable.
 
 Visible wording explicitly says the operation affects **volatile ECU RAM only** and that Burn/persistence is separate and not performed.
 
@@ -216,7 +242,7 @@ Visible wording explicitly says the operation affects **volatile ECU RAM only** 
 
 # Authorization → USB-transfer serialization
 
-`EngineAuthoritySerialization` closes the former mutation race between native currentness authorization and physical USB I/O.
+`EngineAuthoritySerialization` closes the mutation race between native currentness authorization and physical USB I/O.
 
 The real guarded executor holds the shared fair reentrant gate continuously across:
 
@@ -226,7 +252,7 @@ JIT native authorization
 → verified-prefix native reconciliation
 ```
 
-Current authority-mutating paths use the same gate, including Apply, Undo/Redo, source/session installation, profile imports/close, and the covered engine/source replacement paths.
+Current authority-mutating paths use the same gate, including Apply, Undo/Redo, source/session installation, profile imports/close, and covered engine/source replacement paths.
 
 Do not bypass these app-level gated mutation wrappers with direct bridge mutations.
 
@@ -243,16 +269,26 @@ Do not bypass these app-level gated mutation wrappers with direct bridge mutatio
 
 # Immediate next work
 
-The volatile Write-to-RAM vertical slice is complete. Do **not** rebuild it.
+The stale offline-only Tuner authority presentation is complete. Do **not** rebuild it.
 
-Next, tighten the surrounding Tuner presentation before introducing Burn:
+The next concrete Tuner limitation is catalog/table selection:
 
-1. remove remaining stale offline-only wording in `TunerScreen` (for example the Authority card currently still describes the editor as an offline fixture even when the active session is live);
-2. derive source/authority presentation from the existing native catalog/projection/live lifecycle rather than hardcoded labels;
-3. keep the new RAM panel compact and context-sensitive so it guides the next meaningful action without adding visible complexity;
-4. add focused UI/state tests where useful for the five RAM-state presentations and action enablement;
-5. preserve local Apply vs RAM write separation in both wording and interaction;
-6. only after this presentation/state cleanup should Burn/persistence be designed as a separate explicit capability with its own authority, verification, safety UX, and failure semantics.
+- `ActiveTunerTable.activeEntry()` currently chooses the first native catalog entry;
+- that first entry is deterministic because the native catalog is sorted by semantic table ID;
+- this preserves the old single-table screen, but it is not yet a real multi-table tuning workflow.
+
+Proceed with the smallest catalog-driven multi-table selection slice before Burn work:
+
+1. inspect `TunerTableCatalog`, catalog ABI, `ActiveTunerTable`, and current Tuner state ownership;
+2. add explicit semantic table selection based only on native catalog entries — never hardcoded table IDs/names or ECU-family branching;
+3. preserve one engine-owned TuneSession and shared draft/history across table changes;
+4. ensure changing the selected table cancels/rejects stale previews/selections rather than accidentally applying them to another table;
+5. keep 2D and 3D as peer views of the selected semantic table;
+6. design the selector to remain compact and progressive rather than turning the Tuner into a large always-visible table list;
+7. retain `OfflineTunerFixture` only as compatibility where still required; do not use it for new UI work;
+8. add focused tests for table-selection authority and stale-selection/preview behavior.
+
+Do not begin Burn/persistence until this catalog-driven Tuner flow is coherent. Burn remains a later, separate explicit capability with its own definition-owned authority, verification, safety UX, and failure semantics.
 
 Do not make Burn a side effect of Write to RAM and do not add a combined Apply/Write/Burn action.
 
