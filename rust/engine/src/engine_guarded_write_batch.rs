@@ -536,7 +536,8 @@ table = valuesTable, valuesMap, "Values", 1
     }
 
     #[test]
-    fn incomplete_reconciliation_clears_whole_draft_confirmation_without_changing_unverified_bytes() {
+    fn incomplete_reconciliation_clears_whole_draft_confirmation_without_changing_unverified_bytes()
+    {
         let (engine, registry, original_page) = live_engine();
         with_tune_session(engine, |session| {
             session
