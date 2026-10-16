@@ -19,6 +19,7 @@ mod engine;
 pub mod engine_guarded_burn;
 pub mod engine_guarded_write_batch;
 pub mod engine_session_write_intent;
+pub mod guarded_burn_transport;
 pub mod guarded_write_batch_store;
 mod jni_definition_probe_plan;
 mod jni_engine;
