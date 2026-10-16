@@ -31,6 +31,8 @@ private const val BATCH_READBACK_MISMATCH = -23
 private const val BATCH_ENVELOPE_FAILURE = -24
 private const val BATCH_INVALID_ARGUMENT = -25
 private const val BATCH_REGISTRY_FAILURE = -26
+private const val BATCH_INVALID_VERIFIED_PREFIX = -27
+private const val BATCH_SOURCE_RECONCILIATION_FAILURE = -28
 
 private const val STAGE_PRECONDITION = 0
 private const val STAGE_WRITE = 1
@@ -64,6 +66,29 @@ enum class GuardedWriteBatchRejection {
     NativeFailure,
 }
 
+enum class GuardedWriteBatchReconciliationRejection {
+    InvalidHandle,
+    InvalidArgument,
+    InvalidResponseLimit,
+    EmptySignature,
+    InvalidUtf8,
+    ResponseTooLarge,
+    UnknownController,
+    RecognizedControllerWithoutProfile,
+    MissingCompiledBundle,
+    InvalidEngine,
+    MissingSourceImage,
+    NonLiveControllerSource,
+    StaleDraftRevision,
+    StaleProfileGeneration,
+    SourceImageChanged,
+    PlanFailure,
+    RegistryFailure,
+    InvalidVerifiedPrefix,
+    SourceReconciliationFailure,
+    NativeFailure,
+}
+
 data class GuardedWriteBatchMetadata(
     val profileGeneration: Long,
     val draftRevision: Long,
@@ -83,6 +108,14 @@ internal sealed interface GuardedWriteBatchStageResult {
 internal sealed interface GuardedWriteBatchVerifyResult {
     data object Verified : GuardedWriteBatchVerifyResult
     data class Rejected(val reason: GuardedWriteBatchRejection) : GuardedWriteBatchVerifyResult
+}
+
+internal sealed interface GuardedWriteBatchReconciliationResult {
+    data object Reconciled : GuardedWriteBatchReconciliationResult
+
+    data class Rejected(
+        val reason: GuardedWriteBatchReconciliationRejection,
+    ) : GuardedWriteBatchReconciliationResult
 }
 
 internal interface NativeGuardedWriteBatchOps {
@@ -125,6 +158,16 @@ internal interface NativeGuardedWriteBatchOps {
         stage: Int,
         responseBuffer: ByteBuffer,
         responseLength: Int,
+    ): Int
+
+    fun reconcileVerifiedPrefix(
+        batchHandle: Long,
+        engineHandle: Long,
+        registryHandle: Long,
+        signatureBuffer: ByteBuffer,
+        signatureLength: Int,
+        signatureLimit: Int,
+        verifiedTransactionCount: Int,
     ): Int
 }
 
@@ -227,6 +270,39 @@ class NativeGuardedWriteBatch private constructor(
             GuardedWriteBatchVerifyResult.Verified
         } else {
             GuardedWriteBatchVerifyResult.Rejected(mapStatus(status))
+        }
+    }
+
+    @Synchronized
+    internal fun reconcileVerifiedPrefix(
+        verifiedTransactionCount: Int,
+    ): GuardedWriteBatchReconciliationResult {
+        val currentHandle = handle
+        if (currentHandle <= 0L) {
+            return GuardedWriteBatchReconciliationResult.Rejected(
+                GuardedWriteBatchReconciliationRejection.InvalidHandle,
+            )
+        }
+        if (verifiedTransactionCount < 0 || verifiedTransactionCount > metadata.transactionCount) {
+            return GuardedWriteBatchReconciliationResult.Rejected(
+                GuardedWriteBatchReconciliationRejection.InvalidVerifiedPrefix,
+            )
+        }
+
+        val status =
+            ops.reconcileVerifiedPrefix(
+                currentHandle,
+                engineHandleProvider(),
+                registryHandleProvider(),
+                directBuffer(signatureResponse),
+                signatureResponse.size,
+                signatureLimit,
+                verifiedTransactionCount,
+            )
+        return if (status == 0) {
+            GuardedWriteBatchReconciliationResult.Reconciled
+        } else {
+            GuardedWriteBatchReconciliationResult.Rejected(mapReconciliationStatus(status))
         }
     }
 
@@ -358,6 +434,43 @@ class NativeGuardedWriteBatch private constructor(
                 else -> GuardedWriteBatchRejection.NativeFailure
             }
 
+        private fun mapReconciliationStatus(
+            status: Int,
+        ): GuardedWriteBatchReconciliationRejection =
+            when (status) {
+                BATCH_INVALID_HANDLE -> GuardedWriteBatchReconciliationRejection.InvalidHandle
+                BATCH_INVALID_LIMIT -> GuardedWriteBatchReconciliationRejection.InvalidResponseLimit
+                BATCH_EMPTY_SIGNATURE -> GuardedWriteBatchReconciliationRejection.EmptySignature
+                BATCH_INVALID_UTF8 -> GuardedWriteBatchReconciliationRejection.InvalidUtf8
+                BATCH_TOO_LARGE -> GuardedWriteBatchReconciliationRejection.ResponseTooLarge
+                BATCH_UNKNOWN_CONTROLLER -> GuardedWriteBatchReconciliationRejection.UnknownController
+                BATCH_RECOGNIZED_NO_PROFILE ->
+                    GuardedWriteBatchReconciliationRejection.RecognizedControllerWithoutProfile
+                BATCH_MISSING_BUNDLE ->
+                    GuardedWriteBatchReconciliationRejection.MissingCompiledBundle
+                BATCH_INVALID_ENGINE -> GuardedWriteBatchReconciliationRejection.InvalidEngine
+                BATCH_MISSING_SOURCE -> GuardedWriteBatchReconciliationRejection.MissingSourceImage
+                BATCH_NON_LIVE_SOURCE ->
+                    GuardedWriteBatchReconciliationRejection.NonLiveControllerSource
+                BATCH_STALE_REVISION ->
+                    GuardedWriteBatchReconciliationRejection.StaleDraftRevision
+                BATCH_STALE_PROFILE ->
+                    GuardedWriteBatchReconciliationRejection.StaleProfileGeneration
+                BATCH_SOURCE_CHANGED ->
+                    GuardedWriteBatchReconciliationRejection.SourceImageChanged
+                BATCH_PLAN_FAILURE -> GuardedWriteBatchReconciliationRejection.PlanFailure
+                BATCH_REGISTRY_FAILURE -> GuardedWriteBatchReconciliationRejection.RegistryFailure
+                BATCH_INVALID_VERIFIED_PREFIX ->
+                    GuardedWriteBatchReconciliationRejection.InvalidVerifiedPrefix
+                BATCH_SOURCE_RECONCILIATION_FAILURE ->
+                    GuardedWriteBatchReconciliationRejection.SourceReconciliationFailure
+                BATCH_NOT_DIRECT,
+                BATCH_INVALID_LENGTH,
+                BATCH_INVALID_ARGUMENT,
+                -> GuardedWriteBatchReconciliationRejection.InvalidArgument
+                else -> GuardedWriteBatchReconciliationRejection.NativeFailure
+            }
+
         private fun GuardedRamWriteStage.nativeCode(): Int =
             when (this) {
                 GuardedRamWriteStage.Precondition -> STAGE_PRECONDITION
@@ -439,6 +552,25 @@ private object JniNativeGuardedWriteBatchOps : NativeGuardedWriteBatchOps {
             responseBuffer,
             responseLength,
         )
+
+    override fun reconcileVerifiedPrefix(
+        batchHandle: Long,
+        engineHandle: Long,
+        registryHandle: Long,
+        signatureBuffer: ByteBuffer,
+        signatureLength: Int,
+        signatureLimit: Int,
+        verifiedTransactionCount: Int,
+    ): Int =
+        NativeGuardedWriteBatchBridge.reconcileVerifiedPrefix(
+            batchHandle,
+            engineHandle,
+            registryHandle,
+            signatureBuffer,
+            signatureLength,
+            signatureLimit,
+            verifiedTransactionCount,
+        )
 }
 
 object NativeGuardedWriteBatchBridge {
@@ -485,5 +617,15 @@ object NativeGuardedWriteBatchBridge {
         stage: Int,
         responseBuffer: ByteBuffer,
         responseLength: Int,
+    ): Int
+
+    external fun reconcileVerifiedPrefix(
+        batchHandle: Long,
+        engineHandle: Long,
+        registryHandle: Long,
+        signatureBuffer: ByteBuffer,
+        signatureLength: Int,
+        signatureLimit: Int,
+        verifiedTransactionCount: Int,
     ): Int
 }
