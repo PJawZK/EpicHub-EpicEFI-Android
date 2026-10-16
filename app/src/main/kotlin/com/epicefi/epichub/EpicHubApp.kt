@@ -27,6 +27,7 @@ import com.epicefi.epichub.diagnostics.DiagnosticPayload
 import com.epicefi.epichub.diagnostics.DiagnosticSeverity
 import com.epicefi.epichub.diagnostics.DiagnosticsSnapshot
 import com.epicefi.epichub.diagnostics.NativeDiagnosticIngestor
+import com.epicefi.epichub.engine.LiveTuneSourceLifecycleState
 import com.epicefi.epichub.engine.NativeEngine
 import com.epicefi.epichub.engine.RuntimeSnapshot
 import com.epicefi.epichub.navigation.AppDestination
@@ -42,6 +43,7 @@ import com.epicefi.epichub.ui.EpicHubShell
 import com.epicefi.epichub.ui.diagnostics.DiagnosticsTab
 import com.epicefi.epichub.ui.settings.ProfilePackageSettingsState
 import com.epicefi.epichub.ui.settings.UsbControllerSettingsState
+import com.epicefi.epichub.ui.tuner.RamWriteControlState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -54,6 +56,7 @@ private const val BYTES_PER_KIBIBYTE = 1024.0
 private const val LIVE_USB_SIGNATURE_LIMIT_BYTES = 256
 private const val LIVE_USB_CONNECT_TIMEOUT_MS = 1_000
 private const val LIVE_USB_PAGE_TIMEOUT_MS = 2_000
+private const val LIVE_USB_RAM_WRITE_TIMEOUT_MS = 2_000
 
 private val destinationPayloads = AppDestination.entries.associateWith { destination ->
     DiagnosticPayload.DestinationChanged(destination.id)
@@ -127,6 +130,7 @@ fun EpicHubApp(
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
     var profilePackages by remember { mutableStateOf(ProfilePackageSettingsState()) }
     var usbController by remember { mutableStateOf(UsbControllerSettingsState()) }
+    var ramWriteControl by remember { mutableStateOf(RamWriteControlState()) }
     val usbPermissionOwner = remember(context, usbManager) {
         AndroidUsbPermissionRequestOwner(
             context = context,
@@ -240,7 +244,8 @@ fun EpicHubApp(
     val profilePackagePicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenMultipleDocuments(),
     ) { uris ->
-        if (uris.isNotEmpty() && !usbController.operationBusy) {
+        if (uris.isNotEmpty() && !usbController.operationBusy && !ramWriteControl.busy) {
+            ramWriteControl = ramWriteControl.disconnected()
             usbLiveSession.disconnect()
             usbController = usbController.disconnected(
                 "Controller disconnected before replacing profile packages.",
@@ -400,6 +405,19 @@ fun EpicHubApp(
             }
             runtimeSnapshot.value = next
 
+            val nextRamSynchronization =
+                if (
+                    usbController.connected &&
+                    profileDocuments.liveState is LiveTuneSourceLifecycleState.Live
+                ) {
+                    withContext(Dispatchers.Default) {
+                        runCatching { engine.readRamSynchronizationState() }.getOrNull()
+                    }
+                } else {
+                    null
+                }
+            ramWriteControl = ramWriteControl.refresh(nextRamSynchronization)
+
             val recentCaptureFinished = withContext(Dispatchers.Default) {
                 diagnostics.finishRecentProblemCaptureIfDue(
                     RECENT_PROBLEM_POST_TRIGGER_NANOS,
@@ -422,8 +440,10 @@ fun EpicHubApp(
             onWorkspaceSelected = ::selectWorkspace,
             settingsOpen = settingsOpen,
             onOpenSettings = {
-                settingsOpen = true
-                diagnostics.setCurrentDestination("settings")
+                if (!ramWriteControl.busy) {
+                    settingsOpen = true
+                    diagnostics.setCurrentDestination("settings")
+                }
             },
             onCloseSettings = {
                 settingsOpen = false
@@ -439,14 +459,15 @@ fun EpicHubApp(
             activeEngineCount = NativeEngine.activeCount(),
             profilePackages = profilePackages,
             onSelectProfilePackages = {
-                if (!usbController.operationBusy) {
+                if (!usbController.operationBusy && !ramWriteControl.busy) {
                     profilePackagePicker.launch(
                         arrayOf(EPICHUB_PROFILE_MIME_TYPE, "application/zip"),
                     )
                 }
             },
             onClearProfilePackages = {
-                if (!profilePackages.busy && !usbController.operationBusy) {
+                if (!profilePackages.busy && !usbController.operationBusy && !ramWriteControl.busy) {
+                    ramWriteControl = ramWriteControl.disconnected()
                     usbLiveSession.disconnect()
                     usbController = usbController.disconnected(
                         "Controller disconnected before clearing profile authority.",
@@ -462,7 +483,7 @@ fun EpicHubApp(
             },
             usbController = usbController,
             onRefreshUsbCandidates = {
-                if (!usbController.operationBusy) {
+                if (!usbController.operationBusy && !ramWriteControl.busy) {
                     scope.launch {
                         val candidates = withContext(Dispatchers.Default) {
                             usbDiscovery.discover()
@@ -472,7 +493,7 @@ fun EpicHubApp(
                 }
             },
             onSelectUsbCandidate = { endpointId ->
-                if (!usbController.operationBusy) {
+                if (!usbController.operationBusy && !ramWriteControl.busy) {
                     usbController = usbController.select(endpointId)
                 }
             },
@@ -481,7 +502,8 @@ fun EpicHubApp(
                 if (
                     selected != null &&
                     profilePackages.hasSelection &&
-                    !usbController.operationBusy
+                    !usbController.operationBusy &&
+                    !ramWriteControl.busy
                 ) {
                     usbController =
                         usbController.permissionStarted(
@@ -494,8 +516,10 @@ fun EpicHubApp(
                 if (
                     selected != null &&
                     profilePackages.hasSelection &&
-                    !usbController.operationBusy
+                    !usbController.operationBusy &&
+                    !ramWriteControl.busy
                 ) {
+                    ramWriteControl = ramWriteControl.disconnected()
                     usbController = usbController.connectionStarted()
                     scope.launch {
                         val result = withContext(Dispatchers.IO) {
@@ -510,13 +534,19 @@ fun EpicHubApp(
                 }
             },
             onDisconnectUsbController = {
-                if (!usbController.operationBusy) {
+                if (!usbController.operationBusy && !ramWriteControl.busy) {
+                    ramWriteControl = ramWriteControl.disconnected()
                     usbLiveSession.disconnect()
                     usbController = usbController.disconnected()
                 }
             },
             onLoadUsbTune = {
-                if (usbController.connected && !usbController.operationBusy) {
+                if (
+                    usbController.connected &&
+                    !usbController.operationBusy &&
+                    !ramWriteControl.busy
+                ) {
+                    ramWriteControl = ramWriteControl.disconnected()
                     usbController = usbController.loadStarted()
                     scope.launch {
                         val result = withContext(Dispatchers.IO) {
@@ -526,6 +556,26 @@ fun EpicHubApp(
                             )
                         }
                         usbController = usbController.loadCompleted(result)
+                    }
+                }
+            },
+            ramWriteControl = ramWriteControl,
+            onWriteCurrentDraftToRam = {
+                if (
+                    ramWriteControl.actionEnabled &&
+                    usbController.connected &&
+                    !usbController.operationBusy &&
+                    !settingsOpen
+                ) {
+                    ramWriteControl = ramWriteControl.started()
+                    scope.launch {
+                        val result = withContext(Dispatchers.IO) {
+                            usbLiveSession.writeCurrentDraftToRam(
+                                signatureLimit = LIVE_USB_SIGNATURE_LIMIT_BYTES,
+                                timeoutMs = LIVE_USB_RAM_WRITE_TIMEOUT_MS,
+                            )
+                        }
+                        ramWriteControl = ramWriteControl.completed(result)
                     }
                 }
             },
