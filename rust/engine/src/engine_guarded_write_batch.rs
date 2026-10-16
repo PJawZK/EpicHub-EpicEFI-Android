@@ -189,12 +189,10 @@ pub fn reconcile_selected_engine_guarded_batch_verified_prefix(
                         ),
                     ));
                 }
-                let source = source.ok_or_else(|| {
-                    EngineGuardedSourceReconciliationError::GuardedBatch(
-                        EngineGuardedRamWriteBatchError::MissingSourceImage,
-                    )
-                })?;
-                if &*source != &batch.source_image {
+                let source = source.ok_or(EngineGuardedSourceReconciliationError::GuardedBatch(
+                    EngineGuardedRamWriteBatchError::MissingSourceImage,
+                ))?;
+                if *source != batch.source_image {
                     return Err(EngineGuardedSourceReconciliationError::GuardedBatch(
                         EngineGuardedRamWriteBatchError::SourceImageChanged,
                     ));
@@ -209,11 +207,9 @@ pub fn reconcile_selected_engine_guarded_batch_verified_prefix(
                 *source = reconciled;
                 Ok(())
             })
-            .ok_or_else(|| {
-                EngineGuardedSourceReconciliationError::GuardedBatch(
-                    EngineGuardedRamWriteBatchError::InvalidEngineHandle,
-                )
-            })?
+            .ok_or(EngineGuardedSourceReconciliationError::GuardedBatch(
+                EngineGuardedRamWriteBatchError::InvalidEngineHandle,
+            ))?
         },
     )
     .map_err(|error| {
