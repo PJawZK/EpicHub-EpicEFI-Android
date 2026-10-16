@@ -6,33 +6,54 @@ Read this file first, then verify the exact `main`, `current-work`, and Foundati
 
 Repository: `PJawZK/EpicHub-EpicEFI-Android`
 
-Branch model after the 2026-10-16 consolidation:
+Branch model:
 
 - `main` = latest fully qualified baseline.
-- `current-work` = the only active development branch and must stay based on / ahead of `main`.
-- Historical PRs, workflow runs, and commit SHAs remain the audit trail; historical development branches are no longer part of the working model and are to be removed after consolidation.
+- `current-work` = the only active development branch and must remain based on / ahead of `main`.
+- Historical commits, closed PRs, and workflow runs are the audit trail; do not recreate a long-lived stack of phase/feature branches.
 
-Do not recreate a long-lived stack of per-slice branches. New work is performed on `current-work`, qualified there, and accepted milestones advance `main`.
+Every meaningful `current-work` checkpoint must pass the complete Foundation workflow on its exact SHA before it can be called qualified. Advance `main` only to an already-qualified `current-work` SHA.
 
 ---
 
-# Qualified baseline — 2026-10-16
+# Qualified state entering this handoff update — 2026-10-16
 
-`main` was advanced to exact qualified SHA:
+The previous fully qualified baseline on both `main` and `current-work` was:
 
-`8f7bd82dfaf967d7576b37482af5f9a4b3699fc7`
+`65a588d2b48dfaba460ccacfbfdb75ce2209c4ff`
 
 Foundation quality run:
 
-`38858098167`
+`38869610375`
 
-That run passed the complete current Foundation gate:
+That baseline already contained:
+
+- generic definition/profile/runtime-signature authority;
+- verified live tune-page acquisition and exact retained `TuneSourcePageImage`;
+- one Rust-owned semantic `TuneSession` / `TuneDraft`;
+- 2D + 3D peer editing over the same semantic state;
+- source-relative RAM-write intent;
+- definition-owned byte-patch planning;
+- opaque guarded native write batches;
+- constrained Android USB execution with precondition read, exact verification, write, ACK verification, and mandatory readback;
+- pure, engine-owned, opaque-store, JNI, and Android verified-prefix reconciliation;
+- explicit retained-RAM provenance / synchronization evidence without a generic `isSynced` boolean.
+
+The authorization → physical USB transfer race was then closed on `current-work` at exact code SHA:
+
+`1281db10dffa4d4bbd619dbf5d2028a75a552bff`
+
+Foundation quality run:
+
+`38871873302`
+
+That run passed the complete Foundation gate:
 
 - exact source SHA verification;
 - Rust format;
 - Rust Clippy with warnings denied;
 - all Rust tests;
-- Android JVM tests;
+- Android JVM tests, including the new serialization/concurrency proofs;
 - Android debug build;
 - Android performance build;
 - Android Macrobenchmark harness build;
@@ -41,15 +62,17 @@ That run passed the complete current Foundation gate:
 - physical benchmark-kit preparation;
 - qualified artifact publication.
 
-This qualified baseline contains the complete stacked Phase-2 history through former PR #81, including the guarded RAM-write chain and the pure verified retained-source reconciliation primitive.
+Therefore `1281db10dffa4d4bbd619dbf5d2028a75a552bff` is an immutable qualified code checkpoint.
+
+This handoff-file update itself creates a newer `current-work` SHA. That newer SHA must also pass Foundation before `main` advances.
 
 ---
 
-# Current product/architecture boundary
+# Current architecture boundary
 
-EpicHub is a native Kotlin/Jetpack Compose + Rust application. Kotlin owns Android/UI/platform integration. Rust owns semantic tuning state, ECU definition/profile authority, write geometry, reconciliation rules, and other native engine responsibilities.
+EpicHub is a native Kotlin/Jetpack Compose + Rust application. Kotlin owns Android/UI/platform integration. Rust owns semantic tuning state, ECU definition/profile authority, write geometry, reconciliation rules, retained RAM-source provenance, and native engine responsibilities.
 
-The current deep vertical slice is:
+Current deep vertical slice:
 
 ```text
 profile package / ECU definition
@@ -66,7 +89,7 @@ exact bundle/profile selection
     ↓
 verified live page acquisition
     ↓
-retained exact TuneSourcePageImage
+exact retained TuneSourcePageImage + RAM provenance
     +
 atomic semantic TuneSession install
     ↓
@@ -74,26 +97,35 @@ engine-owned TuneDraft / 2D + 3D editor
     ↓
 source-relative write intent
     ↓
-guarded native RAM-write batch
+definition-owned byte patches
     ↓
-Android USB transport execution
+opaque guarded native RAM-write batch
     ↓
-pre-read exact verification
+shared engine-authority serialization gate acquired
     ↓
-write + firmware ACK verification
+just-in-time native batch/currentness authorization
     ↓
-mandatory readback exact verification
+USB precondition read → exact verify
     ↓
-pure verified-prefix retained-source reconciliation
+write → firmware ACK verify
+    ↓
+mandatory readback → exact verify
+    ↓
+exact verified transaction prefix
+    ↓
+native retained-source reconciliation + provenance update
+    ↓
+shared engine-authority serialization gate released
 ```
 
-Keep the following representations distinct:
+Keep these representations distinct:
 
 1. exact retained source-page bytes from the last proven load/readback;
-2. engine-owned semantic `TuneSession` and current `TuneDraft`;
-3. planned source-relative ECU RAM mutations;
-4. guarded write transactions and their verified contiguous prefix;
-5. persisted/Burned ECU state.
+2. retained RAM provenance / verification evidence;
+3. engine-owned semantic `TuneSession` and current `TuneDraft`;
+4. planned source-relative ECU RAM mutations;
+5. opaque guarded write transactions and their verified contiguous prefix;
+6. persisted/Burned ECU state.
 
 Critical invariant:
 
@@ -101,78 +133,122 @@ Critical invariant:
 TuneDraft Apply != ECU RAM write != Burn
 ```
 
-A successful RAM-write transaction proves only the exact readback-verified range. It does not imply whole-session synchronization and does not imply Burn/persistence.
+A successful transaction proves only its exact readback-verified bytes. A fully verified batch can confirm the exact draft revision represented by that batch. Neither implies Burn/persistence.
 
 ---
 
-# What former PR #81 added
+# Retained RAM provenance semantics
 
-`reconcile_verified_transaction_prefix()` is implemented and qualified as a pure rule over retained source images and guarded transactions.
+The retained exact source image carries evidence describing what is actually known about ECU RAM rather than inferring synchronization from the current draft.
 
-It:
+Current rules:
 
-- advances only an exact contiguous prefix reported as fully readback-verified;
-- requires valid 1-based page geometry, bounded offsets/ranges, non-empty equal before/after lengths, and exact retained `before` bytes;
-- returns a new owned `TuneSourcePageImage` rather than mutating the original;
-- fails closed without partially advancing the retained image if any transaction in the requested prefix is invalid or stale;
-- permits partial-success recovery when earlier transactions are proven but a later transaction fails.
-
-It does **not** yet mutate active engine state or consume Android USB execution results directly.
+- verified live acquisition establishes the retained controller image as confirmed at draft revision `0`;
+- a completely readback-verified guarded batch confirms that batch's exact draft revision;
+- a partially verified batch advances only the exact verified transaction/range prefix;
+- an incomplete reconciliation clears whole-draft confirmation while retaining the exact verified ranges that are still proven;
+- current draft revision and confirmed RAM revision remain distinct;
+- the last reconciliation records draft revision, verified transaction count, total transaction count, and completeness;
+- provenance participates in retained-source authority/currentness, so changed certainty can stale an older opaque batch even if raw bytes did not change;
+- byte reconciliation and provenance replacement remain atomic and fail closed;
+- no generic whole-session `isSynced` boolean exists;
+- no RAM provenance state implies nonvolatile persistence.
 
 ---
 
-# Immediate next implementation work
+# Authorization → USB-transfer serialization
 
-The next slice is **engine-owned post-write retained-source reconciliation**.
+The previously known race was:
 
-Implement the smallest authority-preserving integration that:
+```text
+native currentness/JIT authorization
+    ↓
+return request bytes to Android
+    ↓
+[authority could mutate here]
+    ↓
+physical USB transaction
+```
 
-1. takes the exact native guarded batch and the exact number of fully verified transactions produced by transport execution;
-2. reacquires the selected engine/profile/source authority under native synchronization;
-3. revalidates exact runtime/profile generation, draft revision, and retained-source currentness before changing engine state;
-4. invokes the already-qualified pure verified-prefix reconciliation rule;
-5. atomically replaces only the retained `TuneSourcePageImage` with the reconciled image;
-6. preserves the current `TuneSession`, `TuneDraft`, edit history, and draft revision;
-7. makes no claim that unverified/later transactions reached RAM;
-8. makes no whole-session synchronization claim unless separately proven;
-9. does not add Burn or persistence behavior;
-10. does not add user-facing write controls yet.
+That gap is now closed for the current single-engine app architecture by `EngineAuthoritySerialization`, a process-local fair reentrant authority gate.
 
-After that, the likely sequence is:
+The real guarded write executor holds the gate continuously across:
 
-- explicit RAM synchronization/provenance state;
-- stronger mutation/write serialization across the authorize → USB-transfer boundary;
-- user-facing explicit write-to-RAM workflow;
-- Burn/persist later as a separate capability/action.
+```text
+JIT native authorization
+→ physical USB pre-read/write/readback
+→ verified-prefix native reconciliation
+```
+
+Current authority-mutating paths use the same gate:
+
+- TuneSession Apply operations;
+- Undo / Redo;
+- live-controller source/session installation;
+- imported Mega144H7 source/session installation;
+- compiled-profile import;
+- definition-bundle import;
+- profile-registry close;
+- NativeEngine source replacement / close paths covered by the current wrappers.
+
+The gate is deliberately reentrant so authority helpers can compose without introducing lock-order inversions. JVM tests prove that a competing authority mutation cannot enter while a guarded transfer owns the gate and that transport + reconciliation occur inside one serializer scope.
+
+Read-only tune/profile operations are not serialized unnecessarily. USB disconnect/transport lifetime remains a transport concern and is represented as transport failure rather than being conflated with tune/profile/source authority mutation.
+
+Do not bypass the gated app-level mutation wrappers with direct bridge mutations in future code. If the architecture ever expands beyond the current single app-level `NativeEngine`, revisit the serialization ownership model rather than assuming this process-global gate scales unchanged.
 
 ---
 
 # Proven invariants — do not regress
 
 - exact full runtime signature is profile authority;
-- USB VID/PID, product strings, board/family names, endpoints, and signature prefixes are never profile/write authority;
+- USB VID/PID, product strings, family/board labels, endpoints, and signature prefixes are never profile/write authority;
 - one Rust semantic tuning authority;
 - one engine-owned `TuneSession` per engine;
 - immutable baseline + mutable `TuneDraft`;
 - Rust-owned revision/history/Undo/Redo;
 - 2D and 3D are peers over the same semantic state;
-- preview remains non-mutating until Apply;
-- raw retained source pages live beside, not inside, the semantic tune model;
+- previews are non-mutating until local Apply;
+- exact retained pages remain raw byte authority beside the semantic session;
 - failed source/profile replacement preserves the previous valid state;
-- write geometry comes from the exact selected definition/bundle, not Android/UI offsets;
-- guarded writes use pre-read exact verification, ACK verification, and mandatory readback verification;
-- partial write success is represented as a verified prefix, never rounded up to whole-batch success;
-- disconnect/reconnect invalidates any unsupported live synchronization claim;
+- write geometry comes from the exact selected definition/bundle, never Android/UI offsets;
+- Android cannot construct arbitrary page/offset writes;
+- guarded writes require pre-read exact verification, ACK verification, and mandatory readback verification;
+- every physical guarded write executes under the same serialization authority as active tune/profile/source mutations;
+- partial write success is represented only as an exact verified prefix;
+- stale profile generation, draft revision, or retained source fails closed;
+- disconnect/reconnect invalidates unsupported live synchronization claims;
 - Burn remains separate from RAM write.
 
 ---
 
-# Development/qualification rule after consolidation
+# Immediate next work
 
-- Make implementation/process/documentation changes on `current-work`.
-- Every meaningful current-work checkpoint must pass Foundation on its exact SHA before it can be called qualified.
+Before exposing a user-facing RAM-write action, inspect and deliberately resolve one provenance edge case:
+
+- when physical execution is interrupted with a verified transaction prefix of `0`, the current `UsbVerifiedGuardedWriteBatchExecutor` returns `Interrupted(0, ...)` without invoking native reconciliation;
+- because the provenance model treats an incomplete write attempt as meaningful uncertainty even when zero transactions were verified, confirm whether this path must explicitly record incomplete-zero-prefix provenance before any UI can present RAM state.
+
+Do not silently reinterpret this as success or whole-session synchronization.
+
+After that edge case is resolved and qualified, proceed toward the smallest explicit user-facing **Write to RAM** workflow. That workflow should:
+
+1. require a live, exactly selected controller/profile/source authority;
+2. operate on the current exact draft revision;
+3. plan through native source-relative/definition-owned authority only;
+4. show clearly that the action writes volatile ECU RAM, not persistent storage;
+5. execute through the already-qualified guarded + serialized USB path;
+6. surface exact success / partial verification / failure state from native provenance rather than a guessed boolean;
+7. keep Burn/persist as a later, separate capability and user action.
+
+No Burn/persistence behavior should be added as part of the RAM-write UI slice.
+
+---
+
+# Development / qualification rule
+
+- Make implementation, process, and documentation changes on `current-work`.
+- Every meaningful `current-work` checkpoint must pass Foundation on its exact SHA before it is qualified.
 - Advance `main` only to an exact already-qualified `current-work` SHA.
 - Do not append new work directly to an older qualified SHA.
 - Git history, closed PRs, and workflow runs are the archive; do not keep historical feature branches merely as documentation.
-
-The current Foundation workflow is intentionally being moved from `phase2/**` push qualification to `current-work` push qualification as part of this consolidation.
