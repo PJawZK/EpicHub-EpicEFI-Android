@@ -88,7 +88,12 @@ mod tests {
     use super::*;
     use crate::write_envelope_plan::FramedPageWritePlan;
 
-    fn transaction(page: usize, offset: usize, before: &[u8], after: &[u8]) -> GuardedRamWriteTransaction {
+    fn transaction(
+        page: usize,
+        offset: usize,
+        before: &[u8],
+        after: &[u8],
+    ) -> GuardedRamWriteTransaction {
         GuardedRamWriteTransaction {
             page,
             offset,
@@ -99,6 +104,8 @@ mod tests {
             write: FramedPageWritePlan {
                 page,
                 offset,
+                before: before.to_vec(),
+                after: after.to_vec(),
                 request_frame: vec![0x22],
                 expected_response_size: 1,
             },
@@ -172,7 +179,7 @@ mod tests {
 
         assert_eq!(reconciled.confirmed_draft_revision, None);
         assert_eq!(reconciled.verified_write_ranges.len(), 1);
-        assert_eq!(reconciled.last_reconciliation.as_ref().unwrap().complete, false);
+        assert!(!reconciled.last_reconciliation.as_ref().unwrap().complete);
     }
 
     #[test]
@@ -207,7 +214,7 @@ mod tests {
 
         assert_eq!(reconciled.confirmed_draft_revision, Some(3));
         assert!(reconciled.verified_write_ranges.is_empty());
-        assert_eq!(reconciled.last_reconciliation.as_ref().unwrap().complete, true);
+        assert!(reconciled.last_reconciliation.as_ref().unwrap().complete);
     }
 
     #[test]
