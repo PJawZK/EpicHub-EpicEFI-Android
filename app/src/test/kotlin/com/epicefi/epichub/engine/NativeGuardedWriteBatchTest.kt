@@ -123,6 +123,48 @@ class NativeGuardedWriteBatchTest {
     }
 
     @Test
+    fun verifiedPrefixReconciliationUsesOnlyOpaqueOwnerAuthority() {
+        val ops = FakeOps()
+        val batch = createdBatch(ops)
+
+        assertEquals(
+            GuardedWriteBatchReconciliationResult.Reconciled,
+            batch.reconcileVerifiedPrefix(1),
+        )
+        assertEquals(1, ops.lastVerifiedTransactionCount)
+        assertEquals(41L, ops.lastBatchHandle)
+        assertEquals(11L, ops.lastEngineHandle)
+        assertEquals(22L, ops.lastRegistryHandle)
+        assertEquals(signature.toList(), ops.lastSignature.toList())
+
+        ops.reconcileStatus = -28
+        assertEquals(
+            GuardedWriteBatchReconciliationResult.Rejected(
+                GuardedWriteBatchReconciliationRejection.SourceReconciliationFailure,
+            ),
+            batch.reconcileVerifiedPrefix(1),
+        )
+
+        batch.close()
+    }
+
+    @Test
+    fun invalidVerifiedPrefixFailsBeforeNativeReconciliation() {
+        val ops = FakeOps()
+        val batch = createdBatch(ops)
+
+        assertEquals(
+            GuardedWriteBatchReconciliationResult.Rejected(
+                GuardedWriteBatchReconciliationRejection.InvalidVerifiedPrefix,
+            ),
+            batch.reconcileVerifiedPrefix(3),
+        )
+        assertEquals(0, ops.reconcileCalls)
+
+        batch.close()
+    }
+
+    @Test
     fun invalidCreationAndClosedOwnerFailBeforeNativeStageWork() {
         val ops = FakeOps()
         assertEquals(
@@ -164,14 +206,17 @@ class NativeGuardedWriteBatchTest {
         var createCalls = 0
         var closeCalls = 0
         var fillCalls = 0
+        var reconcileCalls = 0
         var alive = true
         var fillStatus: Long? = null
         var verifyStatus = 0
+        var reconcileStatus = 0
         var lastBatchHandle = -1L
         var lastEngineHandle = -1L
         var lastRegistryHandle = -1L
         var lastExpectedRevision = -1L
         var lastTransactionIndex = -1
+        var lastVerifiedTransactionCount = -1
         var lastStage = -1
         var lastSignature = byteArrayOf()
 
@@ -251,6 +296,24 @@ class NativeGuardedWriteBatchTest {
             lastStage = stage
             lastSignature = copyBytes(signatureBuffer, signatureLength)
             return verifyStatus
+        }
+
+        override fun reconcileVerifiedPrefix(
+            batchHandle: Long,
+            engineHandle: Long,
+            registryHandle: Long,
+            signatureBuffer: ByteBuffer,
+            signatureLength: Int,
+            signatureLimit: Int,
+            verifiedTransactionCount: Int,
+        ): Int {
+            reconcileCalls += 1
+            lastBatchHandle = batchHandle
+            lastEngineHandle = engineHandle
+            lastRegistryHandle = registryHandle
+            lastVerifiedTransactionCount = verifiedTransactionCount
+            lastSignature = copyBytes(signatureBuffer, signatureLength)
+            return reconcileStatus
         }
 
         private fun copyBytes(
