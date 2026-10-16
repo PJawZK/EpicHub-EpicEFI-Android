@@ -67,6 +67,15 @@ class NativeLiveTuneInstaller internal constructor(
         signatureResponse: ByteArray,
         signatureLimit: Int,
         pages: List<ByteArray>,
+    ): LiveTuneInstallResult =
+        EngineAuthoritySerialization.exclusive {
+            installSerialized(signatureResponse, signatureLimit, pages)
+        }
+
+    private fun installSerialized(
+        signatureResponse: ByteArray,
+        signatureLimit: Int,
+        pages: List<ByteArray>,
     ): LiveTuneInstallResult {
         if (signatureLimit <= 0) {
             return rejected(LiveTuneInstallRejection.InvalidResponseLimit)
