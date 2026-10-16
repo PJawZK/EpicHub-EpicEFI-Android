@@ -1,5 +1,5 @@
 use crate::ecu_profile::{EcuProfileResolveError, ResolvedEcuProfile};
-use crate::engine::{replace_tune_source, with_tune_session};
+use crate::engine::{replace_tune_session, replace_tune_source, with_tune_session};
 use crate::mega144h7_profile::Mega144h7Profile;
 use crate::resolved_profile_source::Mega144h7ResolvedModes;
 use crate::tune_catalog_abi;
@@ -27,15 +27,15 @@ fn install_pages_with_origin(
 ) -> Result<u64, TuneSourceInstallError> {
     let snapshot = profile.resolve_pages(pages, origin)?;
     let profile_generation = snapshot.profile_generation;
-    with_tune_session(handle, move |session| {
-        *session = TuneSession::from_snapshot(snapshot);
-    })
-    .ok_or(TuneSourceInstallError::InvalidHandle)?;
+    if !replace_tune_session(handle, TuneSession::from_snapshot(snapshot)) {
+        return Err(TuneSourceInstallError::InvalidHandle);
+    }
     Ok(profile_generation)
 }
 
-/// Resolves and validates a complete profile source before taking mutation authority over the
-/// active engine session. A failed decode leaves the existing TuneSession untouched.
+/// Resolves and validates a complete imported source before atomically replacing the active
+/// TuneSession authority. Imported sources have no retained live-controller page image, so any
+/// previous live page image is cleared together with the semantic session replacement.
 pub fn install_imported_pages(
     handle: i64,
     profile: &dyn ResolvedEcuProfile,
@@ -84,7 +84,9 @@ pub fn tune_catalog_bytes(handle: i64) -> Option<Vec<u8>> {
 mod tests {
     use super::*;
     use crate::ecu_profile::{ProfileIdentity, ResolvedEcuProfile};
-    use crate::engine::{close_engine, create_engine};
+    use crate::engine::{
+        close_engine, create_engine, tune_session_epoch, with_tune_source_image,
+    };
     use crate::offline_tune_source::OFFLINE_SOURCE_PRIMARY_TABLE_ID;
     use crate::resolved_profile_source::{
         MEGA144H7_PAGE_1_SIZE, MEGA144H7_PAGE_2_SIZE, ProfileResolveError, TABLE_ID_VE,
@@ -140,6 +142,7 @@ mod tests {
             assert_eq!(session.revision(), 1);
         })
         .unwrap();
+        assert_eq!(tune_session_epoch(handle), Some(1));
 
         let (page_1, page_2) = valid_pages();
         install_mega144h7_imported_pages(
@@ -150,6 +153,7 @@ mod tests {
         )
         .unwrap();
 
+        assert_eq!(tune_session_epoch(handle), Some(2));
         with_tune_session(handle, |session| {
             assert_eq!(session.revision(), 0);
             assert!(
@@ -165,7 +169,7 @@ mod tests {
     }
 
     #[test]
-    fn failed_decode_preserves_existing_session_and_history() {
+    fn failed_decode_preserves_existing_session_history_and_epoch() {
         let handle = create_engine();
         with_tune_session(handle, |session| {
             session
@@ -173,6 +177,7 @@ mod tests {
                 .unwrap();
         })
         .unwrap();
+        let epoch = tune_session_epoch(handle).unwrap();
 
         let (mut page_1, page_2) = valid_pages();
         page_1.pop();
@@ -186,6 +191,7 @@ mod tests {
             .is_err()
         );
 
+        assert_eq!(tune_session_epoch(handle), Some(epoch));
         with_tune_session(handle, |session| {
             assert_eq!(session.revision(), 1);
             assert!(
@@ -196,6 +202,21 @@ mod tests {
             assert_eq!(session.undo().unwrap(), 2);
         })
         .unwrap();
+        close_engine(handle);
+    }
+
+    #[test]
+    fn imported_install_clears_a_previous_live_source_image() {
+        let handle = create_engine();
+        install_live_pages(handle, &AlternateTestProfile, &[]).unwrap();
+        assert!(
+            with_tune_source_image(handle, |image| image.is_some()).unwrap()
+        );
+
+        install_imported_pages(handle, &AlternateTestProfile, &[]).unwrap();
+        assert!(
+            !with_tune_source_image(handle, |image| image.is_some()).unwrap()
+        );
         close_engine(handle);
     }
 
@@ -225,6 +246,8 @@ mod tests {
             );
         })
         .unwrap();
+        assert_eq!(tune_session_epoch(first), Some(2));
+        assert_eq!(tune_session_epoch(second), Some(1));
         close_engine(first);
         close_engine(second);
     }
@@ -234,6 +257,7 @@ mod tests {
         let handle = create_engine();
         let generation = install_imported_pages(handle, &AlternateTestProfile, &[]).unwrap();
         assert_eq!(generation, 9_001);
+        assert_eq!(tune_session_epoch(handle), Some(2));
         with_tune_session(handle, |session| {
             assert_eq!(session.baseline().profile_generation, 9_001);
             assert_eq!(session.baseline().origin, TuneSnapshotOrigin::ImportedFile);
@@ -255,6 +279,7 @@ mod tests {
 
         let generation = install_live_pages(handle, &AlternateTestProfile, &[]).unwrap();
         assert_eq!(generation, 9_001);
+        assert_eq!(tune_session_epoch(handle), Some(2));
         with_tune_session(handle, |session| {
             assert_eq!(
                 session.baseline().origin,
@@ -292,7 +317,7 @@ mod tests {
     }
 
     #[test]
-    fn invalid_handle_does_not_create_a_session() {
+    fn invalid_handle_does_not_create_a_session_or_epoch() {
         let (page_1, page_2) = valid_pages();
         assert_eq!(
             install_mega144h7_imported_pages(
@@ -304,5 +329,6 @@ mod tests {
             Err(TuneSourceInstallError::InvalidHandle)
         );
         assert!(tune_catalog_bytes(i64::MAX).is_none());
+        assert!(tune_session_epoch(i64::MAX).is_none());
     }
 }
