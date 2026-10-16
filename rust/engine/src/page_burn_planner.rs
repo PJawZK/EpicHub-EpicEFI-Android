@@ -10,19 +10,11 @@ pub struct PageBurnPlan {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum PageBurnPlanError {
     InvalidPageNumber(usize),
-    PageOutOfRange {
-        page: usize,
-        page_count: usize,
-    },
-    MissingBurnCapability {
-        page: usize,
-    },
+    PageOutOfRange { page: usize, page_count: usize },
+    MissingBurnCapability { page: usize },
     UnsupportedTemplateToken(String),
     DuplicateIdentifierToken,
-    InvalidIdentifierLength {
-        page: usize,
-        actual: usize,
-    },
+    InvalidIdentifierLength { page: usize, actual: usize },
 }
 
 /// Plans one definition-owned nonvolatile burn request for a single definition page.
@@ -177,12 +169,7 @@ pageReadCommand = {reads}
 
     #[test]
     fn plans_non_indexed_burn_literal() {
-        let bundle = bundle(
-            "64",
-            r#""\x00\x00""#,
-            r#""R%2o%2c""#,
-            Some(r#""B""#),
-        );
+        let bundle = bundle("64", r#""\x00\x00""#, r#""R%2o%2c""#, Some(r#""B""#));
 
         assert_eq!(
             plan_page_burn(&bundle, 1),
@@ -220,12 +207,7 @@ pageReadCommand = {reads}
 
     #[test]
     fn rejects_invalid_or_out_of_range_page() {
-        let bundle = bundle(
-            "64",
-            r#""\x00\x00""#,
-            r#""R%2o%2c""#,
-            Some(r#""B""#),
-        );
+        let bundle = bundle("64", r#""\x00\x00""#, r#""R%2o%2c""#, Some(r#""B""#));
 
         assert_eq!(
             plan_page_burn(&bundle, 0),
@@ -242,12 +224,7 @@ pageReadCommand = {reads}
 
     #[test]
     fn rejects_tokens_not_proven_for_burn_commands() {
-        let bundle = bundle(
-            "64",
-            r#""\x00\x00""#,
-            r#""R%2o%2c""#,
-            Some(r#""B%2o""#),
-        );
+        let bundle = bundle("64", r#""\x00\x00""#, r#""R%2o%2c""#, Some(r#""B%2o""#));
 
         assert_eq!(
             plan_page_burn(&bundle, 1),
@@ -259,12 +236,7 @@ pageReadCommand = {reads}
 
     #[test]
     fn rejects_duplicate_identifier_token() {
-        let bundle = bundle(
-            "64",
-            r#""\x00\x00""#,
-            r#""R%2o%2c""#,
-            Some(r#""B%2i%2i""#),
-        );
+        let bundle = bundle("64", r#""\x00\x00""#, r#""R%2o%2c""#, Some(r#""B%2i%2i""#));
 
         assert_eq!(
             plan_page_burn(&bundle, 1),
