@@ -13,20 +13,21 @@ Branch model:
 - Historical commits, closed PRs, and workflow runs are the audit trail; do not recreate long-lived phase/feature branches.
 - Every meaningful `current-work` checkpoint must pass the complete Foundation workflow on its exact SHA before it is qualified.
 - Advance `main` only to an exact already-qualified `current-work` SHA.
+- `fetch_commit_workflow_runs` is not authoritative here because Foundation is push-triggered; query the Actions workflow/runs directly.
 
 ---
 
-# Latest qualified implementation — 2026-10-16
+# Latest qualified implementation — 2026-10-17
 
-The latest qualified implementation checkpoint is:
+Latest qualified implementation checkpoint:
 
-`4ea7a08f77224399cce2518e7b80e3de42321ada`
+`9c5e332b737085e93ab84531199909b9d5b5c9a6`
 
 Foundation quality run:
 
-`38926787327`
+`38982149150`
 
-That exact SHA passed the complete Foundation gate:
+That exact SHA passed the full Foundation gate:
 
 - exact source SHA verification;
 - Rust format;
@@ -41,208 +42,182 @@ That exact SHA passed the complete Foundation gate:
 - physical benchmark-kit preparation;
 - all qualified artifact publication.
 
-`main` was advanced to that exact qualified SHA before this documentation update.
+`main` and `current-work` were both at that SHA before this handoff-only documentation update.
 
-Important preceding checkpoints remain part of the same qualified history:
+Important recent qualified checkpoints:
 
-- `79f27827f4fa6588141e7a196907c3bc4c319a50`, Foundation `38900643084` — source-aware Tuner authority presentation and direct active-session Tuner usage;
-- `a5ea66476561390e6f70775449c28c013fbdf7ce`, Foundation `38895119391` — visible volatile Write-to-RAM workflow;
-- earlier qualified history contains guarded write planning/execution/reconciliation, RAM provenance, zero-prefix interruption handling, and transfer serialization.
+- `5b585b6096c862d704d90fec61c7e6bdd8edb10e`, Foundation `38949529443` — firmware-backed Burn envelope codec/verifier. Burn request is definition-owned; EpicEFI Burn success status is `4`, not normal command success `0`; Burn ACK is not persistence proof.
+- `d894c50b683e814723ca58faa13a30e64265e7e5`, Foundation `38954935032` — opaque native guarded Burn plan/store + JNI + Android owner. Android receives only opaque-handle-owned staged requests and cannot construct arbitrary Burn geometry.
+- `c8c4a8bf52b0734aa09875b2eb48fc434b9bed96`, Foundation `38981181683` — serialized physical USB Burn executor. Exact sequence is Burn request/ACK verification, then full-page post-Burn CRC request/verification, all inside `EngineAuthoritySerialization`.
+- `9c5e332b737085e93ab84531199909b9d5b5c9a6`, Foundation `38982149150` — high-level live Burn routing through exact live identity and the retained authorized USB session, with no Burn UI exposure.
 
-This handoff update creates a newer `current-work` SHA and must itself pass Foundation before `main` advances again.
+Earlier qualified history contains the complete volatile RAM-write chain, explicit RAM provenance/synchronization state, zero-prefix interruption invalidation, serialized JIT authority → USB transfer → reconciliation, and the visible Write-to-RAM workflow. Do not rebuild those boundaries.
 
 ---
 
-# Current architecture boundary
+# Core invariants
 
-EpicHub is a native Kotlin/Jetpack Compose + Rust application. Kotlin owns Android/UI/platform integration and presentation state. Rust owns semantic tuning state, ECU definition/profile authority, table catalog authority, write geometry, reconciliation rules, retained RAM-source provenance, RAM synchronization classification, and native engine responsibilities.
+Keep these distinctions explicit:
 
-Current deep vertical slice:
+`TuneDraft Apply != ECU RAM write != Burn / nonvolatile persistence`
+
+Additional authority invariants:
+
+- Rust remains semantic tuning and ECU definition/profile authority.
+- Exact full runtime signature selects the exact compiled definition/profile/protocol bundle.
+- Definition-owned semantic IDs and page protocol metadata own geometry; Android/UI must not construct raw page/offset commands.
+- One engine-owned `TuneSession` remains the semantic editing authority.
+- The retained exact source page image remains the byte authority for guarded writes and Burn eligibility.
+- RAM writes remain guarded by retained-before precondition read, exact verification, write ACK verification, post-write readback, exact verification, and verified-prefix reconciliation.
+- A Burn is eligible only for a verified live-controller source whose RAM provenance confirms the current draft revision.
+- Burn is definition-page scoped. Multi-page ECUs may have distinct `B%2i` commands and may have pages with no Burn capability.
+- Burn request framing and response verification remain native/definition-owned.
+- EpicEFI Burn success ACK status is `4`; ordinary status `0` must not be accepted as Burn success.
+- Burn ACK alone never proves persistence.
+- Current persistence proof contract is: verified Burn-specific ACK followed by a matching definition-owned full-page post-Burn CRC response for the exact guarded source page.
+- All physical Burn transfer and native verification run under `EngineAuthoritySerialization`, preventing tune/profile/source authority mutation across the operation.
+- Burn is not exposed in Compose/UI yet.
+
+---
+
+# Current Burn architecture
+
+The qualified path now reaches the retained physical USB channel:
 
 ```text
-profile package / ECU definition
+verified live TuneSession + exact retained source image
     ↓
-coherent compiled profile + protocol bundle
+RAM provenance confirms current draft revision
     ↓
-explicit USB candidate + permission + connection
+plan_selected_engine_guarded_page_burn(...)
     ↓
-definition-owned runtime identity probe
+opaque GuardedBurn plan handle
     ↓
-exact full runtime signature
+NativeGuardedBurn (Android opaque owner)
     ↓
-exact bundle/profile selection
+EngineAuthoritySerialization::exclusive
     ↓
-verified live page acquisition OR imported/offline source
+stage definition-owned framed Burn request
     ↓
-atomic engine-owned TuneSession install
+retained authorized UsbReadOnlyTransactionChannel
     ↓
-native semantic table catalog + source-aware projection ABI
+verify Burn-specific ACK (status 4)
     ↓
-TunerTableSelectionOwner
+stage definition-owned full-page CRC request
     ↓
-selected semantic table ID from the current native catalog
+same retained authorized USB channel
     ↓
-2D + 3D peer editor over the same engine-owned TuneDraft/history
+verify CRC matches exact guarded source page
     ↓
-local Apply / Undo / Redo
-    ↓
-Rust-owned current draft revision
-    ↓
-explicit Write draft to RAM action when verified live authority exists
-    ↓
-opaque guarded native RAM-write batch
-    ↓
-serialized USB precondition/write/ACK/readback
-    ↓
-verified-prefix reconciliation + RAM provenance
-    ↓
-atomic RAM synchronization-state snapshot
+UsbGuardedBurnResult.PersistedAndVerified
 ```
 
-Critical invariant:
+The high-level routing is deliberately below UI:
+
+- `NativeLiveTuneBurnOperation` creates/owns the opaque guarded Burn plan and invokes the serialized executor.
+- `LiveTuneConnectionOwner.burnPageToNonvolatile(...)` resolves the exact live runtime identity from lifecycle state; connected-but-not-loaded state cannot Burn.
+- `AndroidUsbLiveConnectionSessionOwner.burnPageToNonvolatile(...)` supplies only the already-retained authorized USB channel.
+- A disconnected, closed, stale, non-live, RAM-unconfirmed, profile-stale, source-changed, protocol-failed, CRC-failed, or transport-failed path remains explicit and fail-closed.
+
+Focused JVM tests prove:
+
+- Burn stage must succeed before CRC stage executes;
+- rejected Burn ACK stops before CRC;
+- CRC mismatch is not reported as persistence success;
+- transport failure remains stage-specific;
+- invalid timeout fails before native/USB work;
+- one serializer scope covers both physical stages and both native verification calls;
+- live routing forwards exact live identity, internal definition page, and caller/retained channel;
+- connected-but-not-loaded, closed, and disconnected states cannot reach Burn authority.
+
+---
+
+# Immediate next correctness boundary
+
+Before recording persistent/nonvolatile provenance or exposing any Burn control in the UI, tighten the opaque native Burn handle into a native proof-state machine.
+
+Required native sequence:
 
 ```text
-TuneDraft Apply != ECU RAM write != Burn
+Planned
+  ↓ verified Burn-specific ACK
+BurnAckVerified
+  ↓ verified matching post-Burn full-page CRC
+PostBurnCrcVerified
 ```
 
-The existing Write-to-RAM workflow changes volatile ECU RAM only. It does not Burn/persist the tune.
+Why this is required:
+
+- the Kotlin physical executor already executes Burn then CRC in the correct order;
+- however the opaque native handle currently exposes Burn and CRC verification as independent calls;
+- native persistence evidence must not be recordable from a CRC response alone;
+- native authority should enforce the proof sequence even if a caller misuses the JNI wrapper.
+
+Recommended next slice:
+
+1. Add execution/proof state to the opaque guarded Burn plan store, not Kotlin bookkeeping.
+2. Reject CRC verification before Burn ACK has been successfully verified.
+3. Prefer making the handle one-shot after full proof: no second Burn/CRC staging from a completed plan.
+4. Preserve the existing lock-order rule: retain plan/state safely, release the plan-store mutex before entering profile/engine authority, then transition state only after successful native verification.
+5. Add dedicated native error/status mapping for invalid Burn proof-stage ordering rather than collapsing it into transport failure.
+6. Test out-of-order CRC, duplicate/repeated stages, stale authority during each transition, close/race behavior, and normal `Planned → BurnAckVerified → PostBurnCrcVerified` flow.
+
+Only after that state machine is qualified should persistent provenance be recorded.
 
 ---
 
-# Catalog-driven multi-table Tuner — qualified
+# Persistence provenance after proof-state qualification
 
-The previous single-table limitation is complete. Do **not** rebuild this slice.
+There is currently no native nonvolatile persistence provenance model. Do not treat the existing `RamSourceProvenance` as proof of flash/nonvolatile state.
 
-`TunerTableSelectionOwner` now provides presentation-level semantic table selection over the one active engine-owned `TuneSession`.
+The next layer after the proof-state machine should record native evidence tied to at least:
 
-Rules:
+- exact profile generation;
+- exact draft revision;
+- definition page number;
+- exact page CRC32;
+- proof method (`Burn ACK + post-Burn page CRC`);
+- session/source authority that produced the evidence.
 
-- available tables come only from the Rust/native `TunerTableCatalog`;
-- selection keys are semantic native table IDs, never hardcoded ECU-family IDs, raw offsets, names, or transport metadata;
-- selected table identity is Kotlin presentation state only and does not create a second tune authority;
-- every projection/edit operation resolves the current native engine handle and validates the selected semantic table against the current native catalog;
-- if a replacement TuneSession no longer contains the previous selection, the owner falls back deterministically to the current native catalog default entry;
-- explicit selection of a table ID outside the current native catalog fails closed;
-- reordering catalog entries does not change a valid semantic selection;
-- all tables share the same Rust-owned draft revision/history; switching tables does not create per-table drafts or histories;
-- Undo/Redo remains TuneSession-wide and the currently selected table is reprojected afterward;
-- 2D and 3D remain peer views of the selected semantic table.
+Important lifecycle semantics:
 
-The Tuner UI exposes the catalog progressively:
+- fresh controller page acquisition proves current RAM bytes, not nonvolatile persistence; persistence evidence should begin unknown unless separately verified;
+- local draft edits should make a previously verified persisted revision visibly older, not erase history;
+- RAM writes should not automatically claim persistence;
+- a new source/session/profile install must invalidate persistence evidence belonging to the previous authority;
+- re-Burning one page should update that page's persistence evidence without claiming unrelated pages are persisted;
+- only exact post-Burn CRC verification after the required Burn ACK may advance persistence evidence.
 
-- one compact table chip shows the selected native table name and dimensions;
-- the dropdown is shown only when more than one catalog table exists;
-- the dropdown lists only native catalog entries and marks the current entry active;
-- the Tuner is not turned into a permanently expanded table list.
-
-Table-switch safety is explicit:
-
-- selection rectangle is cleared;
-- persistent extend-selection mode is cleared;
-- an active brush stroke is cleared;
-- pending preview is discarded;
-- Apply additionally checks that the preview semantic table ID still equals the currently displayed table ID and rejects stale previews if not.
-
-Focused JVM tests prove semantic selection, invalid-ID rejection, fallback after session replacement, catalog reorder stability, interaction reset, and stale-preview table-ID rejection.
-
-`OfflineTunerFixture` remains compatibility-only. New Tuner UI work must not depend on it.
+A separate app-facing persistence snapshot/state can then be designed, analogous to RAM synchronization state but page-aware and explicitly nonvolatile.
 
 ---
 
-# Tune source presentation authority
+# UI boundary — still intentionally not started
 
-The Tuner must not infer source authority from USB VID/PID, family labels, table names, or connection-looking UI state.
+Do not add a Burn button yet.
 
-The projection ABI carries the Rust-owned TuneSession origin and Kotlin validates exact source/flag combinations before UI presentation:
+Before user-facing Burn:
 
-- offline fixture;
-- imported file;
-- verified live controller.
-
-Unknown source origins, unknown source bits, or contradictory combinations fail closed.
-
-A live-controller projection means the semantic session came from a verified live load. Local Apply still changes only the draft. RAM status and Write-to-RAM availability come from the separate qualified RAM provenance/lifecycle path.
-
----
-
-# Generic ECU / authority invariants
-
-Do not regress these:
-
-- exact full runtime signature is profile authority;
-- USB VID/PID, product strings, family/board labels, endpoints, table names, and signature prefixes are not write/profile authority;
-- generic ECU support remains definition/profile/protocol driven;
-- one Rust semantic tuning authority;
-- one engine-owned `TuneSession` per engine;
-- immutable baseline + mutable `TuneDraft`;
-- Rust-owned revision/history/Undo/Redo;
-- 2D and 3D are peers over the same semantic state;
-- previews are non-mutating until local Apply;
-- exact retained pages remain raw byte authority beside semantic state;
-- write geometry comes from the exact selected definition/bundle, never Android/UI offsets;
-- Android cannot construct arbitrary page/offset writes;
-- stale profile generation, draft revision, retained source, or semantic table identity fails closed;
-- source presentation comes from validated native semantic authority, not transport heuristics.
+1. qualify native Burn proof-state ordering;
+2. qualify nonvolatile persistence provenance and an app-facing read-only state projection;
+3. decide how the selected semantic table maps to definition page(s) without presenting raw page numbers as normal UX;
+4. define confirmation and failure presentation that clearly distinguishes:
+   - local Apply;
+   - volatile RAM current;
+   - nonvolatile page persistence verified;
+   - unknown/stale persistence;
+5. keep multi-page/partial Burn truthful — never claim the whole tune is persisted when only one page has proof.
 
 ---
 
-# Volatile RAM workflow invariants
+# Repository discipline
 
-Rust-owned RAM provenance remains authoritative. Important rules:
+At the start of the next session:
 
-- fresh verified live acquisition establishes the acquired RAM baseline;
-- a fully readback-verified write can confirm the exact draft revision represented by that batch;
-- partial success advances only the exact verified prefix/ranges;
-- zero-prefix interruption invalidates unsupported whole-draft confirmation;
-- ACK alone never proves final RAM truth;
-- mandatory readback is required for confirmation;
-- disconnect/reconnect cannot make retained provenance appear freshly live without a new exact-authorized load;
-- Burn/persistence is not implied by any RAM state.
+1. inspect `main` and `current-work` heads;
+2. inspect the latest Foundation run on `current-work`;
+3. if this handoff-only SHA is fully green, promote that exact SHA to `main` and verify both refs;
+4. if it is not green, fix only the exact failing gate;
+5. continue with the native guarded-Burn proof-state machine above.
 
-`EngineAuthoritySerialization` continues to span JIT native authorization through physical USB transfer and verified-prefix reconciliation, while active tune/profile/source mutation paths share the same gate.
-
----
-
-# Repository/process state
-
-- Only `main` and `current-work` should exist as branch refs.
-- Historical PRs are closed; Git history and Actions are the audit trail.
-- Foundation is push-triggered on `current-work`; query Actions REST directly for authoritative run state.
-- Advance `main` only after the exact `current-work` head has a complete green Foundation run.
-
----
-
-# Immediate next work
-
-The source-aware Tuner authority slice and catalog-driven multi-table selection are complete. Do **not** rebuild them.
-
-The next correctness boundary is **TuneSession/source lifecycle coherence while the Tuner remains composed**.
-
-Current observation:
-
-- `TunerScreen` remembers its initial `TunerTableSelectionOwner`, catalog selection, and projection when the composable is created;
-- a verified live load, imported-source replacement, or other successful TuneSession replacement can occur while the Tuner workspace remains mounted;
-- native authority changes atomically, but the already-composed Tuner presentation does not yet have an explicit session-generation/source-change signal that forces it to refresh its catalog/projection and discard presentation state from the previous session.
-
-Proceed with the smallest lifecycle-coherence slice before Burn work:
-
-1. trace the exact successful TuneSession/source replacement paths and identify an existing native/session generation or introduce the smallest read-only generation token needed for presentation invalidation;
-2. make Tuner catalog/projection presentation refresh when the active TuneSession authority changes while the screen remains composed;
-3. preserve semantic table selection only when the same semantic ID exists in the replacement native catalog; otherwise fall back to the catalog default;
-4. always discard pending preview, rectangle selection, active brush stroke, and other session-relative transient edit state on a TuneSession replacement;
-5. do not reset state merely because unrelated runtime telemetry changes;
-6. do not create a second Kotlin tune/session authority or poll raw ECU geometry;
-7. add focused tests proving same-session edits do not spuriously reset presentation, while genuine session replacement does;
-8. preserve source-aware presentation and volatile RAM lifecycle gating after the refresh.
-
-After that coherence boundary is qualified, reassess the remaining prerequisites for **Burn/persistence**. Burn must remain a separate definition-owned capability with explicit safety UX, verification, failure semantics, and no combined Apply/Write/Burn action.
-
----
-
-# Development / qualification rule
-
-- Make implementation, process, and documentation changes on `current-work`.
-- Every meaningful `current-work` checkpoint must pass Foundation on its exact SHA before it is qualified.
-- Advance `main` only to an exact already-qualified `current-work` SHA.
-- Do not append new work directly to an older qualified SHA.
-- Git history, closed PRs, and workflow runs are the archive; do not keep historical feature branches merely as documentation.
+Do not recreate old phase branches, old RAM-write work, or the already-qualified Burn planner/envelope/opaque-wrapper/USB-routing layers.
