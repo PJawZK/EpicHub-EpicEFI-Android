@@ -25,6 +25,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,10 +46,12 @@ import com.epicefi.epichub.engine.TunerTableProjection
 import com.epicefi.epichub.engine.TunerTableSelectionOwner
 import com.epicefi.epichub.ui.components.StructuralCard
 import java.util.Locale
+import kotlinx.coroutines.delay
 import kotlin.math.max
 
 private const val CELL_WIDTH_DP = 72
 private const val AXIS_WIDTH_DP = 64
+private const val SESSION_EPOCH_POLL_MS = 250L
 
 private sealed interface PendingOperation {
     data class Step(val step: TunerCellStep) : PendingOperation
@@ -84,20 +87,22 @@ private data class PendingPreview(
 fun TunerScreen(modifier: Modifier = Modifier) {
     @Suppress("LocalVariableName")
     val ActiveTunerTable = remember { TunerTableSelectionOwner() }
-    val initialSelection = remember(ActiveTunerTable) {
-        runCatching { ActiveTunerTable.currentSelection() }
-    }
-    val initialProjection = remember(ActiveTunerTable) {
-        runCatching { ActiveTunerTable.readProjection() }
+    val initialPresentation = remember(ActiveTunerTable) {
+        runCatching { ActiveTunerTable.readPresentationSnapshot() }
     }
     val tableFocusRequester = remember { FocusRequester() }
-    var tableSelection by remember { mutableStateOf(initialSelection.getOrNull()) }
+    var observedSessionEpoch by remember {
+        mutableStateOf(initialPresentation.getOrNull()?.sessionEpoch)
+    }
+    var tableSelection by remember {
+        mutableStateOf(initialPresentation.getOrNull()?.selection)
+    }
     var tableMenuExpanded by remember { mutableStateOf(false) }
-    var projection by remember { mutableStateOf(initialProjection.getOrNull()) }
+    var projection by remember {
+        mutableStateOf(initialPresentation.getOrNull()?.projection)
+    }
     var errorMessage by remember {
-        mutableStateOf(
-            initialProjection.exceptionOrNull()?.message ?: initialSelection.exceptionOrNull()?.message,
-        )
+        mutableStateOf(initialPresentation.exceptionOrNull()?.message)
     }
     var show3d by remember { mutableStateOf(false) }
     var threeDInteractionMode by remember { mutableStateOf(Tuner3dInteractionMode.INSPECT) }
@@ -112,6 +117,36 @@ fun TunerScreen(modifier: Modifier = Modifier) {
     var brushPullStrength by remember { mutableStateOf("100") }
     var brushPullFalloff by remember { mutableStateOf("1") }
     var brushGestureEnabled by remember { mutableStateOf(false) }
+
+    LaunchedEffect(ActiveTunerTable) {
+        while (true) {
+            delay(SESSION_EPOCH_POLL_MS)
+            val currentEpoch = runCatching { ActiveTunerTable.sessionEpoch() }.getOrNull() ?: continue
+            if (!tuneSessionAuthorityChanged(observedSessionEpoch, currentEpoch)) {
+                continue
+            }
+
+            runCatching { ActiveTunerTable.readPresentationSnapshot() }
+                .onSuccess { refreshed ->
+                    observedSessionEpoch = refreshed.sessionEpoch
+                    tableSelection = refreshed.selection
+                    projection = refreshed.projection
+                    interactionState = TunerInteractionState()
+                    pendingPreview = null
+                    tableMenuExpanded = false
+                    errorMessage = null
+                }
+                .onFailure { error ->
+                    observedSessionEpoch = null
+                    tableSelection = null
+                    projection = null
+                    interactionState = TunerInteractionState()
+                    pendingPreview = null
+                    tableMenuExpanded = false
+                    errorMessage = error.message ?: "TuneSession refresh failed."
+                }
+        }
+    }
 
     fun brushStrokeParameters() = TunerBrushStrokeParameters(
         delta = brushPullDelta,
@@ -710,8 +745,7 @@ fun TunerScreen(modifier: Modifier = Modifier) {
                         singleLine = true,
                         label = {
                             Text(
-                                if (numericOperation == TunerNumericOperation.SCALE) {
-                                    "Scale factor"
+                                if (numericOperation == TunerNumericOperation.SCALE)n                                    "Scale factor"
                                 } else {
                                     "Value"
                                 },
