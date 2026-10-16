@@ -1,3 +1,5 @@
+use crate::engine::with_tune_source_authority;
+use crate::tuning::TuneSnapshotOrigin;
 use crate::write_reconciliation_transaction::GuardedRamWriteTransaction;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -28,6 +30,12 @@ pub struct RamSourceProvenance {
     pub confirmed_draft_revision: Option<u64>,
     pub verified_write_ranges: Vec<RamVerifiedWriteRange>,
     pub last_reconciliation: Option<RamWriteReconciliationSummary>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EngineRamSourceState {
+    pub current_draft_revision: u64,
+    pub provenance: RamSourceProvenance,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -81,6 +89,23 @@ impl RamSourceProvenance {
         );
         Ok(next)
     }
+}
+
+pub fn engine_ram_source_state(engine_handle: i64) -> Option<Option<EngineRamSourceState>> {
+    with_tune_source_authority(engine_handle, |session, source| {
+        let source = source?;
+        let provenance = if let Some(provenance) = source.provenance() {
+            provenance.clone()
+        } else if session.baseline().origin == TuneSnapshotOrigin::LiveController {
+            RamSourceProvenance::from_live_controller_read(session.profile_generation(), 0)
+        } else {
+            return None;
+        };
+        Some(EngineRamSourceState {
+            current_draft_revision: session.revision(),
+            provenance,
+        })
+    })
 }
 
 #[cfg(test)]
