@@ -239,14 +239,13 @@ pub extern "system" fn Java_com_epicefi_epichub_engine_NativeGuardedBurnBridge_p
     _object: JObject,
     handle: jlong,
 ) -> jlong {
-    ffi_guard(
-        i64::from(BURN_PANIC),
-        || match guarded_burn_plan_summary(handle) {
+    ffi_guard(i64::from(BURN_PANIC), || {
+        match guarded_burn_plan_summary(handle) {
             Ok(summary) => jlong::try_from(summary.profile_generation)
                 .unwrap_or(i64::from(BURN_INVALID_ARGUMENT)),
             Err(error) => i64::from(map_store_error(error)),
-        },
-    )
+        }
+    })
 }
 
 #[unsafe(no_mangle)]
@@ -255,15 +254,14 @@ pub extern "system" fn Java_com_epicefi_epichub_engine_NativeGuardedBurnBridge_d
     _object: JObject,
     handle: jlong,
 ) -> jlong {
-    ffi_guard(
-        i64::from(BURN_PANIC),
-        || match guarded_burn_plan_summary(handle) {
+    ffi_guard(i64::from(BURN_PANIC), || {
+        match guarded_burn_plan_summary(handle) {
             Ok(summary) => {
                 jlong::try_from(summary.draft_revision).unwrap_or(i64::from(BURN_INVALID_ARGUMENT))
             }
             Err(error) => i64::from(map_store_error(error)),
-        },
-    )
+        }
+    })
 }
 
 #[unsafe(no_mangle)]
@@ -319,7 +317,10 @@ pub extern "system" fn Java_com_epicefi_epichub_engine_NativeGuardedBurnBridge_f
             Err(error) => return i64::from(map_store_error(error)),
         };
         let (request, expected_response_size) = match stage {
-            STAGE_BURN => (&staged.burn.request_frame, staged.burn.expected_response_size),
+            STAGE_BURN => (
+                &staged.burn.request_frame,
+                staged.burn.expected_response_size,
+            ),
             STAGE_CRC => (
                 &staged.crc_check.request_frame,
                 staged.crc_check.expected_response_size,
