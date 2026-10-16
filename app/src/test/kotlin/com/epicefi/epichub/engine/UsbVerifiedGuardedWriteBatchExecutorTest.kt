@@ -49,7 +49,7 @@ class UsbVerifiedGuardedWriteBatchExecutorTest {
     }
 
     @Test
-    fun interruptedFirstTransactionDoesNotMutateRetainedSource() {
+    fun interruptedFirstTransactionReconcilesZeroPrefixForProvenanceInvalidation() {
         val failure =
             UsbNativeGuardedWriteBatchResult.AuthorityRejected(
                 stage = GuardedRamWriteStage.Readback,
@@ -68,7 +68,35 @@ class UsbVerifiedGuardedWriteBatchExecutorTest {
             ),
             result,
         )
-        assertEquals(emptyList<Int>(), reconciled)
+        assertEquals(listOf(0), reconciled)
+    }
+
+    @Test
+    fun zeroPrefixReconciliationFailurePreservesInterruptedCause() {
+        val failure =
+            UsbNativeGuardedWriteBatchResult.TransportFailure(
+                stage = GuardedRamWriteStage.Write,
+                transactionIndex = 0,
+                reason = "usb write failed",
+            )
+        val result =
+            UsbVerifiedGuardedWriteBatchExecutor(
+                executeTransport = { _, _ -> failure },
+                reconcileVerifiedPrefix = { count ->
+                    assertEquals(0, count)
+                    GuardedWriteBatchReconciliationResult.Rejected(
+                        GuardedWriteBatchReconciliationRejection.SourceReconciliationFailure,
+                    )
+                },
+            ).execute(unusedChannel, 100)
+
+        result as UsbVerifiedGuardedWriteBatchResult.ReconciliationRejected
+        assertEquals(0, result.verifiedTransactionCount)
+        assertEquals(
+            GuardedWriteBatchReconciliationRejection.SourceReconciliationFailure,
+            result.reason,
+        )
+        assertSame(failure, result.interruptedCause)
     }
 
     @Test
