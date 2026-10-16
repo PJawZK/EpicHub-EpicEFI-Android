@@ -53,13 +53,6 @@ internal class UsbVerifiedGuardedWriteBatchExecutor(
         val transportResult = executeTransport(channel, timeoutMs)
         val verifiedTransactionCount = transportResult.verifiedTransactionPrefix()
 
-        if (verifiedTransactionCount == 0 && transportResult !is UsbNativeGuardedWriteBatchResult.Reconciled) {
-            return UsbVerifiedGuardedWriteBatchResult.Interrupted(
-                reconciledTransactionCount = 0,
-                cause = transportResult,
-            )
-        }
-
         return when (val reconciliation = reconcileVerifiedPrefix(verifiedTransactionCount)) {
             GuardedWriteBatchReconciliationResult.Reconciled -> {
                 if (transportResult is UsbNativeGuardedWriteBatchResult.Reconciled) {
