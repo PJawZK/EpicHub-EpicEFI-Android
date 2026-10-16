@@ -1,9 +1,12 @@
 use crate::ecu_profile::ResolvedEcuProfile;
-use crate::engine::with_tune_source_authority;
+use crate::engine::{with_tune_source_authority, with_tune_source_authority_mut};
 use crate::profile_registry_store::{RegistryStoreError, with_selected_compiled_bundle};
 use crate::session_write_intent::{SessionWriteIntentError, plan_session_ram_write_intent};
 use crate::tune_source_image::TuneSourcePageImage;
 use crate::tuning::TuneSnapshotOrigin;
+use crate::verified_source_reconciliation::{
+    VerifiedSourceReconciliationError, reconcile_verified_transaction_prefix,
+};
 use crate::write_reconciliation_transaction::{
     GuardedRamWriteTransaction, ReconciliationTransactionError, plan_guarded_ram_write_transactions,
 };
@@ -27,6 +30,7 @@ pub enum EngineGuardedRamWriteBatchError {
     SourceImageChanged,
     Intent(SessionWriteIntentError),
     Transaction(ReconciliationTransactionError),
+    VerifiedSourceReconciliation(VerifiedSourceReconciliationError),
 }
 
 pub fn plan_selected_engine_guarded_ram_write_batch(
@@ -131,13 +135,76 @@ pub fn require_selected_engine_guarded_batch_current(
     .map_err(EngineGuardedRamWriteBatchError::ProfileAuthority)?
 }
 
+pub fn reconcile_selected_engine_guarded_batch_verified_prefix(
+    engine_handle: i64,
+    registry_handle: i64,
+    runtime_signature_response: &[u8],
+    max_signature_response_bytes: usize,
+    batch: &EngineGuardedRamWriteBatch,
+    verified_transaction_count: usize,
+) -> Result<(), EngineGuardedRamWriteBatchError> {
+    with_selected_compiled_bundle(
+        registry_handle,
+        runtime_signature_response,
+        max_signature_response_bytes,
+        |bundle| {
+            let selected_generation = bundle.profile.identity().profile_generation;
+            if selected_generation != batch.profile_generation {
+                return Err(EngineGuardedRamWriteBatchError::StaleProfileGeneration {
+                    expected: batch.profile_generation,
+                    actual: selected_generation,
+                });
+            }
+
+            with_tune_source_authority_mut(engine_handle, |session, source| {
+                let actual_generation = session.profile_generation();
+                if actual_generation != batch.profile_generation {
+                    return Err(EngineGuardedRamWriteBatchError::StaleProfileGeneration {
+                        expected: batch.profile_generation,
+                        actual: actual_generation,
+                    });
+                }
+                let actual_revision = session.revision();
+                if actual_revision != batch.draft_revision {
+                    return Err(EngineGuardedRamWriteBatchError::StaleDraftRevision {
+                        expected: batch.draft_revision,
+                        actual: actual_revision,
+                    });
+                }
+                if session.baseline().origin != TuneSnapshotOrigin::LiveController {
+                    return Err(EngineGuardedRamWriteBatchError::NonLiveControllerSource(
+                        session.baseline().origin,
+                    ));
+                }
+                let source = source.ok_or(EngineGuardedRamWriteBatchError::MissingSourceImage)?;
+                if &*source != &batch.source_image {
+                    return Err(EngineGuardedRamWriteBatchError::SourceImageChanged);
+                }
+
+                let reconciled = reconcile_verified_transaction_prefix(
+                    &*source,
+                    &batch.transactions,
+                    verified_transaction_count,
+                )
+                .map_err(EngineGuardedRamWriteBatchError::VerifiedSourceReconciliation)?;
+                *source = reconciled;
+                Ok(())
+            })
+            .ok_or(EngineGuardedRamWriteBatchError::InvalidEngineHandle)?
+        },
+    )
+    .map_err(EngineGuardedRamWriteBatchError::ProfileAuthority)?
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::{HashMap, HashSet};
 
     use super::*;
     use crate::compiled_profile_bundle::OwnedDefinitionBundleImport;
-    use crate::engine::{close_engine, create_engine, replace_tune_source, with_tune_session};
+    use crate::engine::{
+        close_engine, create_engine, replace_tune_source, with_tune_session, with_tune_source_image,
+    };
     use crate::live_tune_install::install_selected_live_pages;
     use crate::profile_import::OwnedSemanticTableBindingSpec;
     use crate::profile_registry_store::{
@@ -351,6 +418,124 @@ table = valuesTable, valuesMap, "Values", 1
                 &batch,
             ),
             Err(EngineGuardedRamWriteBatchError::SourceImageChanged)
+        );
+
+        close_profile_registry(registry);
+        close_engine(engine);
+    }
+
+    #[test]
+    fn verified_prefix_reconciles_only_retained_source_and_preserves_session_history() {
+        let (engine, registry, original_page) = live_engine();
+        with_tune_session(engine, |session| {
+            session
+                .apply_rectangle_numeric(42, 0, 0, 0, 0, 0, "101", 0)
+                .unwrap();
+        })
+        .unwrap();
+        let batch = plan_selected_engine_guarded_ram_write_batch(
+            engine,
+            registry,
+            SIGNATURE.as_bytes(),
+            256,
+            1,
+        )
+        .unwrap();
+
+        assert_eq!(
+            reconcile_selected_engine_guarded_batch_verified_prefix(
+                engine,
+                registry,
+                SIGNATURE.as_bytes(),
+                256,
+                &batch,
+                1,
+            ),
+            Ok(())
+        );
+
+        let retained = with_tune_source_image(engine, |source| source.unwrap().page(0).unwrap().to_vec())
+            .unwrap();
+        assert_eq!(retained[6], 101);
+        assert_eq!(retained[7..], original_page[7..]);
+        assert_eq!(with_tune_session(engine, |session| session.revision()), Some(1));
+        assert!(
+            with_tune_session(engine, |session| session.undo())
+                .unwrap()
+                .is_ok()
+        );
+        assert!(
+            with_tune_session(engine, |session| session.redo())
+                .unwrap()
+                .is_ok()
+        );
+
+        close_profile_registry(registry);
+        close_engine(engine);
+    }
+
+    #[test]
+    fn stale_or_invalid_reconciliation_never_replaces_retained_source() {
+        let (engine, registry, original_page) = live_engine();
+        with_tune_session(engine, |session| {
+            session
+                .apply_rectangle_numeric(42, 0, 0, 0, 0, 0, "101", 0)
+                .unwrap();
+        })
+        .unwrap();
+        let batch = plan_selected_engine_guarded_ram_write_batch(
+            engine,
+            registry,
+            SIGNATURE.as_bytes(),
+            256,
+            1,
+        )
+        .unwrap();
+
+        assert_eq!(
+            reconcile_selected_engine_guarded_batch_verified_prefix(
+                engine,
+                registry,
+                SIGNATURE.as_bytes(),
+                256,
+                &batch,
+                2,
+            ),
+            Err(EngineGuardedRamWriteBatchError::VerifiedSourceReconciliation(
+                VerifiedSourceReconciliationError::VerifiedPrefixTooLarge {
+                    verified: 2,
+                    available: 1,
+                }
+            ))
+        );
+        assert_eq!(
+            with_tune_source_image(engine, |source| source.unwrap().page(0).unwrap().to_vec()),
+            Some(original_page.clone()),
+        );
+
+        with_tune_session(engine, |session| {
+            session
+                .apply_rectangle_numeric(42, 0, 0, 0, 0, 0, "102", 1)
+                .unwrap();
+        })
+        .unwrap();
+        assert_eq!(
+            reconcile_selected_engine_guarded_batch_verified_prefix(
+                engine,
+                registry,
+                SIGNATURE.as_bytes(),
+                256,
+                &batch,
+                1,
+            ),
+            Err(EngineGuardedRamWriteBatchError::StaleDraftRevision {
+                expected: 1,
+                actual: 2,
+            })
+        );
+        assert_eq!(
+            with_tune_source_image(engine, |source| source.unwrap().page(0).unwrap().to_vec()),
+            Some(original_page),
         );
 
         close_profile_registry(registry);
