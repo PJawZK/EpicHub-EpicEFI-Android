@@ -745,7 +745,8 @@ fun TunerScreen(modifier: Modifier = Modifier) {
                         singleLine = true,
                         label = {
                             Text(
-                                if (numericOperation == TunerNumericOperation.SCALE)n                                    "Scale factor"
+                                if (numericOperation == TunerNumericOperation.SCALE) {
+                                    "Scale factor"
                                 } else {
                                     "Value"
                                 },
