@@ -21,9 +21,9 @@ class RamSynchronizationStateTest {
             )
 
         assertEquals(RamSynchronizationStatus.FreshLiveControllerConfirmation, state.status)
-        assertEquals(77, state.profileGeneration)
-        assertEquals(0, state.currentDraftRevision)
-        assertEquals(0, state.confirmedDraftRevision)
+        assertEquals(77L, state.profileGeneration)
+        assertEquals(0L, state.currentDraftRevision)
+        assertEquals(0L, state.confirmedDraftRevision)
         assertEquals(RamSourceAcquisition.LiveControllerRead, state.acquisition)
         assertNull(state.lastReconciliation)
     }
@@ -42,9 +42,9 @@ class RamSynchronizationStateTest {
             )
 
         assertEquals(RamSynchronizationStatus.LocalDraftAheadOfConfirmedRam, state.status)
-        assertEquals(4, state.currentDraftRevision)
-        assertEquals(2, state.confirmedDraftRevision)
-        assertEquals(3, state.verifiedWriteRangeCount)
+        assertEquals(4L, state.currentDraftRevision)
+        assertEquals(2L, state.confirmedDraftRevision)
+        assertEquals(3L, state.verifiedWriteRangeCount)
     }
 
     @Test
@@ -93,8 +93,8 @@ class RamSynchronizationStateTest {
 
         assertEquals(RamSynchronizationStatus.PartiallyVerifiedInterruptedWrite, state.status)
         assertNull(state.confirmedDraftRevision)
-        assertEquals(1, state.verifiedWriteRangeCount)
-        assertEquals(1, state.lastReconciliation?.verifiedTransactionCount)
+        assertEquals(1L, state.verifiedWriteRangeCount)
+        assertEquals(1L, state.lastReconciliation?.verifiedTransactionCount)
         assertEquals(false, state.lastReconciliation?.complete)
     }
 
@@ -115,8 +115,8 @@ class RamSynchronizationStateTest {
 
         assertEquals(RamSynchronizationStatus.RamUnconfirmedAfterInterruptedWrite, state.status)
         assertNull(state.confirmedDraftRevision)
-        assertEquals(0, state.lastReconciliation?.verifiedTransactionCount)
-        assertEquals(1, state.lastReconciliation?.transactionCount)
+        assertEquals(0L, state.lastReconciliation?.verifiedTransactionCount)
+        assertEquals(1L, state.lastReconciliation?.transactionCount)
     }
 
     @Test
@@ -150,14 +150,14 @@ class RamSynchronizationStateTest {
         ByteBuffer.allocateDirect(64).order(ByteOrder.LITTLE_ENDIAN).apply {
             put(RAM_STATE_MAGIC)
             put(status.toByte())
-            put(1)
+            put(1.toByte())
             put(flags.toByte())
-            put(1)
-            putLong(77)
+            put(1.toByte())
+            putLong(77L)
             putLong(currentDraftRevision)
-            putLong(confirmedDraftRevision ?: -1)
+            putLong(confirmedDraftRevision ?: -1L)
             putLong(verifiedWriteRangeCount)
-            putLong(lastDraftRevision ?: -1)
+            putLong(lastDraftRevision ?: -1L)
             putLong(lastVerifiedTransactionCount)
             putLong(lastTransactionCount)
             rewind()
