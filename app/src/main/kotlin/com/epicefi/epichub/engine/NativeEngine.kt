@@ -47,37 +47,40 @@ class NativeEngine private constructor(initialHandle: Long) : Closeable {
         page1: ByteArray,
         page2: ByteArray,
         modes: Mega144h7TuneSourceModes = Mega144h7TuneSourceModes(),
-    ): Long {
-        require(page1.size == MEGA144H7_PAGE_1_SIZE) {
-            "Mega144H7 page 1 must be exactly $MEGA144H7_PAGE_1_SIZE bytes."
+    ): Long =
+        EngineAuthoritySerialization.exclusive {
+            require(page1.size == MEGA144H7_PAGE_1_SIZE) {
+                "Mega144H7 page 1 must be exactly $MEGA144H7_PAGE_1_SIZE bytes."
+            }
+            require(page2.size == MEGA144H7_PAGE_2_SIZE) {
+                "Mega144H7 page 2 must be exactly $MEGA144H7_PAGE_2_SIZE bytes."
+            }
+            val page1Buffer = ByteBuffer.allocateDirect(page1.size).apply {
+                put(page1)
+                rewind()
+            }
+            val page2Buffer = ByteBuffer.allocateDirect(page2.size).apply {
+                put(page2)
+                rewind()
+            }
+            val result = NativeEngineBridge.installMega144h7ImportedTunePages(
+                requireNativeHandle(),
+                page1Buffer,
+                page2Buffer,
+                modes.flags(),
+            )
+            check(result > 0L) { "Mega144H7 tune source install failed with status $result." }
+            result
         }
-        require(page2.size == MEGA144H7_PAGE_2_SIZE) {
-            "Mega144H7 page 2 must be exactly $MEGA144H7_PAGE_2_SIZE bytes."
-        }
-        val page1Buffer = ByteBuffer.allocateDirect(page1.size).apply {
-            put(page1)
-            rewind()
-        }
-        val page2Buffer = ByteBuffer.allocateDirect(page2.size).apply {
-            put(page2)
-            rewind()
-        }
-        val result = NativeEngineBridge.installMega144h7ImportedTunePages(
-            requireNativeHandle(),
-            page1Buffer,
-            page2Buffer,
-            modes.flags(),
-        )
-        check(result > 0L) { "Mega144H7 tune source install failed with status $result." }
-        return result
-    }
 
     @Synchronized
     override fun close() {
-        val current = handle.getAndSet(0L)
-        if (current != 0L) {
-            NativeEngineBridge.close(current)
-            currentEngineHandle.compareAndSet(current, 0L)
+        EngineAuthoritySerialization.exclusive {
+            val current = handle.getAndSet(0L)
+            if (current != 0L) {
+                NativeEngineBridge.close(current)
+                currentEngineHandle.compareAndSet(current, 0L)
+            }
         }
     }
 
