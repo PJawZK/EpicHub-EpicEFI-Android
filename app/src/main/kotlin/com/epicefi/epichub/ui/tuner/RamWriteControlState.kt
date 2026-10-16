@@ -46,7 +46,7 @@ data class RamWriteControlState(
     fun started(): RamWriteControlState =
         copy(busy = true, message = "Writing current draft to volatile ECU RAM and verifying exact readback…")
 
-    fun completed(result: AndroidUsbLiveRamWriteResult): RamWriteControlState =
+    internal fun completed(result: AndroidUsbLiveRamWriteResult): RamWriteControlState =
         when (result) {
             is AndroidUsbLiveRamWriteResult.Completed -> completed(result.result)
             AndroidUsbLiveRamWriteResult.NotConnected ->
@@ -160,4 +160,3 @@ private fun UsbNativeGuardedWriteBatchResult.describeFailure(): String =
         is UsbNativeGuardedWriteBatchResult.Reconciled ->
             "unexpected reconciled transport result (${transactionCount} transaction(s))"
     }
-}
