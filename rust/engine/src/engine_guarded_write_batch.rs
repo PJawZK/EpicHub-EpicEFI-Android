@@ -30,7 +30,12 @@ pub enum EngineGuardedRamWriteBatchError {
     SourceImageChanged,
     Intent(SessionWriteIntentError),
     Transaction(ReconciliationTransactionError),
-    VerifiedSourceReconciliation(VerifiedSourceReconciliationError),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum EngineGuardedSourceReconciliationError {
+    GuardedBatch(EngineGuardedRamWriteBatchError),
+    VerifiedSource(VerifiedSourceReconciliationError),
 }
 
 pub fn plan_selected_engine_guarded_ram_write_batch(
@@ -142,7 +147,7 @@ pub fn reconcile_selected_engine_guarded_batch_verified_prefix(
     max_signature_response_bytes: usize,
     batch: &EngineGuardedRamWriteBatch,
     verified_transaction_count: usize,
-) -> Result<(), EngineGuardedRamWriteBatchError> {
+) -> Result<(), EngineGuardedSourceReconciliationError> {
     with_selected_compiled_bundle(
         registry_handle,
         runtime_signature_response,
@@ -150,35 +155,49 @@ pub fn reconcile_selected_engine_guarded_batch_verified_prefix(
         |bundle| {
             let selected_generation = bundle.profile.identity().profile_generation;
             if selected_generation != batch.profile_generation {
-                return Err(EngineGuardedRamWriteBatchError::StaleProfileGeneration {
-                    expected: batch.profile_generation,
-                    actual: selected_generation,
-                });
+                return Err(EngineGuardedSourceReconciliationError::GuardedBatch(
+                    EngineGuardedRamWriteBatchError::StaleProfileGeneration {
+                        expected: batch.profile_generation,
+                        actual: selected_generation,
+                    },
+                ));
             }
 
             with_tune_source_authority_mut(engine_handle, |session, source| {
                 let actual_generation = session.profile_generation();
                 if actual_generation != batch.profile_generation {
-                    return Err(EngineGuardedRamWriteBatchError::StaleProfileGeneration {
-                        expected: batch.profile_generation,
-                        actual: actual_generation,
-                    });
+                    return Err(EngineGuardedSourceReconciliationError::GuardedBatch(
+                        EngineGuardedRamWriteBatchError::StaleProfileGeneration {
+                            expected: batch.profile_generation,
+                            actual: actual_generation,
+                        },
+                    ));
                 }
                 let actual_revision = session.revision();
                 if actual_revision != batch.draft_revision {
-                    return Err(EngineGuardedRamWriteBatchError::StaleDraftRevision {
-                        expected: batch.draft_revision,
-                        actual: actual_revision,
-                    });
-                }
-                if session.baseline().origin != TuneSnapshotOrigin::LiveController {
-                    return Err(EngineGuardedRamWriteBatchError::NonLiveControllerSource(
-                        session.baseline().origin,
+                    return Err(EngineGuardedSourceReconciliationError::GuardedBatch(
+                        EngineGuardedRamWriteBatchError::StaleDraftRevision {
+                            expected: batch.draft_revision,
+                            actual: actual_revision,
+                        },
                     ));
                 }
-                let source = source.ok_or(EngineGuardedRamWriteBatchError::MissingSourceImage)?;
+                if session.baseline().origin != TuneSnapshotOrigin::LiveController {
+                    return Err(EngineGuardedSourceReconciliationError::GuardedBatch(
+                        EngineGuardedRamWriteBatchError::NonLiveControllerSource(
+                            session.baseline().origin,
+                        ),
+                    ));
+                }
+                let source = source.ok_or_else(|| {
+                    EngineGuardedSourceReconciliationError::GuardedBatch(
+                        EngineGuardedRamWriteBatchError::MissingSourceImage,
+                    )
+                })?;
                 if &*source != &batch.source_image {
-                    return Err(EngineGuardedRamWriteBatchError::SourceImageChanged);
+                    return Err(EngineGuardedSourceReconciliationError::GuardedBatch(
+                        EngineGuardedRamWriteBatchError::SourceImageChanged,
+                    ));
                 }
 
                 let reconciled = reconcile_verified_transaction_prefix(
@@ -186,14 +205,22 @@ pub fn reconcile_selected_engine_guarded_batch_verified_prefix(
                     &batch.transactions,
                     verified_transaction_count,
                 )
-                .map_err(EngineGuardedRamWriteBatchError::VerifiedSourceReconciliation)?;
+                .map_err(EngineGuardedSourceReconciliationError::VerifiedSource)?;
                 *source = reconciled;
                 Ok(())
             })
-            .ok_or(EngineGuardedRamWriteBatchError::InvalidEngineHandle)?
+            .ok_or_else(|| {
+                EngineGuardedSourceReconciliationError::GuardedBatch(
+                    EngineGuardedRamWriteBatchError::InvalidEngineHandle,
+                )
+            })?
         },
     )
-    .map_err(EngineGuardedRamWriteBatchError::ProfileAuthority)?
+    .map_err(|error| {
+        EngineGuardedSourceReconciliationError::GuardedBatch(
+            EngineGuardedRamWriteBatchError::ProfileAuthority(error),
+        )
+    })?
 }
 
 #[cfg(test)]
@@ -505,14 +532,12 @@ table = valuesTable, valuesMap, "Values", 1
                 &batch,
                 2,
             ),
-            Err(
-                EngineGuardedRamWriteBatchError::VerifiedSourceReconciliation(
-                    VerifiedSourceReconciliationError::VerifiedPrefixTooLarge {
-                        verified: 2,
-                        available: 1,
-                    }
-                )
-            )
+            Err(EngineGuardedSourceReconciliationError::VerifiedSource(
+                VerifiedSourceReconciliationError::VerifiedPrefixTooLarge {
+                    verified: 2,
+                    available: 1,
+                }
+            ))
         );
         assert_eq!(
             with_tune_source_image(engine, |source| source.unwrap().page(0).unwrap().to_vec()),
@@ -534,10 +559,12 @@ table = valuesTable, valuesMap, "Values", 1
                 &batch,
                 1,
             ),
-            Err(EngineGuardedRamWriteBatchError::StaleDraftRevision {
-                expected: 1,
-                actual: 2,
-            })
+            Err(EngineGuardedSourceReconciliationError::GuardedBatch(
+                EngineGuardedRamWriteBatchError::StaleDraftRevision {
+                    expected: 1,
+                    actual: 2,
+                }
+            ))
         );
         assert_eq!(
             with_tune_source_image(engine, |source| source.unwrap().page(0).unwrap().to_vec()),
