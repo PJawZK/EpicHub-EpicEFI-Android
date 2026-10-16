@@ -3,6 +3,7 @@ pub mod compiled_ecu_profile;
 pub mod compiled_profile_bundle;
 #[cfg(test)]
 mod compiled_profile_install_tests;
+pub mod crc32_check_envelope_plan;
 mod diagnostics;
 pub mod ecu_calibration;
 pub mod ecu_compiled_snapshot;
