@@ -84,9 +84,7 @@ pub fn tune_catalog_bytes(handle: i64) -> Option<Vec<u8>> {
 mod tests {
     use super::*;
     use crate::ecu_profile::{ProfileIdentity, ResolvedEcuProfile};
-    use crate::engine::{
-        close_engine, create_engine, tune_session_epoch, with_tune_source_image,
-    };
+    use crate::engine::{close_engine, create_engine, tune_session_epoch, with_tune_source_image};
     use crate::offline_tune_source::OFFLINE_SOURCE_PRIMARY_TABLE_ID;
     use crate::resolved_profile_source::{
         MEGA144H7_PAGE_1_SIZE, MEGA144H7_PAGE_2_SIZE, ProfileResolveError, TABLE_ID_VE,
@@ -209,14 +207,10 @@ mod tests {
     fn imported_install_clears_a_previous_live_source_image() {
         let handle = create_engine();
         install_live_pages(handle, &AlternateTestProfile, &[]).unwrap();
-        assert!(
-            with_tune_source_image(handle, |image| image.is_some()).unwrap()
-        );
+        assert!(with_tune_source_image(handle, |image| image.is_some()).unwrap());
 
         install_imported_pages(handle, &AlternateTestProfile, &[]).unwrap();
-        assert!(
-            !with_tune_source_image(handle, |image| image.is_some()).unwrap()
-        );
+        assert!(!with_tune_source_image(handle, |image| image.is_some()).unwrap());
         close_engine(handle);
     }
 
