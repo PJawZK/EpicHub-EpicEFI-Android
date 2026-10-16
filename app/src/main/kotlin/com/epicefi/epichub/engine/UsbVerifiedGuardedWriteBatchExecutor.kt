@@ -25,9 +25,9 @@ internal class UsbVerifiedGuardedWriteBatchExecutor(
         Int,
     ) -> UsbNativeGuardedWriteBatchResult,
     private val reconcileVerifiedPrefix: (Int) -> GuardedWriteBatchReconciliationResult,
-    private val serializeExecution: (((() -> UsbVerifiedGuardedWriteBatchResult)) -> UsbVerifiedGuardedWriteBatchResult) = { block ->
-        block()
-    },
+    private val serializeExecution:
+        ((() -> UsbVerifiedGuardedWriteBatchResult) -> UsbVerifiedGuardedWriteBatchResult) =
+        { block -> block() },
 ) {
     constructor(batch: NativeGuardedWriteBatch) :
         this(
