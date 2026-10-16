@@ -29,6 +29,7 @@ mod jni_readonly_page_acquisition;
 mod jni_readonly_tune_metadata;
 mod jni_runtime_identity;
 mod jni_tune_session;
+mod jni_tune_session_epoch;
 pub mod live_tune_install;
 mod mega144h7_profile;
 pub mod ms_envelope_codec;
