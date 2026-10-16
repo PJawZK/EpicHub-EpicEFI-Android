@@ -15,11 +15,41 @@ class TunerTableSelectionOwner {
     fun currentSelection(): TunerTableSelection = resolveSelection()
 
     @Synchronized
+    fun sessionEpoch(): Long = readSessionEpoch(NativeEngine.requireCurrentHandle())
+
+    /**
+     * Reads epoch, catalog selection and projection as one presentation snapshot. A TuneSession may
+     * be replaced between read-only JNI calls, so the epoch is sampled before and after. Mixed
+     * authority is rejected and retried rather than surfaced to Compose.
+     */
+    @Synchronized
+    fun readPresentationSnapshot(): TunerSessionPresentationSnapshot {
+        repeat(MAX_PRESENTATION_SNAPSHOT_ATTEMPTS) {
+            val handle = NativeEngine.requireCurrentHandle()
+            val beforeEpoch = readSessionEpoch(handle)
+            val selection = resolveSelection(handle)
+            val projection = TunerSessionClient(handle, selection.entry.tableId).readProjection()
+            val afterEpoch = readSessionEpoch(handle)
+            if (
+                beforeEpoch == afterEpoch &&
+                projection.tableId == selection.entry.tableId &&
+                projection.profileGeneration == selection.catalog.profileGeneration
+            ) {
+                return TunerSessionPresentationSnapshot(
+                    sessionEpoch = afterEpoch,
+                    selection = selection,
+                    projection = projection,
+                )
+            }
+        }
+        error("TuneSession changed while reading Tuner presentation authority.")
+    }
+
+    @Synchronized
     fun select(tableId: Int): TunerTableSelection {
         val handle = NativeEngine.requireCurrentHandle()
         val catalog = TunerTableCatalogBuffer().read(handle)
-        val entry = catalog.tables.firstOrNull { it.tableId == tableId }
-            ?: error("Tune table $tableId is not present in the active native catalog.")
+        val entry = requireTunerTableSelection(catalog, tableId)
         selectedTableId = entry.tableId
         return TunerTableSelection(catalog = catalog, entry = entry)
     }
@@ -166,18 +196,31 @@ class TunerTableSelectionOwner {
         handle: Long = NativeEngine.requireCurrentHandle(),
     ): TunerTableSelection {
         val catalog = TunerTableCatalogBuffer().read(handle)
-        val requested = selectedTableId
-        val entry = requested?.let { tableId ->
-            catalog.tables.firstOrNull { it.tableId == tableId }
-        } ?: catalog.defaultTable()
+        val entry = resolveTunerTableSelection(catalog, selectedTableId)
         selectedTableId = entry.tableId
         return TunerTableSelection(catalog = catalog, entry = entry)
+    }
+
+    private fun readSessionEpoch(handle: Long): Long {
+        val epoch = NativeEngineBridge.tuneSessionEpoch(handle)
+        check(epoch > 0L) { "Native TuneSession epoch is unavailable." }
+        return epoch
+    }
+
+    private companion object {
+        const val MAX_PRESENTATION_SNAPSHOT_ATTEMPTS = 3
     }
 }
 
 data class TunerTableSelection(
     val catalog: TunerTableCatalog,
     val entry: TunerTableCatalogEntry,
+)
+
+data class TunerSessionPresentationSnapshot(
+    val sessionEpoch: Long,
+    val selection: TunerTableSelection,
+    val projection: TunerTableProjection,
 )
 
 /** Pure catalog selection rules used by the owner and JVM tests without native state. */
