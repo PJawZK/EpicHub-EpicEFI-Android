@@ -1,7 +1,7 @@
 package com.epicefi.epichub.engine
 
-import kotlin.test.Test
-import kotlin.test.assertFailsWith
+import org.junit.Assert.assertThrows
+import org.junit.Test
 
 class TunerTableProjectionOriginValidationTest {
     @Test
@@ -22,21 +22,21 @@ class TunerTableProjectionOriginValidationTest {
 
     @Test
     fun unknown_origin_is_rejected() {
-        assertFailsWith<IllegalArgumentException> {
+        assertThrows(IllegalArgumentException::class.java) {
             validateTunerProjectionOrigin(originCode = 4, flags = 0)
         }
     }
 
     @Test
     fun unknown_flag_bit_is_rejected() {
-        assertFailsWith<IllegalArgumentException> {
+        assertThrows(IllegalArgumentException::class.java) {
             validateTunerProjectionOrigin(originCode = 3, flags = 1 shl 7)
         }
     }
 
     @Test
     fun live_origin_cannot_claim_offline_flags() {
-        assertFailsWith<IllegalArgumentException> {
+        assertThrows(IllegalArgumentException::class.java) {
             validateTunerProjectionOrigin(
                 originCode = 3,
                 flags = TABLE_PROJECTION_FLAG_OFFLINE,
@@ -46,7 +46,7 @@ class TunerTableProjectionOriginValidationTest {
 
     @Test
     fun fixture_origin_requires_both_offline_and_fixture_flags() {
-        assertFailsWith<IllegalArgumentException> {
+        assertThrows(IllegalArgumentException::class.java) {
             validateTunerProjectionOrigin(
                 originCode = 1,
                 flags = TABLE_PROJECTION_FLAG_FIXTURE,
