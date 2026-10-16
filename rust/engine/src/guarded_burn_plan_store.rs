@@ -61,7 +61,10 @@ impl GuardedBurnPlanStore {
         i32::try_from(self.plans.len()).unwrap_or(i32::MAX)
     }
 
-    pub fn get(&self, handle: i64) -> Result<Arc<EngineGuardedPageBurnPlan>, GuardedBurnPlanStoreError> {
+    pub fn get(
+        &self,
+        handle: i64,
+    ) -> Result<Arc<EngineGuardedPageBurnPlan>, GuardedBurnPlanStoreError> {
         self.plans
             .get(&handle)
             .cloned()
@@ -309,14 +312,8 @@ table = valuesTable, valuesMap, "Values", 1
                 page: 1,
             }
         );
-        let staged = stage_guarded_burn_plan(
-            handle,
-            engine,
-            registry,
-            SIGNATURE.as_bytes(),
-            256,
-        )
-        .unwrap();
+        let staged =
+            stage_guarded_burn_plan(handle, engine, registry, SIGNATURE.as_bytes(), 256).unwrap();
         assert_eq!(staged.burn.expected_response_size, 7);
 
         close_guarded_burn_plan(handle);
@@ -371,14 +368,8 @@ table = valuesTable, valuesMap, "Values", 1
             1,
         )
         .unwrap();
-        let staged = stage_guarded_burn_plan(
-            handle,
-            engine,
-            registry,
-            SIGNATURE.as_bytes(),
-            256,
-        )
-        .unwrap();
+        let staged =
+            stage_guarded_burn_plan(handle, engine, registry, SIGNATURE.as_bytes(), 256).unwrap();
 
         assert_eq!(
             verify_guarded_burn_ack(
