@@ -454,11 +454,15 @@ table = valuesTable, valuesMap, "Values", 1
             Ok(())
         );
 
-        let retained = with_tune_source_image(engine, |source| source.unwrap().page(0).unwrap().to_vec())
-            .unwrap();
+        let retained =
+            with_tune_source_image(engine, |source| source.unwrap().page(0).unwrap().to_vec())
+                .unwrap();
         assert_eq!(retained[6], 101);
         assert_eq!(retained[7..], original_page[7..]);
-        assert_eq!(with_tune_session(engine, |session| session.revision()), Some(1));
+        assert_eq!(
+            with_tune_session(engine, |session| session.revision()),
+            Some(1)
+        );
         assert!(
             with_tune_session(engine, |session| session.undo())
                 .unwrap()
@@ -501,12 +505,14 @@ table = valuesTable, valuesMap, "Values", 1
                 &batch,
                 2,
             ),
-            Err(EngineGuardedRamWriteBatchError::VerifiedSourceReconciliation(
-                VerifiedSourceReconciliationError::VerifiedPrefixTooLarge {
-                    verified: 2,
-                    available: 1,
-                }
-            ))
+            Err(
+                EngineGuardedRamWriteBatchError::VerifiedSourceReconciliation(
+                    VerifiedSourceReconciliationError::VerifiedPrefixTooLarge {
+                        verified: 2,
+                        available: 1,
+                    }
+                )
+            )
         );
         assert_eq!(
             with_tune_source_image(engine, |source| source.unwrap().page(0).unwrap().to_vec()),
