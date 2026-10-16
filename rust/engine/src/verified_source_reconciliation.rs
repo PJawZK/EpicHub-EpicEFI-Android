@@ -68,7 +68,9 @@ fn reconcile_transaction(
     let page_index = transaction.page - 1;
     let page = pages
         .get_mut(page_index)
-        .ok_or(VerifiedSourceReconciliationError::InvalidPage(transaction.page))?;
+        .ok_or(VerifiedSourceReconciliationError::InvalidPage(
+            transaction.page,
+        ))?;
     let end = transaction
         .offset
         .checked_add(transaction.before.len())
@@ -133,12 +135,9 @@ mod tests {
     #[test]
     fn zero_verified_transactions_leave_source_exactly_unchanged() {
         let source = source();
-        let reconciled = reconcile_verified_transaction_prefix(
-            &source,
-            &[transaction(1, 1, &[2], &[9])],
-            0,
-        )
-        .unwrap();
+        let reconciled =
+            reconcile_verified_transaction_prefix(&source, &[transaction(1, 1, &[2], &[9])], 0)
+                .unwrap();
 
         assert_eq!(reconciled, source);
     }
