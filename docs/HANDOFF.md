@@ -16,17 +16,17 @@ Every meaningful `current-work` checkpoint must pass the complete Foundation wor
 
 ---
 
-# Qualified state entering this handoff update — 2026-10-16
+# Qualified state — 2026-10-16
 
-The previous fully qualified baseline on both `main` and `current-work` was:
+The latest fully qualified implementation checkpoint is:
 
-`2e024fa8c54ef3e730b99e8dbf84599093da9695`
+`d35c76a448679b081ca13215246acf9c4e202dc4`
 
 Foundation quality run:
 
-`38875188598`
+`38880159652`
 
-That baseline already contained:
+That checkpoint completed the explicit app-facing RAM synchronization-state boundary. It contains:
 
 - generic definition/profile/runtime-signature authority;
 - verified live tune-page acquisition and exact retained `TuneSourcePageImage`;
@@ -37,17 +37,19 @@ That baseline already contained:
 - opaque guarded native write batches;
 - constrained Android USB execution with precondition read, exact verification, write, ACK verification, and mandatory readback;
 - pure, engine-owned, opaque-store, JNI, and Android verified-prefix reconciliation;
-- retained RAM provenance / synchronization evidence without a generic `isSynced` boolean;
 - process-local engine-authority serialization across just-in-time authorization, physical USB transfer, and reconciliation;
-- zero-verified-prefix interruption reconciliation, so even an interrupted first transaction records incomplete RAM provenance instead of silently preserving an older whole-draft confirmation.
+- zero-verified-prefix interruption reconciliation, so even an interrupted first transaction records incomplete RAM provenance instead of silently preserving an older whole-draft confirmation;
+- Rust-owned semantic RAM synchronization classification;
+- one atomic versioned native RAM-state snapshot exposed to Android;
+- fail-closed Kotlin decoding of the native state/evidence without a generic `isSynced` boolean.
 
-The explicit app-facing RAM synchronization-state boundary was then completed on `current-work` at exact code SHA:
+The handoff content describing that checkpoint was qualified on exact repository SHA:
 
-`d35c76a448679b081ca13215246acf9c4e202dc4`
+`9411e5c86fced27fefb9ea8e4fb5162f73c8b136`
 
 Foundation quality run:
 
-`38880159652`
+`38880935456`
 
 That run passed the complete Foundation gate:
 
@@ -55,7 +57,7 @@ That run passed the complete Foundation gate:
 - Rust format;
 - Rust Clippy with warnings denied;
 - all Rust tests;
-- Android JVM tests, including snapshot decoding and fail-closed contradiction proofs;
+- Android JVM tests;
 - Android debug build;
 - Android performance build;
 - Android Macrobenchmark harness build;
@@ -64,9 +66,9 @@ That run passed the complete Foundation gate:
 - physical benchmark-kit preparation;
 - qualified artifact publication.
 
-Therefore `d35c76a448679b081ca13215246acf9c4e202dc4` is an immutable qualified code checkpoint.
+Therefore `9411e5c86fced27fefb9ea8e4fb5162f73c8b136` is the latest immutable qualified repository checkpoint entering the next work slice.
 
-This handoff-file update itself creates a newer `current-work` SHA. That newer SHA must also pass Foundation before `main` advances.
+This small handoff metadata update creates a newer `current-work` SHA and must itself pass Foundation before `main` advances to it.
 
 ---
 
@@ -160,7 +162,7 @@ Current rules:
 - no generic whole-session `isSynced` boolean exists;
 - no RAM provenance state implies nonvolatile persistence.
 
-Rust now classifies that evidence into five explicit app-facing states:
+Rust classifies that evidence into five explicit app-facing states:
 
 1. `FreshLiveControllerConfirmation` — a freshly acquired live-controller image confirms the current draft/baseline and no write reconciliation has occurred;
 2. `CurrentDraftConfirmedInRam` — a complete readback-verified write reconciliation confirms the exact current draft revision in volatile RAM;
@@ -258,7 +260,9 @@ Do not bypass the gated app-level mutation wrappers with direct bridge mutations
 
 Proceed toward the smallest explicit user-facing **Write to RAM** workflow. Do not add Burn/persistence in this slice.
 
-Before changing UI, inspect the current Tuner/live-connection ownership and identify the narrowest existing integration point that already has:
+The current integration inspection identifies `EpicHubApp` + `AndroidUsbLiveConnectionSessionOwner` / `LiveTuneConnectionOwner` as the existing live connection/profile/source ownership path. Reuse that path rather than creating a second connection or tune authority.
+
+Before changing UI, trace the exact `AndroidUsbLiveConnectionSessionOwner` API and the Tuner shell state so the write workflow has one owner that already possesses or can safely expose:
 
 - the active `NativeEngine`;
 - the active profile registry / exact runtime signature authority;
