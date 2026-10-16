@@ -18,6 +18,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -34,13 +36,13 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.unit.dp
-import com.epicefi.epichub.engine.ActiveTunerTable
 import com.epicefi.epichub.engine.TunerBrushPathPoint
 import com.epicefi.epichub.engine.TunerBrushPullMode
 import com.epicefi.epichub.engine.TunerCellStep
 import com.epicefi.epichub.engine.TunerInterpolationMode
 import com.epicefi.epichub.engine.TunerNumericOperation
 import com.epicefi.epichub.engine.TunerTableProjection
+import com.epicefi.epichub.engine.TunerTableSelectionOwner
 import com.epicefi.epichub.ui.components.StructuralCard
 import java.util.Locale
 import kotlin.math.max
@@ -80,10 +82,23 @@ private data class PendingPreview(
 
 @Composable
 fun TunerScreen(modifier: Modifier = Modifier) {
-    val initialProjection = remember { runCatching { ActiveTunerTable.readProjection() } }
+    @Suppress("LocalVariableName")
+    val ActiveTunerTable = remember { TunerTableSelectionOwner() }
+    val initialSelection = remember(ActiveTunerTable) {
+        runCatching { ActiveTunerTable.currentSelection() }
+    }
+    val initialProjection = remember(ActiveTunerTable) {
+        runCatching { ActiveTunerTable.readProjection() }
+    }
     val tableFocusRequester = remember { FocusRequester() }
+    var tableSelection by remember { mutableStateOf(initialSelection.getOrNull()) }
+    var tableMenuExpanded by remember { mutableStateOf(false) }
     var projection by remember { mutableStateOf(initialProjection.getOrNull()) }
-    var errorMessage by remember { mutableStateOf(initialProjection.exceptionOrNull()?.message) }
+    var errorMessage by remember {
+        mutableStateOf(
+            initialProjection.exceptionOrNull()?.message ?: initialSelection.exceptionOrNull()?.message,
+        )
+    }
     var show3d by remember { mutableStateOf(false) }
     var threeDInteractionMode by remember { mutableStateOf(Tuner3dInteractionMode.INSPECT) }
     var interactionState by remember { mutableStateOf(TunerInteractionState()) }
@@ -275,6 +290,12 @@ fun TunerScreen(modifier: Modifier = Modifier) {
 
             TunerCommandEffect.ApplyPreview -> {
                 val preview = pendingPreview ?: return
+                val current = projection ?: return
+                if (!previewBelongsToSelectedTable(preview.projection.tableId, current.tableId)) {
+                    pendingPreview = null
+                    errorMessage = "Preview discarded because the selected semantic table changed."
+                    return
+                }
                 runCatching {
                     when (val operation = preview.operation) {
                         is PendingOperation.Step -> ActiveTunerTable.applyRectangleStep(
@@ -362,6 +383,27 @@ fun TunerScreen(modifier: Modifier = Modifier) {
         }
     }
 
+    fun selectTable(tableId: Int) {
+        tableMenuExpanded = false
+        val previousInteraction = interactionState
+        runCatching {
+            val selection = ActiveTunerTable.select(tableId)
+            val nextProjection = ActiveTunerTable.readProjection()
+            check(nextProjection.tableId == selection.entry.tableId) {
+                "Selected native catalog table did not match the returned projection."
+            }
+            selection to nextProjection
+        }.onSuccess { (selection, nextProjection) ->
+            tableSelection = selection
+            projection = nextProjection
+            interactionState = resetInteractionForTableSwitch(previousInteraction)
+            pendingPreview = null
+            errorMessage = null
+        }.onFailure { error ->
+            errorMessage = error.message ?: "Table selection rejected."
+        }
+    }
+
     fun dispatch(command: TunerCommand): Boolean {
         val current = projection ?: return false
         val routed = TunerCommandRouter.route(
@@ -407,6 +449,39 @@ fun TunerScreen(modifier: Modifier = Modifier) {
         projection?.let { current ->
             val selection = interactionState.selection
             val currentAuthority = tunerAuthorityPresentation(current)
+            val currentTableSelection = tableSelection
+            if (currentTableSelection != null && currentTableSelection.catalog.tables.size > 1) {
+                Box {
+                    AssistChip(
+                        onClick = { tableMenuExpanded = true },
+                        label = {
+                            Text(
+                                "Table · ${currentTableSelection.entry.name} " +
+                                    "(${currentTableSelection.entry.rows}×${currentTableSelection.entry.columns})",
+                            )
+                        },
+                    )
+                    DropdownMenu(
+                        expanded = tableMenuExpanded,
+                        onDismissRequest = { tableMenuExpanded = false },
+                    ) {
+                        currentTableSelection.catalog.tables.forEach { entry ->
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        if (entry.tableId == currentTableSelection.entry.tableId) {
+                                            "${entry.name} · ${entry.rows}×${entry.columns} · active"
+                                        } else {
+                                            "${entry.name} · ${entry.rows}×${entry.columns}"
+                                        },
+                                    )
+                                },
+                                onClick = { selectTable(entry.tableId) },
+                            )
+                        }
+                    }
+                }
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 AssistChip(
                     onClick = { show3d = false },
