@@ -15,6 +15,7 @@ pub mod ecu_profile;
 pub mod ecu_profile_registry;
 pub mod ecu_protocol;
 mod engine;
+pub mod engine_guarded_burn;
 pub mod engine_guarded_write_batch;
 pub mod engine_session_write_intent;
 pub mod guarded_write_batch_store;
