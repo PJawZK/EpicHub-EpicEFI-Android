@@ -168,7 +168,10 @@ crc32CheckCommand = "k%2o%2c"
         assert_eq!(framed.page, 1);
         assert_eq!(framed.offset, 8);
         assert_eq!(framed.count, 4);
-        assert_eq!(framed.expected_response_size, CRC32_CHECK_RESPONSE_FRAME_SIZE);
+        assert_eq!(
+            framed.expected_response_size,
+            CRC32_CHECK_RESPONSE_FRAME_SIZE
+        );
         assert_eq!(&framed.request_frame[..2], &[0x00, 0x05]);
         assert_eq!(&framed.request_frame[2..7], plan.request_body.as_slice());
         assert_eq!(
