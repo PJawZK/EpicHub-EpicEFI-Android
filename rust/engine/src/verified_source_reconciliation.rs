@@ -162,12 +162,9 @@ mod tests {
     #[test]
     fn byte_reconciliation_preserves_existing_source_provenance() {
         let source = TuneSourcePageImage::from_live_controller_pages(77, 0, &[&[1_u8, 2, 3, 4]]);
-        let reconciled = reconcile_verified_transaction_prefix(
-            &source,
-            &[transaction(1, 1, &[2], &[9])],
-            1,
-        )
-        .unwrap();
+        let reconciled =
+            reconcile_verified_transaction_prefix(&source, &[transaction(1, 1, &[2], &[9])], 1)
+                .unwrap();
 
         assert_eq!(reconciled.page(0), Some(&[1, 9, 3, 4][..]));
         assert_eq!(reconciled.provenance(), source.provenance());
