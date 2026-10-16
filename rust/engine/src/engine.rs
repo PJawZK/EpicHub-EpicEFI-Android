@@ -137,7 +137,9 @@ impl EngineRegistry {
     }
 
     fn tune_session_epoch(&self, handle: i64) -> Option<u64> {
-        self.engines.get(&handle).map(|engine| engine.tune_session_epoch)
+        self.engines
+            .get(&handle)
+            .map(|engine| engine.tune_session_epoch)
     }
 
     fn tune_source_authority<T>(
