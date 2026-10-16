@@ -114,6 +114,34 @@ class UsbVerifiedGuardedWriteBatchExecutorTest {
         assertSame(failure, result.interruptedCause)
     }
 
+    @Test
+    fun serializerCoversTransportAndVerifiedSourceReconciliationAsOneCriticalSection() {
+        val events = mutableListOf<String>()
+        val executor =
+            UsbVerifiedGuardedWriteBatchExecutor(
+                executeTransport = { _, _ ->
+                    events += "transport"
+                    UsbNativeGuardedWriteBatchResult.Reconciled(1)
+                },
+                reconcileVerifiedPrefix = {
+                    events += "reconcile"
+                    GuardedWriteBatchReconciliationResult.Reconciled
+                },
+                serializeExecution = { block ->
+                    events += "enter"
+                    val result = block()
+                    events += "exit"
+                    result
+                },
+            )
+
+        assertEquals(
+            UsbVerifiedGuardedWriteBatchResult.Reconciled(1),
+            executor.execute(unusedChannel, 100),
+        )
+        assertEquals(listOf("enter", "transport", "reconcile", "exit"), events)
+    }
+
     private fun executor(
         transportResult: UsbNativeGuardedWriteBatchResult,
         reconciled: MutableList<Int>,
