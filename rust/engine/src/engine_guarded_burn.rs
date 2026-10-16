@@ -34,13 +34,21 @@ pub enum EngineGuardedPageBurnError {
     InvalidEngineHandle,
     MissingSourceImage,
     NonLiveControllerSource(TuneSnapshotOrigin),
-    StaleProfileGeneration { expected: u64, actual: u64 },
-    RamProvenanceGenerationMismatch { expected: u64, actual: u64 },
+    StaleProfileGeneration {
+        expected: u64,
+        actual: u64,
+    },
+    RamProvenanceGenerationMismatch {
+        expected: u64,
+        actual: u64,
+    },
     RamNotConfirmedForCurrentDraft {
         draft_revision: u64,
         confirmed_revision: Option<u64>,
     },
-    MissingSourcePage { page: usize },
+    MissingSourcePage {
+        page: usize,
+    },
     SourcePageSizeMismatch {
         page: usize,
         expected: usize,
@@ -68,8 +76,8 @@ pub fn plan_selected_engine_guarded_page_burn(
                 validate_live_ram_authority(bundle, session, source)?;
                 let source = source.ok_or(EngineGuardedPageBurnError::MissingSourceImage)?;
                 let expected_page_bytes = exact_source_page(bundle, source, page)?.to_vec();
-                let burn = plan_page_burn(bundle, page)
-                    .map_err(EngineGuardedPageBurnError::BurnPlan)?;
+                let burn =
+                    plan_page_burn(bundle, page).map_err(EngineGuardedPageBurnError::BurnPlan)?;
                 let crc_check = plan_full_page_crc32_check(bundle, page)
                     .map_err(EngineGuardedPageBurnError::CrcPlan)?;
                 let framed_crc_check = frame_page_crc32_check(bundle, &crc_check)
@@ -118,8 +126,9 @@ pub fn require_selected_engine_guarded_page_burn_current(
                 if session.revision() != plan.draft_revision {
                     return Err(EngineGuardedPageBurnError::RamNotConfirmedForCurrentDraft {
                         draft_revision: session.revision(),
-                        confirmed_revision: source
-                            .and_then(|source| effective_provenance(session, source).confirmed_draft_revision),
+                        confirmed_revision: source.and_then(|source| {
+                            effective_provenance(session, source).confirmed_draft_revision
+                        }),
                     });
                 }
                 let source = source.ok_or(EngineGuardedPageBurnError::MissingSourceImage)?;
@@ -161,10 +170,12 @@ fn validate_live_ram_authority(
     let source = source.ok_or(EngineGuardedPageBurnError::MissingSourceImage)?;
     let provenance = effective_provenance(session, source);
     if provenance.profile_generation != selected_generation {
-        return Err(EngineGuardedPageBurnError::RamProvenanceGenerationMismatch {
-            expected: selected_generation,
-            actual: provenance.profile_generation,
-        });
+        return Err(
+            EngineGuardedPageBurnError::RamProvenanceGenerationMismatch {
+                expected: selected_generation,
+                actual: provenance.profile_generation,
+            },
+        );
     }
     if provenance.acquisition != RamSourceAcquisition::LiveControllerRead {
         return Err(EngineGuardedPageBurnError::NonLiveControllerSource(
@@ -320,20 +331,18 @@ table = valuesTable, valuesMap, "Values", 1
     #[test]
     fn fresh_live_controller_can_authorize_current_page_burn() {
         let (engine, registry, page) = live_engine(true, true);
-        let plan = plan_selected_engine_guarded_page_burn(
-            engine,
-            registry,
-            SIGNATURE.as_bytes(),
-            256,
-            1,
-        )
-        .unwrap();
+        let plan =
+            plan_selected_engine_guarded_page_burn(engine, registry, SIGNATURE.as_bytes(), 256, 1)
+                .unwrap();
 
         assert_eq!(plan.profile_generation, 77);
         assert_eq!(plan.draft_revision, 0);
         assert_eq!(plan.page, 1);
         assert_eq!(plan.expected_page_bytes, page);
-        assert_eq!(plan.expected_page_crc32, crc32_ieee(&plan.expected_page_bytes));
+        assert_eq!(
+            plan.expected_page_crc32,
+            crc32_ieee(&plan.expected_page_bytes)
+        );
         assert_eq!(plan.burn.request_body, vec![b'B']);
         assert_eq!(plan.crc_check.offset, 0);
         assert_eq!(plan.crc_check.count, 24);
@@ -363,13 +372,7 @@ table = valuesTable, valuesMap, "Values", 1
         .unwrap();
 
         assert_eq!(
-            plan_selected_engine_guarded_page_burn(
-                engine,
-                registry,
-                SIGNATURE.as_bytes(),
-                256,
-                1,
-            ),
+            plan_selected_engine_guarded_page_burn(engine, registry, SIGNATURE.as_bytes(), 256, 1,),
             Err(EngineGuardedPageBurnError::RamNotConfirmedForCurrentDraft {
                 draft_revision: 1,
                 confirmed_revision: Some(0),
@@ -395,14 +398,9 @@ table = valuesTable, valuesMap, "Values", 1
         )
         .unwrap();
 
-        let burn = plan_selected_engine_guarded_page_burn(
-            engine,
-            registry,
-            SIGNATURE.as_bytes(),
-            256,
-            1,
-        )
-        .unwrap();
+        let burn =
+            plan_selected_engine_guarded_page_burn(engine, registry, SIGNATURE.as_bytes(), 256, 1)
+                .unwrap();
         assert_eq!(burn.draft_revision, 1);
         assert_eq!(burn.expected_page_bytes[6..8], 101u16.to_le_bytes());
 
@@ -438,13 +436,7 @@ table = valuesTable, valuesMap, "Values", 1
         .unwrap();
 
         assert_eq!(
-            plan_selected_engine_guarded_page_burn(
-                engine,
-                registry,
-                SIGNATURE.as_bytes(),
-                256,
-                1,
-            ),
+            plan_selected_engine_guarded_page_burn(engine, registry, SIGNATURE.as_bytes(), 256, 1,),
             Err(EngineGuardedPageBurnError::RamNotConfirmedForCurrentDraft {
                 draft_revision: 1,
                 confirmed_revision: None,
@@ -459,13 +451,7 @@ table = valuesTable, valuesMap, "Values", 1
     fn missing_definition_capabilities_fail_closed() {
         let (engine, registry, _) = live_engine(false, true);
         assert!(matches!(
-            plan_selected_engine_guarded_page_burn(
-                engine,
-                registry,
-                SIGNATURE.as_bytes(),
-                256,
-                1,
-            ),
+            plan_selected_engine_guarded_page_burn(engine, registry, SIGNATURE.as_bytes(), 256, 1,),
             Err(EngineGuardedPageBurnError::BurnPlan(
                 PageBurnPlanError::MissingBurnCapability { page: 1 }
             ))
@@ -475,13 +461,7 @@ table = valuesTable, valuesMap, "Values", 1
 
         let (engine, registry, _) = live_engine(true, false);
         assert!(matches!(
-            plan_selected_engine_guarded_page_burn(
-                engine,
-                registry,
-                SIGNATURE.as_bytes(),
-                256,
-                1,
-            ),
+            plan_selected_engine_guarded_page_burn(engine, registry, SIGNATURE.as_bytes(), 256, 1,),
             Err(EngineGuardedPageBurnError::CrcPlan(
                 PageCrc32CheckPlanError::MissingCrc32CheckCapability { page: 1 }
             ))
@@ -493,14 +473,9 @@ table = valuesTable, valuesMap, "Values", 1
     #[test]
     fn later_draft_edit_stales_previously_authorized_burn() {
         let (engine, registry, _) = live_engine(true, true);
-        let plan = plan_selected_engine_guarded_page_burn(
-            engine,
-            registry,
-            SIGNATURE.as_bytes(),
-            256,
-            1,
-        )
-        .unwrap();
+        let plan =
+            plan_selected_engine_guarded_page_burn(engine, registry, SIGNATURE.as_bytes(), 256, 1)
+                .unwrap();
 
         with_tune_session(engine, |session| {
             session
