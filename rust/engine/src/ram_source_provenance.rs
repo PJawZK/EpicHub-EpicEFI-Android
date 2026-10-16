@@ -129,14 +129,14 @@ impl RamSourceProvenance {
 
 impl EngineRamSourceState {
     pub fn synchronization_status(&self) -> RamSynchronizationStatus {
-        if let Some(last_reconciliation) = &self.provenance.last_reconciliation {
-            if !last_reconciliation.complete {
-                return if last_reconciliation.verified_transaction_count == 0 {
-                    RamSynchronizationStatus::RamUnconfirmedAfterInterruptedWrite
-                } else {
-                    RamSynchronizationStatus::PartiallyVerifiedInterruptedWrite
-                };
-            }
+        if let Some(last_reconciliation) = &self.provenance.last_reconciliation
+            && !last_reconciliation.complete
+        {
+            return if last_reconciliation.verified_transaction_count == 0 {
+                RamSynchronizationStatus::RamUnconfirmedAfterInterruptedWrite
+            } else {
+                RamSynchronizationStatus::PartiallyVerifiedInterruptedWrite
+            };
         }
 
         match self.provenance.confirmed_draft_revision {
