@@ -3,9 +3,9 @@ package com.epicefi.epichub.ui.tuner
 import com.epicefi.epichub.engine.TABLE_PROJECTION_FLAG_FIXTURE
 import com.epicefi.epichub.engine.TABLE_PROJECTION_FLAG_OFFLINE
 import com.epicefi.epichub.engine.TunerTableProjection
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertTrue
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
 
 class TunerAuthorityPresentationTest {
     @Test
