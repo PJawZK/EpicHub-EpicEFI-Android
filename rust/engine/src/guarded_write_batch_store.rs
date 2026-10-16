@@ -3,7 +3,9 @@ use std::sync::{Arc, LazyLock, Mutex};
 
 use crate::engine_guarded_write_batch::{
     EngineGuardedRamWriteBatch, EngineGuardedRamWriteBatchError,
-    plan_selected_engine_guarded_ram_write_batch, require_selected_engine_guarded_batch_current,
+    EngineGuardedSourceReconciliationError, plan_selected_engine_guarded_ram_write_batch,
+    reconcile_selected_engine_guarded_batch_verified_prefix,
+    require_selected_engine_guarded_batch_current,
 };
 use crate::write_reconciliation_transaction::GuardedRamWriteTransaction;
 
@@ -19,6 +21,7 @@ pub enum GuardedWriteBatchStoreError {
     InvalidHandle,
     InvalidTransactionIndex { index: usize, count: usize },
     Authority(EngineGuardedRamWriteBatchError),
+    Reconciliation(EngineGuardedSourceReconciliationError),
 }
 
 pub struct GuardedWriteBatchStore {
@@ -164,18 +167,43 @@ pub fn require_guarded_write_batch_current(
     .map_err(GuardedWriteBatchStoreError::Authority)
 }
 
+pub fn reconcile_guarded_write_batch_verified_prefix(
+    handle: i64,
+    engine_handle: i64,
+    registry_handle: i64,
+    runtime_signature_response: &[u8],
+    max_signature_response_bytes: usize,
+    verified_transaction_count: usize,
+) -> Result<(), GuardedWriteBatchStoreError> {
+    // Preserve the same lock-order contract as the currentness check: retain the batch
+    // through an Arc, release the batch-store mutex, then enter profile/engine authority.
+    let batch = with_store(|store| store.get(handle))?;
+    reconcile_selected_engine_guarded_batch_verified_prefix(
+        engine_handle,
+        registry_handle,
+        runtime_signature_response,
+        max_signature_response_bytes,
+        &batch,
+        verified_transaction_count,
+    )
+    .map_err(GuardedWriteBatchStoreError::Reconciliation)
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::{HashMap, HashSet};
 
     use super::*;
     use crate::compiled_profile_bundle::OwnedDefinitionBundleImport;
-    use crate::engine::{close_engine, create_engine, with_tune_session};
+    use crate::engine::{
+        close_engine, create_engine, with_tune_session, with_tune_source_image,
+    };
     use crate::live_tune_install::install_selected_live_pages;
     use crate::profile_import::OwnedSemanticTableBindingSpec;
     use crate::profile_registry_store::{
         close_profile_registry, create_profile_registry, register_definition_bundle_import,
     };
+    use crate::verified_source_reconciliation::VerifiedSourceReconciliationError;
 
     const SIGNATURE: &str = "rusEFI guarded-write-batch-store.test.1";
     const DEFINITION: &str = r#"
@@ -320,6 +348,114 @@ table = valuesTable, valuesMap, "Values", 1
                     actual: 1,
                 }
             ))
+        );
+
+        close_guarded_write_batch(handle);
+        close_profile_registry(registry);
+        close_engine(engine);
+    }
+
+    #[test]
+    fn reconciliation_uses_opaque_batch_after_store_lock_is_released() {
+        let (engine, registry) = live_engine();
+        with_tune_session(engine, |session| {
+            session
+                .apply_rectangle_numeric(42, 0, 0, 0, 0, 0, "101", 0)
+                .unwrap();
+        })
+        .unwrap();
+        let handle = create_selected_engine_guarded_write_batch(
+            engine,
+            registry,
+            SIGNATURE.as_bytes(),
+            256,
+            1,
+        )
+        .unwrap();
+
+        assert_eq!(
+            reconcile_guarded_write_batch_verified_prefix(
+                handle,
+                engine,
+                registry,
+                SIGNATURE.as_bytes(),
+                256,
+                1,
+            ),
+            Ok(())
+        );
+        assert_eq!(
+            with_tune_source_image(engine, |source| source.unwrap().page(0).unwrap()[6]),
+            Some(101),
+        );
+        assert!(guarded_write_batch_is_alive(handle));
+        assert_eq!(
+            with_tune_session(engine, |session| session.revision()),
+            Some(1)
+        );
+
+        close_guarded_write_batch(handle);
+        close_profile_registry(registry);
+        close_engine(engine);
+    }
+
+    #[test]
+    fn reconciliation_invalid_handle_and_invalid_prefix_fail_closed() {
+        let (engine, registry) = live_engine();
+        assert_eq!(
+            reconcile_guarded_write_batch_verified_prefix(
+                i64::MAX,
+                engine,
+                registry,
+                SIGNATURE.as_bytes(),
+                256,
+                0,
+            ),
+            Err(GuardedWriteBatchStoreError::InvalidHandle)
+        );
+
+        with_tune_session(engine, |session| {
+            session
+                .apply_rectangle_numeric(42, 0, 0, 0, 0, 0, "101", 0)
+                .unwrap();
+        })
+        .unwrap();
+        let handle = create_selected_engine_guarded_write_batch(
+            engine,
+            registry,
+            SIGNATURE.as_bytes(),
+            256,
+            1,
+        )
+        .unwrap();
+        let before = with_tune_source_image(engine, |source| {
+            source.unwrap().page(0).unwrap().to_vec()
+        })
+        .unwrap();
+
+        assert_eq!(
+            reconcile_guarded_write_batch_verified_prefix(
+                handle,
+                engine,
+                registry,
+                SIGNATURE.as_bytes(),
+                256,
+                2,
+            ),
+            Err(GuardedWriteBatchStoreError::Reconciliation(
+                EngineGuardedSourceReconciliationError::VerifiedSource(
+                    VerifiedSourceReconciliationError::VerifiedPrefixTooLarge {
+                        verified: 2,
+                        available: 1,
+                    }
+                )
+            ))
+        );
+        assert_eq!(
+            with_tune_source_image(engine, |source| {
+                source.unwrap().page(0).unwrap().to_vec()
+            }),
+            Some(before),
         );
 
         close_guarded_write_batch(handle);
