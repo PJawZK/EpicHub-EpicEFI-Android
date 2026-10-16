@@ -3,6 +3,7 @@ package com.epicefi.epichub.platform.transport.usb
 import android.hardware.usb.UsbManager
 import com.epicefi.epichub.engine.DefinitionDrivenLiveTuneConnectResult
 import com.epicefi.epichub.engine.LiveTuneConnectionOwner
+import com.epicefi.epichub.engine.LiveTuneOwnerBurnResult
 import com.epicefi.epichub.engine.LiveTuneOwnerLoadResult
 import com.epicefi.epichub.engine.LiveTuneOwnerRamWriteResult
 import com.epicefi.epichub.engine.ValidatedRuntimeIdentity
@@ -65,6 +66,16 @@ internal sealed interface AndroidUsbLiveRamWriteResult {
     data object NotConnected : AndroidUsbLiveRamWriteResult
 
     data object OwnerClosed : AndroidUsbLiveRamWriteResult
+}
+
+internal sealed interface AndroidUsbLiveBurnResult {
+    data class Completed(
+        val result: LiveTuneOwnerBurnResult,
+    ) : AndroidUsbLiveBurnResult
+
+    data object NotConnected : AndroidUsbLiveBurnResult
+
+    data object OwnerClosed : AndroidUsbLiveBurnResult
 }
 
 internal fun interface AndroidUsbEndpointChannelOpener {
@@ -212,6 +223,29 @@ class AndroidUsbLiveConnectionSessionOwner internal constructor(
         }
         return AndroidUsbLiveRamWriteResult.Completed(
             authority.writeCurrentDraftToRam(
+                signatureLimit = signatureLimit,
+                channel = channel,
+                timeoutMs = timeoutMs,
+            ),
+        )
+    }
+
+    @Synchronized
+    internal fun burnPageToNonvolatile(
+        page: Int,
+        signatureLimit: Int,
+        timeoutMs: Int,
+    ): AndroidUsbLiveBurnResult {
+        if (closed) return AndroidUsbLiveBurnResult.OwnerClosed
+        val channel = connectedChannel ?: return AndroidUsbLiveBurnResult.NotConnected
+        val authority = connectedOwner ?: return AndroidUsbLiveBurnResult.NotConnected
+        if (!authority.isAlive) {
+            disconnectCurrent()
+            return AndroidUsbLiveBurnResult.NotConnected
+        }
+        return AndroidUsbLiveBurnResult.Completed(
+            authority.burnPageToNonvolatile(
+                page = page,
                 signatureLimit = signatureLimit,
                 channel = channel,
                 timeoutMs = timeoutMs,
