@@ -3,7 +3,7 @@ name: Foundation quality
 on:
   push:
     branches:
-      - 'phase2/**'
+      - current-work
   pull_request:
     branches:
       - main
