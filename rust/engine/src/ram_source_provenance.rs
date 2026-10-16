@@ -439,7 +439,10 @@ mod tests {
         assert_eq!(snapshot[7], RAM_SOURCE_STATE_SNAPSHOT_VERSION);
         assert_eq!(u64::from_le_bytes(snapshot[8..16].try_into().unwrap()), 77);
         assert_eq!(u64::from_le_bytes(snapshot[16..24].try_into().unwrap()), 4);
-        assert_eq!(u64::from_le_bytes(snapshot[24..32].try_into().unwrap()), u64::MAX);
+        assert_eq!(
+            u64::from_le_bytes(snapshot[24..32].try_into().unwrap()),
+            u64::MAX
+        );
         assert_eq!(u64::from_le_bytes(snapshot[32..40].try_into().unwrap()), 1);
         assert_eq!(u64::from_le_bytes(snapshot[40..48].try_into().unwrap()), 4);
         assert_eq!(u64::from_le_bytes(snapshot[48..56].try_into().unwrap()), 1);
