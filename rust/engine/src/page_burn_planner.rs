@@ -1,4 +1,5 @@
 use crate::compiled_profile_bundle::CompiledEcuProfileBundle;
+use crate::ecu_profile::ResolvedEcuProfile;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PageBurnPlan {
@@ -144,7 +145,8 @@ pageReadCommand = {reads}
             definition_fingerprint: None,
             root_definition: definition,
             enabled_symbols: HashSet::new(),
-            nested_definitions: HashMap::new(),
+            includes: HashMap::new(),
+            semantic_tables: Vec::new(),
         })
         .unwrap()
     }
