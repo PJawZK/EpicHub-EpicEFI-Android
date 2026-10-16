@@ -135,7 +135,10 @@ burnCommand = "B"
 
         assert_eq!(framed.page, 1);
         assert_eq!(framed.expected_response_size, BURN_RESPONSE_FRAME_SIZE);
-        assert_eq!(&framed.request_frame[..2], &(burn.request_body.len() as u16).to_be_bytes());
+        assert_eq!(
+            &framed.request_frame[..2],
+            &(burn.request_body.len() as u16).to_be_bytes()
+        );
         assert_eq!(
             &framed.request_frame[2..2 + burn.request_body.len()],
             burn.request_body.as_slice()
