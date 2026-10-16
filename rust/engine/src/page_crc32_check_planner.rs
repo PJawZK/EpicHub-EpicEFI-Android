@@ -15,8 +15,13 @@ pub struct PageCrc32CheckPlan {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum PageCrc32CheckPlanError {
     InvalidPageNumber(usize),
-    PageOutOfRange { page: usize, page_count: usize },
-    MissingCrc32CheckCapability { page: usize },
+    PageOutOfRange {
+        page: usize,
+        page_count: usize,
+    },
+    MissingCrc32CheckCapability {
+        page: usize,
+    },
     ZeroCount,
     OffsetTooLarge(usize),
     CountTooLarge(usize),
@@ -33,7 +38,10 @@ pub enum PageCrc32CheckPlanError {
     DuplicateOffsetToken,
     DuplicateCountToken,
     DuplicateIdentifierToken,
-    InvalidIdentifierLength { page: usize, actual: usize },
+    InvalidIdentifierLength {
+        page: usize,
+        actual: usize,
+    },
 }
 
 /// Plans one definition-owned CRC32 verification request for a page range.
@@ -58,14 +66,15 @@ pub fn plan_page_crc32_check(
             page,
             page_count: page_sizes.len(),
         })?;
-    let protocol = bundle
-        .protocol
-        .pages
-        .get(page_index)
-        .ok_or(PageCrc32CheckPlanError::PageOutOfRange {
-            page,
-            page_count: bundle.protocol.pages.len(),
-        })?;
+    let protocol =
+        bundle
+            .protocol
+            .pages
+            .get(page_index)
+            .ok_or(PageCrc32CheckPlanError::PageOutOfRange {
+                page,
+                page_count: bundle.protocol.pages.len(),
+            })?;
     let template = protocol
         .crc32_check_command
         .as_deref()
