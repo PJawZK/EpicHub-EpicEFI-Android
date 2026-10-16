@@ -1,6 +1,7 @@
 use crate::ecu_profile::ResolvedEcuProfile;
 use crate::engine::{with_tune_source_authority, with_tune_source_authority_mut};
 use crate::profile_registry_store::{RegistryStoreError, with_selected_compiled_bundle};
+use crate::ram_source_provenance::{RamSourceProvenance, RamSourceProvenanceError};
 use crate::session_write_intent::{SessionWriteIntentError, plan_session_ram_write_intent};
 use crate::tune_source_image::TuneSourcePageImage;
 use crate::tuning::TuneSnapshotOrigin;
@@ -204,7 +205,27 @@ pub fn reconcile_selected_engine_guarded_batch_verified_prefix(
                     verified_transaction_count,
                 )
                 .map_err(EngineGuardedSourceReconciliationError::VerifiedSource)?;
-                *source = reconciled;
+                let base_provenance = source.provenance().cloned().unwrap_or_else(|| {
+                    RamSourceProvenance::from_live_controller_read(batch.profile_generation, 0)
+                });
+                let provenance = base_provenance
+                    .reconciled_with_verified_prefix(
+                        batch.draft_revision,
+                        &batch.transactions,
+                        verified_transaction_count,
+                    )
+                    .map_err(|error| match error {
+                        RamSourceProvenanceError::VerifiedPrefixTooLarge {
+                            verified,
+                            available,
+                        } => EngineGuardedSourceReconciliationError::VerifiedSource(
+                            VerifiedSourceReconciliationError::VerifiedPrefixTooLarge {
+                                verified,
+                                available,
+                            },
+                        ),
+                    })?;
+                *source = reconciled.with_provenance(provenance);
                 Ok(())
             })
             .ok_or(EngineGuardedSourceReconciliationError::GuardedBatch(
@@ -233,6 +254,7 @@ mod tests {
     use crate::profile_registry_store::{
         close_profile_registry, create_profile_registry, register_definition_bundle_import,
     };
+    use crate::ram_source_provenance::engine_ram_source_state;
     use crate::tune_session::TuneSession;
 
     const SIGNATURE: &str = "rusEFI engine-guarded-write-batch.test.1";
@@ -486,6 +508,18 @@ table = valuesTable, valuesMap, "Values", 1
             with_tune_session(engine, |session| session.revision()),
             Some(1)
         );
+        let ram_state = engine_ram_source_state(engine).unwrap().unwrap();
+        assert_eq!(ram_state.current_draft_revision, 1);
+        assert_eq!(ram_state.provenance.confirmed_draft_revision, Some(1));
+        assert_eq!(ram_state.provenance.verified_write_ranges.len(), 1);
+        assert!(
+            ram_state
+                .provenance
+                .last_reconciliation
+                .as_ref()
+                .unwrap()
+                .complete
+        );
         assert!(
             with_tune_session(engine, |session| session.undo())
                 .unwrap()
@@ -496,6 +530,55 @@ table = valuesTable, valuesMap, "Values", 1
                 .unwrap()
                 .is_ok()
         );
+
+        close_profile_registry(registry);
+        close_engine(engine);
+    }
+
+    #[test]
+    fn incomplete_reconciliation_clears_whole_draft_confirmation_without_changing_unverified_bytes() {
+        let (engine, registry, original_page) = live_engine();
+        with_tune_session(engine, |session| {
+            session
+                .apply_rectangle_numeric(42, 0, 0, 0, 0, 0, "101", 0)
+                .unwrap();
+        })
+        .unwrap();
+        let batch = plan_selected_engine_guarded_ram_write_batch(
+            engine,
+            registry,
+            SIGNATURE.as_bytes(),
+            256,
+            1,
+        )
+        .unwrap();
+        assert_eq!(batch.transactions.len(), 1);
+
+        assert_eq!(
+            reconcile_selected_engine_guarded_batch_verified_prefix(
+                engine,
+                registry,
+                SIGNATURE.as_bytes(),
+                256,
+                &batch,
+                0,
+            ),
+            Ok(())
+        );
+
+        assert_eq!(
+            with_tune_source_image(engine, |source| source.unwrap().page(0).unwrap().to_vec()),
+            Some(original_page),
+        );
+        let ram_state = engine_ram_source_state(engine).unwrap().unwrap();
+        assert_eq!(ram_state.current_draft_revision, 1);
+        assert_eq!(ram_state.provenance.confirmed_draft_revision, None);
+        assert!(ram_state.provenance.verified_write_ranges.is_empty());
+        let last = ram_state.provenance.last_reconciliation.unwrap();
+        assert_eq!(last.draft_revision, 1);
+        assert_eq!(last.verified_transaction_count, 0);
+        assert_eq!(last.transaction_count, 1);
+        assert!(!last.complete);
 
         close_profile_registry(registry);
         close_engine(engine);
