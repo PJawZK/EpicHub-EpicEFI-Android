@@ -140,6 +140,19 @@ impl EngineRegistry {
             .map(|engine| operation(&engine.tune_session, engine.tune_source_image.as_ref()))
     }
 
+    fn tune_source_authority_mut<T>(
+        &mut self,
+        handle: i64,
+        operation: impl FnOnce(&TuneSession, Option<&mut TuneSourcePageImage>) -> T,
+    ) -> Option<T> {
+        self.engines.get_mut(&handle).map(|engine| {
+            operation(
+                &engine.tune_session,
+                engine.tune_source_image.as_mut(),
+            )
+        })
+    }
+
     fn replace_tune_source(
         &mut self,
         handle: i64,
@@ -212,6 +225,13 @@ pub(crate) fn with_tune_source_authority<T>(
     operation: impl FnOnce(&TuneSession, Option<&TuneSourcePageImage>) -> T,
 ) -> Option<T> {
     with_registry(|registry| registry.tune_source_authority(handle, operation))
+}
+
+pub(crate) fn with_tune_source_authority_mut<T>(
+    handle: i64,
+    operation: impl FnOnce(&TuneSession, Option<&mut TuneSourcePageImage>) -> T,
+) -> Option<T> {
+    with_registry(|registry| registry.tune_source_authority_mut(handle, operation))
 }
 
 pub(crate) fn replace_tune_source(
@@ -385,6 +405,39 @@ mod tests {
     }
 
     #[test]
+    fn source_authority_mutation_preserves_session_while_replacing_only_source_image() {
+        let mut registry = EngineRegistry::new();
+        let handle = registry.create();
+        let source_image = TuneSourcePageImage::from_pages(&[&[9_u8, 8, 7]]);
+        assert!(registry.replace_tune_source(
+            handle,
+            TuneSession::from_snapshot(offline_source_snapshot()),
+            source_image,
+        ));
+
+        let revision = registry
+            .tune_source_authority_mut(handle, |session, source| {
+                let revision = session.revision();
+                *source.unwrap() = TuneSourcePageImage::from_pages(&[&[1_u8, 2, 3]]);
+                revision
+            })
+            .unwrap();
+
+        assert_eq!(revision, 0);
+        assert_eq!(
+            registry
+                .tune_source_authority(handle, |session, source| {
+                    (
+                        session.revision(),
+                        source.unwrap().page(0).unwrap().to_vec(),
+                    )
+                })
+                .unwrap(),
+            (0, vec![1, 2, 3]),
+        );
+    }
+
+    #[test]
     fn closed_or_unknown_handle_cannot_publish_state() {
         let mut registry = EngineRegistry::new();
         let handle = registry.create();
@@ -398,6 +451,7 @@ mod tests {
                 .is_none()
         );
         assert!(registry.tune_source_authority(handle, |_, _| ()).is_none());
+        assert!(registry.tune_source_authority_mut(handle, |_, _| ()).is_none());
         assert!(registry.tune_source_image(handle, |_| ()).is_none());
         assert!(registry.snapshot(i64::MAX).is_none());
         assert!(registry.diagnostic_batch(i64::MAX).is_none());
@@ -409,6 +463,11 @@ mod tests {
         assert!(
             registry
                 .tune_source_authority(i64::MAX, |_, _| ())
+                .is_none()
+        );
+        assert!(
+            registry
+                .tune_source_authority_mut(i64::MAX, |_, _| ())
                 .is_none()
         );
         assert!(registry.tune_source_image(i64::MAX, |_| ()).is_none());
