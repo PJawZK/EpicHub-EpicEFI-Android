@@ -116,7 +116,7 @@ pub fn verify_selected_engine_guarded_page_burn_crc(
         |bundle| {
             verify_page_crc32_check_response(
                 bundle,
-                &plan.framed_crc_check,
+                &plan.crc_check,
                 &plan.expected_page_bytes,
                 response_frame,
             )
@@ -311,7 +311,7 @@ table = valuesTable, valuesMap, "Values", 1
         )
         .unwrap();
         assert_eq!(verified.page, 1);
-        assert_eq!(verified.actual_crc32, guarded.expected_page_crc32);
+        assert_eq!(verified.checksum, guarded.expected_page_crc32);
 
         close_profile_registry(registry);
         close_engine(engine);
