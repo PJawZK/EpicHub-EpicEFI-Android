@@ -45,7 +45,7 @@ pub fn reconcile_verified_transaction_prefix(
         reconcile_transaction(&mut pages, transaction)?;
     }
     let refs = pages.iter().map(Vec::as_slice).collect::<Vec<_>>();
-    Ok(TuneSourcePageImage::from_pages(&refs))
+    Ok(source.with_pages_preserving_provenance(&refs))
 }
 
 fn reconcile_transaction(
@@ -157,6 +157,20 @@ mod tests {
         let all = reconcile_verified_transaction_prefix(&source, &transactions, 2).unwrap();
         assert_eq!(all.page(0), Some(&[1, 9, 3, 4][..]));
         assert_eq!(all.page(1), Some(&[5, 6, 0xAA, 8][..]));
+    }
+
+    #[test]
+    fn byte_reconciliation_preserves_existing_source_provenance() {
+        let source = TuneSourcePageImage::from_live_controller_pages(77, 0, &[&[1_u8, 2, 3, 4]]);
+        let reconciled = reconcile_verified_transaction_prefix(
+            &source,
+            &[transaction(1, 1, &[2], &[9])],
+            1,
+        )
+        .unwrap();
+
+        assert_eq!(reconciled.page(0), Some(&[1, 9, 3, 4][..]));
+        assert_eq!(reconciled.provenance(), source.provenance());
     }
 
     #[test]
