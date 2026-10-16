@@ -19,6 +19,7 @@ struct EngineState {
     diagnostics: EngineDiagnostics,
     tune_session: TuneSession,
     tune_source_image: Option<TuneSourcePageImage>,
+    tune_session_epoch: u64,
 }
 
 impl EngineState {
@@ -36,6 +37,7 @@ impl EngineState {
             diagnostics: EngineDiagnostics::new(u64::try_from(handle).unwrap_or(0)),
             tune_session,
             tune_source_image: None,
+            tune_session_epoch: 1,
         }
     }
 
@@ -66,6 +68,10 @@ impl EngineState {
 
     fn drain_diagnostics(&mut self) -> [u8; DIAGNOSTIC_BATCH_SIZE] {
         self.diagnostics.drain_batch()
+    }
+
+    fn advance_tune_session_epoch(&mut self) {
+        self.tune_session_epoch = self.tune_session_epoch.saturating_add(1);
     }
 }
 
@@ -130,6 +136,10 @@ impl EngineRegistry {
             .map(|engine| operation(&mut engine.tune_session))
     }
 
+    fn tune_session_epoch(&self, handle: i64) -> Option<u64> {
+        self.engines.get(&handle).map(|engine| engine.tune_session_epoch)
+    }
+
     fn tune_source_authority<T>(
         &self,
         handle: i64,
@@ -150,6 +160,16 @@ impl EngineRegistry {
             .map(|engine| operation(&engine.tune_session, engine.tune_source_image.as_mut()))
     }
 
+    fn replace_tune_session(&mut self, handle: i64, session: TuneSession) -> bool {
+        let Some(engine) = self.engines.get_mut(&handle) else {
+            return false;
+        };
+        engine.tune_session = session;
+        engine.tune_source_image = None;
+        engine.advance_tune_session_epoch();
+        true
+    }
+
     fn replace_tune_source(
         &mut self,
         handle: i64,
@@ -161,6 +181,7 @@ impl EngineRegistry {
         };
         engine.tune_session = session;
         engine.tune_source_image = Some(source_image);
+        engine.advance_tune_session_epoch();
         true
     }
 
@@ -217,6 +238,10 @@ pub(crate) fn with_tune_session<T>(
     with_registry(|registry| registry.tune_session(handle, operation))
 }
 
+pub(crate) fn tune_session_epoch(handle: i64) -> Option<u64> {
+    with_registry(|registry| registry.tune_session_epoch(handle))
+}
+
 pub(crate) fn with_tune_source_authority<T>(
     handle: i64,
     operation: impl FnOnce(&TuneSession, Option<&TuneSourcePageImage>) -> T,
@@ -229,6 +254,10 @@ pub(crate) fn with_tune_source_authority_mut<T>(
     operation: impl FnOnce(&TuneSession, Option<&mut TuneSourcePageImage>) -> T,
 ) -> Option<T> {
     with_registry(|registry| registry.tune_source_authority_mut(handle, operation))
+}
+
+pub(crate) fn replace_tune_session(handle: i64, session: TuneSession) -> bool {
+    with_registry(|registry| registry.replace_tune_session(handle, session))
 }
 
 pub(crate) fn replace_tune_source(
@@ -339,6 +368,61 @@ mod tests {
     }
 
     #[test]
+    fn tune_session_epoch_changes_only_when_session_authority_is_replaced() {
+        let mut registry = EngineRegistry::new();
+        let handle = registry.create();
+        assert_eq!(registry.tune_session_epoch(handle), Some(1));
+
+        registry
+            .tune_session(handle, |session| {
+                session
+                    .apply_rectangle_step(OFFLINE_SOURCE_PRIMARY_TABLE_ID, 0, 0, 0, 0, 1, 0)
+                    .unwrap();
+            })
+            .unwrap();
+        assert_eq!(registry.tune_session_epoch(handle), Some(1));
+
+        assert!(registry.replace_tune_session(
+            handle,
+            TuneSession::from_snapshot(offline_source_snapshot()),
+        ));
+        assert_eq!(registry.tune_session_epoch(handle), Some(2));
+
+        assert!(registry.replace_tune_source(
+            handle,
+            TuneSession::from_snapshot(offline_source_snapshot()),
+            TuneSourcePageImage::from_pages(&[&[1_u8, 2, 3]]),
+        ));
+        assert_eq!(registry.tune_session_epoch(handle), Some(3));
+    }
+
+    #[test]
+    fn imported_session_replacement_clears_retained_page_image() {
+        let mut registry = EngineRegistry::new();
+        let handle = registry.create();
+        assert!(registry.replace_tune_source(
+            handle,
+            TuneSession::from_snapshot(offline_source_snapshot()),
+            TuneSourcePageImage::from_pages(&[&[1_u8, 2, 3]]),
+        ));
+        assert!(
+            registry
+                .tune_source_image(handle, |image| image.is_some())
+                .unwrap()
+        );
+
+        assert!(registry.replace_tune_session(
+            handle,
+            TuneSession::from_snapshot(offline_source_snapshot()),
+        ));
+        assert!(
+            !registry
+                .tune_source_image(handle, |image| image.is_some())
+                .unwrap()
+        );
+    }
+
+    #[test]
     fn tune_projection_is_owned_by_engine_generation() {
         let mut registry = EngineRegistry::new();
         let handle = registry.create();
@@ -411,6 +495,7 @@ mod tests {
             TuneSession::from_snapshot(offline_source_snapshot()),
             source_image,
         ));
+        let epoch = registry.tune_session_epoch(handle).unwrap();
 
         let revision = registry
             .tune_source_authority_mut(handle, |session, source| {
@@ -421,6 +506,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(revision, 0);
+        assert_eq!(registry.tune_session_epoch(handle), Some(epoch));
         assert_eq!(
             registry
                 .tune_source_authority(handle, |session, source| {
@@ -442,6 +528,7 @@ mod tests {
 
         assert!(registry.snapshot(handle).is_none());
         assert!(registry.diagnostic_batch(handle).is_none());
+        assert!(registry.tune_session_epoch(handle).is_none());
         assert!(
             registry
                 .tune_session(handle, |session| session.revision())
@@ -456,6 +543,7 @@ mod tests {
         assert!(registry.tune_source_image(handle, |_| ()).is_none());
         assert!(registry.snapshot(i64::MAX).is_none());
         assert!(registry.diagnostic_batch(i64::MAX).is_none());
+        assert!(registry.tune_session_epoch(i64::MAX).is_none());
         assert!(
             registry
                 .tune_session(i64::MAX, |session| session.revision())
