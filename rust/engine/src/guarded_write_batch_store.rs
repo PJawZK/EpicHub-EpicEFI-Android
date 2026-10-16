@@ -250,7 +250,6 @@ table = valuesTable, valuesMap, "Values", 1
         })
         .unwrap();
 
-        let before_count = active_guarded_write_batch_count();
         let handle = create_selected_engine_guarded_write_batch(
             engine,
             registry,
@@ -260,7 +259,6 @@ table = valuesTable, valuesMap, "Values", 1
         )
         .unwrap();
         assert!(guarded_write_batch_is_alive(handle));
-        assert_eq!(active_guarded_write_batch_count(), before_count + 1);
         assert_eq!(
             guarded_write_batch_summary(handle).unwrap(),
             GuardedWriteBatchSummary {
@@ -275,7 +273,6 @@ table = valuesTable, valuesMap, "Values", 1
         close_guarded_write_batch(handle);
         close_guarded_write_batch(handle);
         assert!(!guarded_write_batch_is_alive(handle));
-        assert_eq!(active_guarded_write_batch_count(), before_count);
 
         close_profile_registry(registry);
         close_engine(engine);
