@@ -138,15 +138,11 @@ pub extern "system" fn Java_com_epicefi_epichub_engine_NativeGuardedWriteBatchBr
         if batch_handle <= 0 || engine_handle <= 0 || registry_handle <= 0 {
             return BATCH_INVALID_HANDLE;
         }
-        let signature = match direct_bytes(
-            &env,
-            &signature_buffer,
-            signature_length,
-            signature_limit,
-        ) {
-            Ok(value) => value,
-            Err(status) => return status,
-        };
+        let signature =
+            match direct_bytes(&env, &signature_buffer, signature_length, signature_limit) {
+                Ok(value) => value,
+                Err(status) => return status,
+            };
         let Ok(signature_limit) = usize::try_from(signature_limit) else {
             return BATCH_INVALID_LIMIT;
         };
@@ -175,16 +171,14 @@ mod tests {
     #[test]
     fn verified_prefix_error_has_reconciliation_specific_status() {
         assert_eq!(
-            map_reconciliation_error(
-                GuardedWriteBatchReconciliationStoreError::Reconciliation(
-                    EngineGuardedSourceReconciliationError::VerifiedSource(
-                        VerifiedSourceReconciliationError::VerifiedPrefixTooLarge {
-                            verified: 2,
-                            available: 1,
-                        },
-                    ),
+            map_reconciliation_error(GuardedWriteBatchReconciliationStoreError::Reconciliation(
+                EngineGuardedSourceReconciliationError::VerifiedSource(
+                    VerifiedSourceReconciliationError::VerifiedPrefixTooLarge {
+                        verified: 2,
+                        available: 1,
+                    },
                 ),
-            ),
+            ),),
             BATCH_INVALID_VERIFIED_PREFIX
         );
     }
@@ -192,13 +186,11 @@ mod tests {
     #[test]
     fn retained_source_failure_has_reconciliation_specific_status() {
         assert_eq!(
-            map_reconciliation_error(
-                GuardedWriteBatchReconciliationStoreError::Reconciliation(
-                    EngineGuardedSourceReconciliationError::VerifiedSource(
-                        VerifiedSourceReconciliationError::EmptyPatch,
-                    ),
+            map_reconciliation_error(GuardedWriteBatchReconciliationStoreError::Reconciliation(
+                EngineGuardedSourceReconciliationError::VerifiedSource(
+                    VerifiedSourceReconciliationError::EmptyPatch,
                 ),
-            ),
+            ),),
             BATCH_SOURCE_RECONCILIATION_FAILURE
         );
     }
