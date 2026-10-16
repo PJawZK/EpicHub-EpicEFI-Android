@@ -4,6 +4,7 @@ import android.hardware.usb.UsbManager
 import com.epicefi.epichub.engine.DefinitionDrivenLiveTuneConnectResult
 import com.epicefi.epichub.engine.LiveTuneConnectionOwner
 import com.epicefi.epichub.engine.LiveTuneOwnerLoadResult
+import com.epicefi.epichub.engine.LiveTuneOwnerRamWriteResult
 import com.epicefi.epichub.engine.ValidatedRuntimeIdentity
 
 sealed interface AndroidUsbEndpointOpenResult {
@@ -54,6 +55,16 @@ sealed interface AndroidUsbLiveLoadResult {
     data object NotConnected : AndroidUsbLiveLoadResult
 
     data object OwnerClosed : AndroidUsbLiveLoadResult
+}
+
+internal sealed interface AndroidUsbLiveRamWriteResult {
+    data class Completed(
+        val result: LiveTuneOwnerRamWriteResult,
+    ) : AndroidUsbLiveRamWriteResult
+
+    data object NotConnected : AndroidUsbLiveRamWriteResult
+
+    data object OwnerClosed : AndroidUsbLiveRamWriteResult
 }
 
 internal fun interface AndroidUsbEndpointChannelOpener {
@@ -180,6 +191,27 @@ class AndroidUsbLiveConnectionSessionOwner internal constructor(
         }
         return AndroidUsbLiveLoadResult.Completed(
             authority.loadCurrentController(
+                signatureLimit = signatureLimit,
+                channel = channel,
+                timeoutMs = timeoutMs,
+            ),
+        )
+    }
+
+    @Synchronized
+    internal fun writeCurrentDraftToRam(
+        signatureLimit: Int,
+        timeoutMs: Int,
+    ): AndroidUsbLiveRamWriteResult {
+        if (closed) return AndroidUsbLiveRamWriteResult.OwnerClosed
+        val channel = connectedChannel ?: return AndroidUsbLiveRamWriteResult.NotConnected
+        val authority = connectedOwner ?: return AndroidUsbLiveRamWriteResult.NotConnected
+        if (!authority.isAlive) {
+            disconnectCurrent()
+            return AndroidUsbLiveRamWriteResult.NotConnected
+        }
+        return AndroidUsbLiveRamWriteResult.Completed(
+            authority.writeCurrentDraftToRam(
                 signatureLimit = signatureLimit,
                 channel = channel,
                 timeoutMs = timeoutMs,
