@@ -72,6 +72,20 @@ sealed interface LiveTuneOwnerLoadResult {
     data object OwnerClosed : LiveTuneOwnerLoadResult
 }
 
+internal sealed interface LiveTuneOwnerRamWriteResult {
+    data class Completed(
+        val result: LiveTuneRamWriteResult,
+    ) : LiveTuneOwnerRamWriteResult
+
+    data class NotWritable(
+        val state: LiveTuneSourceLifecycleState,
+    ) : LiveTuneOwnerRamWriteResult
+
+    data object OperationUnavailable : LiveTuneOwnerRamWriteResult
+
+    data object OwnerClosed : LiveTuneOwnerRamWriteResult
+}
+
 internal fun interface RuntimeIdentityProbeOperation {
     fun probe(
         channel: UsbReadOnlyTransactionChannel,
@@ -134,6 +148,7 @@ class LiveTuneConnectionOwner internal constructor(
     private val definitionBundles: List<DefinitionBundleImport> = emptyList(),
     private val profileSelector: RuntimeProfileSelectionOperation? = null,
     private val probeQueryCompiler: DefinitionProbeQueryCompileOperation? = null,
+    private val ramWriteOperation: LiveTuneRamWriteOperation? = null,
 ) : AutoCloseable {
     @Volatile
     private var closed = false
@@ -280,6 +295,29 @@ class LiveTuneConnectionOwner internal constructor(
         return LiveTuneOwnerLoadResult.Completed(result)
     }
 
+    internal fun writeCurrentDraftToRam(
+        signatureLimit: Int,
+        channel: UsbReadOnlyTransactionChannel,
+        timeoutMs: Int,
+    ): LiveTuneOwnerRamWriteResult {
+        if (!isAlive) {
+            return LiveTuneOwnerRamWriteResult.OwnerClosed
+        }
+        val live = lifecycle.state as? LiveTuneSourceLifecycleState.Live
+            ?: return LiveTuneOwnerRamWriteResult.NotWritable(lifecycle.state)
+        val operation = ramWriteOperation
+            ?: return LiveTuneOwnerRamWriteResult.OperationUnavailable
+
+        return LiveTuneOwnerRamWriteResult.Completed(
+            operation.write(
+                signatureResponse = live.identity.signature.toByteArray(Charsets.UTF_8),
+                signatureLimit = signatureLimit,
+                channel = channel,
+                timeoutMs = timeoutMs,
+            ),
+        )
+    }
+
     fun disconnect() {
         if (!closed) {
             lifecycle.onDisconnected()
@@ -319,6 +357,7 @@ class LiveTuneConnectionOwner internal constructor(
                                 definitionBundles = registryOwner.definitionBundles(),
                                 profileSelector = RuntimeProfileSelectionOperation(nativeRegistry::select),
                                 probeQueryCompiler = DefinitionProbeQueryCompileOperation(probeCompiler::compile),
+                                ramWriteOperation = NativeLiveTuneRamWriteOperation(engine, nativeRegistry),
                             ),
                         importedBundleCount = opened.importedBundleCount,
                     )
