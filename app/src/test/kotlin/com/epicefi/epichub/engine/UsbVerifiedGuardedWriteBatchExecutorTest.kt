@@ -1,5 +1,6 @@
 package com.epicefi.epichub.engine
 
+import com.epicefi.epichub.platform.transport.usb.UsbReadOnlyBulkPort
 import com.epicefi.epichub.platform.transport.usb.UsbReadOnlyTransactionChannel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -7,8 +8,7 @@ import org.junit.Assert.assertSame
 import org.junit.Test
 
 class UsbVerifiedGuardedWriteBatchExecutorTest {
-    private val unusedChannel: UsbReadOnlyTransactionChannel
-        get() = throw AssertionError("transport channel should be consumed only by injected executor")
+    private val unusedChannel = UsbReadOnlyTransactionChannel(UnusedPort())
 
     @Test
     fun fullTransportSuccessReconcilesExactFullPrefix() {
@@ -125,4 +125,18 @@ class UsbVerifiedGuardedWriteBatchExecutorTest {
                 GuardedWriteBatchReconciliationResult.Reconciled
             },
         )
+
+    private class UnusedPort : UsbReadOnlyBulkPort {
+        override fun sendRequest(
+            request: ByteArray,
+            timeoutMs: Int,
+        ): Int = throw AssertionError("transport should be injected")
+
+        override fun receiveResponse(
+            buffer: ByteArray,
+            timeoutMs: Int,
+        ): Int = throw AssertionError("transport should be injected")
+
+        override fun close() = Unit
+    }
 }
