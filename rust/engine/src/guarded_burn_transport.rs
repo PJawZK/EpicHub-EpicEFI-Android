@@ -378,14 +378,16 @@ table = valuesTable, valuesMap, "Values", 1
         let guarded =
             plan_selected_engine_guarded_page_burn(engine, registry, SIGNATURE.as_bytes(), 256, 1)
                 .unwrap();
-        assert!(stage_selected_engine_guarded_page_burn(
-            engine,
-            registry,
-            SIGNATURE.as_bytes(),
-            256,
-            &guarded,
-        )
-        .is_ok());
+        assert!(
+            stage_selected_engine_guarded_page_burn(
+                engine,
+                registry,
+                SIGNATURE.as_bytes(),
+                256,
+                &guarded,
+            )
+            .is_ok()
+        );
 
         close_profile_registry(registry);
         close_engine(engine);
