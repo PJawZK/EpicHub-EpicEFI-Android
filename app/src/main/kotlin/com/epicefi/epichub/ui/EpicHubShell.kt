@@ -48,6 +48,8 @@ import com.epicefi.epichub.ui.settings.ProfilePackageSettingsState
 import com.epicefi.epichub.ui.settings.SettingsScreen
 import com.epicefi.epichub.ui.settings.UsbControllerSettingsState
 import com.epicefi.epichub.ui.tools.TuningToolsScreen
+import com.epicefi.epichub.ui.tuner.RamWriteControlPanel
+import com.epicefi.epichub.ui.tuner.RamWriteControlState
 import com.epicefi.epichub.ui.tuner.TunerScreen
 
 @Composable
@@ -73,6 +75,8 @@ fun EpicHubShell(
     onConnectUsbController: () -> Unit = {},
     onDisconnectUsbController: () -> Unit = {},
     onLoadUsbTune: () -> Unit = {},
+    ramWriteControl: RamWriteControlState = RamWriteControlState(),
+    onWriteCurrentDraftToRam: () -> Unit = {},
     benchmarkPlaceholderContent: Boolean = false,
     onDiagnosticsTabSelected: (DiagnosticsTab) -> Unit,
     onCaptureRecentProblem: () -> Unit,
@@ -129,6 +133,8 @@ fun EpicHubShell(
                                 onConnectUsbController = onConnectUsbController,
                                 onDisconnectUsbController = onDisconnectUsbController,
                                 onLoadUsbTune = onLoadUsbTune,
+                                ramWriteControl = ramWriteControl,
+                                onWriteCurrentDraftToRam = onWriteCurrentDraftToRam,
                                 benchmarkPlaceholderContent = benchmarkPlaceholderContent,
                                 onDiagnosticsTabSelected = onDiagnosticsTabSelected,
                                 onSaveCapture = onSaveCapture,
@@ -155,6 +161,8 @@ fun EpicHubShell(
                             onConnectUsbController = onConnectUsbController,
                             onDisconnectUsbController = onDisconnectUsbController,
                             onLoadUsbTune = onLoadUsbTune,
+                            ramWriteControl = ramWriteControl,
+                            onWriteCurrentDraftToRam = onWriteCurrentDraftToRam,
                             benchmarkPlaceholderContent = benchmarkPlaceholderContent,
                             onDiagnosticsTabSelected = onDiagnosticsTabSelected,
                             onSaveCapture = onSaveCapture,
@@ -404,6 +412,8 @@ private fun ShellContent(
     onConnectUsbController: () -> Unit,
     onDisconnectUsbController: () -> Unit,
     onLoadUsbTune: () -> Unit,
+    ramWriteControl: RamWriteControlState,
+    onWriteCurrentDraftToRam: () -> Unit,
     benchmarkPlaceholderContent: Boolean,
     onDiagnosticsTabSelected: (DiagnosticsTab) -> Unit,
     onSaveCapture: (DiagnosticCapture) -> Unit,
@@ -438,6 +448,15 @@ private fun ShellContent(
         )
         PrimaryWorkspace.TUNER -> Column(modifier = Modifier.fillMaxSize()) {
             WorkspaceRouteTabs(destination, onDestinationSelected)
+            if (!benchmarkPlaceholderContent && destination == AppDestination.TUNER) {
+                RamWriteControlPanel(
+                    state = ramWriteControl,
+                    onWriteToRam = onWriteCurrentDraftToRam,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+            }
             Box(modifier = Modifier.weight(1f)) {
                 if (benchmarkPlaceholderContent) {
                     BenchmarkRoutePlaceholder(destination)
