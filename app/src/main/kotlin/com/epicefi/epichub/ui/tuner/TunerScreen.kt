@@ -34,7 +34,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.unit.dp
-import com.epicefi.epichub.engine.OfflineTunerFixture
+import com.epicefi.epichub.engine.ActiveTunerTable
 import com.epicefi.epichub.engine.TunerBrushPathPoint
 import com.epicefi.epichub.engine.TunerBrushPullMode
 import com.epicefi.epichub.engine.TunerCellStep
@@ -80,7 +80,7 @@ private data class PendingPreview(
 
 @Composable
 fun TunerScreen(modifier: Modifier = Modifier) {
-    val initialProjection = remember { runCatching { OfflineTunerFixture.readProjection() } }
+    val initialProjection = remember { runCatching { ActiveTunerTable.readProjection() } }
     val tableFocusRequester = remember { FocusRequester() }
     var projection by remember { mutableStateOf(initialProjection.getOrNull()) }
     var errorMessage by remember { mutableStateOf(initialProjection.exceptionOrNull()?.message) }
@@ -128,7 +128,7 @@ fun TunerScreen(modifier: Modifier = Modifier) {
                 val selected = interactionState.selection ?: return
                 val current = projection ?: return
                 runCatching {
-                    OfflineTunerFixture.previewRectangleStep(
+                    ActiveTunerTable.previewRectangleStep(
                         selected.toNative(),
                         effect.step,
                     ).also { preview -> validatePreview(current, preview) }
@@ -150,7 +150,7 @@ fun TunerScreen(modifier: Modifier = Modifier) {
                 val selected = interactionState.selection ?: return
                 val current = projection ?: return
                 runCatching {
-                    OfflineTunerFixture.previewRectangleNumeric(
+                    ActiveTunerTable.previewRectangleNumeric(
                         rectangle = selected.toNative(),
                         operation = effect.operation,
                         operand = effect.operand,
@@ -173,7 +173,7 @@ fun TunerScreen(modifier: Modifier = Modifier) {
                 val selected = interactionState.selection ?: return
                 val current = projection ?: return
                 runCatching {
-                    OfflineTunerFixture.previewInterpolation(
+                    ActiveTunerTable.previewInterpolation(
                         rectangle = selected.toNative(),
                         mode = effect.mode,
                     ).also { preview -> validatePreview(current, preview) }
@@ -195,7 +195,7 @@ fun TunerScreen(modifier: Modifier = Modifier) {
                 val selected = interactionState.selection ?: return
                 val current = projection ?: return
                 runCatching {
-                    OfflineTunerFixture.previewSmoothing(
+                    ActiveTunerTable.previewSmoothing(
                         rectangle = selected.toNative(),
                         strengthPercent = effect.strengthPercent,
                     ).also { preview -> validatePreview(current, preview) }
@@ -218,7 +218,7 @@ fun TunerScreen(modifier: Modifier = Modifier) {
                 val current = projection ?: return
                 val parameters = effect.stroke.parameters
                 runCatching {
-                    OfflineTunerFixture.previewBrushPath(
+                    ActiveTunerTable.previewBrushPath(
                         path = effect.stroke.points.map { point ->
                             TunerBrushPathPoint(row = point.row, col = point.col)
                         },
@@ -245,7 +245,7 @@ fun TunerScreen(modifier: Modifier = Modifier) {
                 val selected = interactionState.selection ?: return
                 val current = projection ?: return
                 runCatching {
-                    OfflineTunerFixture.previewBrushPull(
+                    ActiveTunerTable.previewBrushPull(
                         rectangle = selected.toNative(),
                         mode = effect.mode,
                         delta = effect.delta,
@@ -277,32 +277,32 @@ fun TunerScreen(modifier: Modifier = Modifier) {
                 val preview = pendingPreview ?: return
                 runCatching {
                     when (val operation = preview.operation) {
-                        is PendingOperation.Step -> OfflineTunerFixture.applyRectangleStep(
+                        is PendingOperation.Step -> ActiveTunerTable.applyRectangleStep(
                             rectangle = preview.selection.toNative(),
                             step = operation.step,
                             expectedRevision = preview.baseRevision,
                         )
 
-                        is PendingOperation.Numeric -> OfflineTunerFixture.applyRectangleNumeric(
+                        is PendingOperation.Numeric -> ActiveTunerTable.applyRectangleNumeric(
                             rectangle = preview.selection.toNative(),
                             operation = operation.operation,
                             operand = operation.operand,
                             expectedRevision = preview.baseRevision,
                         )
 
-                        is PendingOperation.Interpolation -> OfflineTunerFixture.applyInterpolation(
+                        is PendingOperation.Interpolation -> ActiveTunerTable.applyInterpolation(
                             rectangle = preview.selection.toNative(),
                             mode = operation.mode,
                             expectedRevision = preview.baseRevision,
                         )
 
-                        is PendingOperation.Smoothing -> OfflineTunerFixture.applySmoothing(
+                        is PendingOperation.Smoothing -> ActiveTunerTable.applySmoothing(
                             rectangle = preview.selection.toNative(),
                             strengthPercent = operation.strengthPercent,
                             expectedRevision = preview.baseRevision,
                         )
 
-                        is PendingOperation.BrushPull -> OfflineTunerFixture.applyBrushPull(
+                        is PendingOperation.BrushPull -> ActiveTunerTable.applyBrushPull(
                             rectangle = preview.selection.toNative(),
                             mode = operation.mode,
                             delta = operation.delta,
@@ -314,7 +314,7 @@ fun TunerScreen(modifier: Modifier = Modifier) {
 
                         is PendingOperation.BrushPath -> {
                             val parameters = operation.stroke.parameters
-                            OfflineTunerFixture.applyBrushPath(
+                            ActiveTunerTable.applyBrushPath(
                                 path = operation.stroke.points.map { point ->
                                     TunerBrushPathPoint(row = point.row, col = point.col)
                                 },
@@ -337,7 +337,7 @@ fun TunerScreen(modifier: Modifier = Modifier) {
             }
 
             TunerCommandEffect.Undo -> {
-                runCatching { OfflineTunerFixture.undoProjection() }
+                runCatching { ActiveTunerTable.undoProjection() }
                     .onSuccess { next ->
                         projection = next
                         pendingPreview = null
@@ -349,7 +349,7 @@ fun TunerScreen(modifier: Modifier = Modifier) {
             }
 
             TunerCommandEffect.Redo -> {
-                runCatching { OfflineTunerFixture.redoProjection() }
+                runCatching { ActiveTunerTable.redoProjection() }
                     .onSuccess { next ->
                         projection = next
                         pendingPreview = null
@@ -385,25 +385,28 @@ fun TunerScreen(modifier: Modifier = Modifier) {
     ) {
         Text("Tuner", style = MaterialTheme.typography.headlineMedium)
 
+        val authorityPresentation = tunerAuthorityPresentation(projection)
         StructuralCard(
             title = "Authority",
             modifier = Modifier.fillMaxWidth(),
-            subtitle = "Offline semantic draft only",
+            subtitle = authorityPresentation.subtitle,
         ) {
-            if (projection == null) {
-                Text("OFFLINE FIXTURE · projection unavailable")
-                errorMessage?.let { Text(it) }
-            } else {
-                Text("OFFLINE FIXTURE · NOT ECU APPLIED")
+            Text(authorityPresentation.headline)
+            projection?.let { current ->
                 Text(
-                    "Profile generation ${projection?.profileGeneration} · Draft revision ${projection?.draftRevision}",
+                    "Profile generation ${current.profileGeneration} · Draft revision ${current.draftRevision}",
                     style = MaterialTheme.typography.bodySmall,
                 )
-            }
+            } ?: errorMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            Text(
+                authorityPresentation.detail,
+                style = MaterialTheme.typography.bodySmall,
+            )
         }
 
         projection?.let { current ->
             val selection = interactionState.selection
+            val currentAuthority = tunerAuthorityPresentation(current)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 AssistChip(
                     onClick = { show3d = false },
@@ -474,7 +477,8 @@ fun TunerScreen(modifier: Modifier = Modifier) {
                     .onKeyEvent { event ->
                         event.toTunerCommand()?.let(::dispatch) ?: false
                     },
-                subtitle = "Table ${current.tableId} · ${current.rows}×${current.cols} · offline draft",
+                subtitle =
+                    "Table ${current.tableId} · ${current.rows}×${current.cols} · ${currentAuthority.tableSourceLabel}",
             ) {
                 if (show3d) {
                     Tuner3dSurface(
