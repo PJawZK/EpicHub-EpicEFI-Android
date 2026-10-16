@@ -206,9 +206,7 @@ mod tests {
 
     use super::*;
     use crate::compiled_profile_bundle::OwnedDefinitionBundleImport;
-    use crate::engine::{
-        close_engine, create_engine, with_tune_session, with_tune_source_image,
-    };
+    use crate::engine::{close_engine, create_engine, with_tune_session, with_tune_source_image};
     use crate::live_tune_install::install_selected_live_pages;
     use crate::profile_import::OwnedSemanticTableBindingSpec;
     use crate::profile_registry_store::{
@@ -439,10 +437,9 @@ table = valuesTable, valuesMap, "Values", 1
             1,
         )
         .unwrap();
-        let before = with_tune_source_image(engine, |source| {
-            source.unwrap().page(0).unwrap().to_vec()
-        })
-        .unwrap();
+        let before =
+            with_tune_source_image(engine, |source| source.unwrap().page(0).unwrap().to_vec())
+                .unwrap();
 
         assert_eq!(
             reconcile_guarded_write_batch_verified_prefix(
