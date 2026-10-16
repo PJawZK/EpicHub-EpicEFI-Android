@@ -36,6 +36,7 @@ pub mod page_read_planner;
 pub mod page_write_planner;
 pub mod profile_import;
 pub mod profile_registry_store;
+pub mod ram_source_provenance;
 pub mod readonly_page_acquisition;
 pub mod resolved_profile_source;
 pub mod runtime_identity_probe;
