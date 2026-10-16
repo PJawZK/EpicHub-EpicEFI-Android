@@ -153,7 +153,14 @@ class NativeProfileRegistry internal constructor(
     val isAlive: Boolean
         get() = handle != 0L && ops.isAlive(handle)
 
-    fun importCompiledProfile(import: CompiledProfileImport): CompiledProfileImportResult {
+    fun importCompiledProfile(import: CompiledProfileImport): CompiledProfileImportResult =
+        EngineAuthoritySerialization.exclusive {
+            importCompiledProfileSerialized(import)
+        }
+
+    private fun importCompiledProfileSerialized(
+        import: CompiledProfileImport,
+    ): CompiledProfileImportResult {
         val currentHandle = handle
         if (currentHandle == 0L) {
             return CompiledProfileImportResult.Rejected(CompiledProfileImportRejection.InvalidHandle)
@@ -191,7 +198,14 @@ class NativeProfileRegistry internal constructor(
         }
     }
 
-    fun importDefinitionBundle(import: DefinitionBundleImport): DefinitionBundleImportResult {
+    fun importDefinitionBundle(import: DefinitionBundleImport): DefinitionBundleImportResult =
+        EngineAuthoritySerialization.exclusive {
+            importDefinitionBundleSerialized(import)
+        }
+
+    private fun importDefinitionBundleSerialized(
+        import: DefinitionBundleImport,
+    ): DefinitionBundleImportResult {
         val currentHandle = handle
         if (currentHandle == 0L) {
             return rejectedBundleImport(DefinitionBundleImportRejection.InvalidHandle)
@@ -281,10 +295,12 @@ class NativeProfileRegistry internal constructor(
     internal fun readOnlyRegistryHandle(): Long = handle
 
     override fun close() {
-        val currentHandle = handle
-        if (currentHandle != 0L) {
-            ops.close(currentHandle)
-            handle = 0L
+        EngineAuthoritySerialization.exclusive {
+            val currentHandle = handle
+            if (currentHandle != 0L) {
+                ops.close(currentHandle)
+                handle = 0L
+            }
         }
     }
 
