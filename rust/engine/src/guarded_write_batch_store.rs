@@ -21,6 +21,11 @@ pub enum GuardedWriteBatchStoreError {
     InvalidHandle,
     InvalidTransactionIndex { index: usize, count: usize },
     Authority(EngineGuardedRamWriteBatchError),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum GuardedWriteBatchReconciliationStoreError {
+    InvalidHandle,
     Reconciliation(EngineGuardedSourceReconciliationError),
 }
 
@@ -174,10 +179,16 @@ pub fn reconcile_guarded_write_batch_verified_prefix(
     runtime_signature_response: &[u8],
     max_signature_response_bytes: usize,
     verified_transaction_count: usize,
-) -> Result<(), GuardedWriteBatchStoreError> {
+) -> Result<(), GuardedWriteBatchReconciliationStoreError> {
     // Preserve the same lock-order contract as the currentness check: retain the batch
     // through an Arc, release the batch-store mutex, then enter profile/engine authority.
-    let batch = with_store(|store| store.get(handle))?;
+    let batch = with_store(|store| store.get(handle)).map_err(|error| match error {
+        GuardedWriteBatchStoreError::InvalidHandle => {
+            GuardedWriteBatchReconciliationStoreError::InvalidHandle
+        }
+        GuardedWriteBatchStoreError::InvalidTransactionIndex { .. }
+        | GuardedWriteBatchStoreError::Authority(_) => unreachable!(),
+    })?;
     reconcile_selected_engine_guarded_batch_verified_prefix(
         engine_handle,
         registry_handle,
@@ -186,7 +197,7 @@ pub fn reconcile_guarded_write_batch_verified_prefix(
         &batch,
         verified_transaction_count,
     )
-    .map_err(GuardedWriteBatchStoreError::Reconciliation)
+    .map_err(GuardedWriteBatchReconciliationStoreError::Reconciliation)
 }
 
 #[cfg(test)]
@@ -411,7 +422,7 @@ table = valuesTable, valuesMap, "Values", 1
                 256,
                 0,
             ),
-            Err(GuardedWriteBatchStoreError::InvalidHandle)
+            Err(GuardedWriteBatchReconciliationStoreError::InvalidHandle)
         );
 
         with_tune_session(engine, |session| {
@@ -442,7 +453,7 @@ table = valuesTable, valuesMap, "Values", 1
                 256,
                 2,
             ),
-            Err(GuardedWriteBatchStoreError::Reconciliation(
+            Err(GuardedWriteBatchReconciliationStoreError::Reconciliation(
                 EngineGuardedSourceReconciliationError::VerifiedSource(
                     VerifiedSourceReconciliationError::VerifiedPrefixTooLarge {
                         verified: 2,
