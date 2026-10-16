@@ -34,6 +34,7 @@ pub mod live_tune_install;
 mod mega144h7_profile;
 pub mod ms_envelope_codec;
 mod offline_tune_source;
+pub mod page_burn_planner;
 pub mod page_read_planner;
 pub mod page_write_planner;
 pub mod profile_import;
