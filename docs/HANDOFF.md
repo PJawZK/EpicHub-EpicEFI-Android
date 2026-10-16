@@ -20,11 +20,11 @@ Every meaningful `current-work` checkpoint must pass the complete Foundation wor
 
 The previous fully qualified baseline on both `main` and `current-work` was:
 
-`65a588d2b48dfaba460ccacfbfdb75ce2209c4ff`
+`2e024fa8c54ef3e730b99e8dbf84599093da9695`
 
 Foundation quality run:
 
-`38869610375`
+`38875188598`
 
 That baseline already contained:
 
@@ -37,15 +37,17 @@ That baseline already contained:
 - opaque guarded native write batches;
 - constrained Android USB execution with precondition read, exact verification, write, ACK verification, and mandatory readback;
 - pure, engine-owned, opaque-store, JNI, and Android verified-prefix reconciliation;
-- explicit retained-RAM provenance / synchronization evidence without a generic `isSynced` boolean.
+- retained RAM provenance / synchronization evidence without a generic `isSynced` boolean;
+- process-local engine-authority serialization across just-in-time authorization, physical USB transfer, and reconciliation;
+- zero-verified-prefix interruption reconciliation, so even an interrupted first transaction records incomplete RAM provenance instead of silently preserving an older whole-draft confirmation.
 
-The authorization → physical USB transfer race was then closed on `current-work` at exact code SHA:
+The explicit app-facing RAM synchronization-state boundary was then completed on `current-work` at exact code SHA:
 
-`1281db10dffa4d4bbd619dbf5d2028a75a552bff`
+`d35c76a448679b081ca13215246acf9c4e202dc4`
 
 Foundation quality run:
 
-`38871873302`
+`38880159652`
 
 That run passed the complete Foundation gate:
 
@@ -53,7 +55,7 @@ That run passed the complete Foundation gate:
 - Rust format;
 - Rust Clippy with warnings denied;
 - all Rust tests;
-- Android JVM tests, including the new serialization/concurrency proofs;
+- Android JVM tests, including snapshot decoding and fail-closed contradiction proofs;
 - Android debug build;
 - Android performance build;
 - Android Macrobenchmark harness build;
@@ -62,7 +64,7 @@ That run passed the complete Foundation gate:
 - physical benchmark-kit preparation;
 - qualified artifact publication.
 
-Therefore `1281db10dffa4d4bbd619dbf5d2028a75a552bff` is an immutable qualified code checkpoint.
+Therefore `d35c76a448679b081ca13215246acf9c4e202dc4` is an immutable qualified code checkpoint.
 
 This handoff-file update itself creates a newer `current-work` SHA. That newer SHA must also pass Foundation before `main` advances.
 
@@ -70,7 +72,7 @@ This handoff-file update itself creates a newer `current-work` SHA. That newer S
 
 # Current architecture boundary
 
-EpicHub is a native Kotlin/Jetpack Compose + Rust application. Kotlin owns Android/UI/platform integration. Rust owns semantic tuning state, ECU definition/profile authority, write geometry, reconciliation rules, retained RAM-source provenance, and native engine responsibilities.
+EpicHub is a native Kotlin/Jetpack Compose + Rust application. Kotlin owns Android/UI/platform integration. Rust owns semantic tuning state, ECU definition/profile authority, write geometry, reconciliation rules, retained RAM-source provenance, RAM synchronization classification, and native engine responsibilities.
 
 Current deep vertical slice:
 
@@ -111,11 +113,13 @@ write → firmware ACK verify
     ↓
 mandatory readback → exact verify
     ↓
-exact verified transaction prefix
+exact verified transaction prefix, including zero-prefix interruption
     ↓
 native retained-source reconciliation + provenance update
     ↓
 shared engine-authority serialization gate released
+    ↓
+atomic native RAM synchronization-state snapshot for Android
 ```
 
 Keep these representations distinct:
@@ -125,7 +129,8 @@ Keep these representations distinct:
 3. engine-owned semantic `TuneSession` and current `TuneDraft`;
 4. planned source-relative ECU RAM mutations;
 5. opaque guarded write transactions and their verified contiguous prefix;
-6. persisted/Burned ECU state.
+6. app-facing semantic RAM synchronization state derived by Rust from the retained evidence;
+7. persisted/Burned ECU state.
 
 Critical invariant:
 
@@ -137,7 +142,7 @@ A successful transaction proves only its exact readback-verified bytes. A fully 
 
 ---
 
-# Retained RAM provenance semantics
+# Retained RAM provenance and synchronization semantics
 
 The retained exact source image carries evidence describing what is actually known about ECU RAM rather than inferring synchronization from the current draft.
 
@@ -147,12 +152,37 @@ Current rules:
 - a completely readback-verified guarded batch confirms that batch's exact draft revision;
 - a partially verified batch advances only the exact verified transaction/range prefix;
 - an incomplete reconciliation clears whole-draft confirmation while retaining the exact verified ranges that are still proven;
+- a zero-verified-prefix interruption also performs native reconciliation, clears whole-draft confirmation, and records an incomplete reconciliation with zero verified transactions;
 - current draft revision and confirmed RAM revision remain distinct;
 - the last reconciliation records draft revision, verified transaction count, total transaction count, and completeness;
 - provenance participates in retained-source authority/currentness, so changed certainty can stale an older opaque batch even if raw bytes did not change;
 - byte reconciliation and provenance replacement remain atomic and fail closed;
 - no generic whole-session `isSynced` boolean exists;
 - no RAM provenance state implies nonvolatile persistence.
+
+Rust now classifies that evidence into five explicit app-facing states:
+
+1. `FreshLiveControllerConfirmation` — a freshly acquired live-controller image confirms the current draft/baseline and no write reconciliation has occurred;
+2. `CurrentDraftConfirmedInRam` — a complete readback-verified write reconciliation confirms the exact current draft revision in volatile RAM;
+3. `LocalDraftAheadOfConfirmedRam` — RAM has an exact confirmed revision, but the local draft has advanced beyond it;
+4. `PartiallyVerifiedInterruptedWrite` — an interrupted batch has a non-zero verified transaction prefix, but no whole-draft RAM confirmation remains;
+5. `RamUnconfirmedAfterInterruptedWrite` — an interrupted batch has zero verified transactions, so the previous whole-draft RAM confirmation is invalidated and current RAM cannot be claimed as confirmed from retained evidence.
+
+The state crosses JNI as one versioned, fixed-size native snapshot rather than several independently read fields. The snapshot keeps the semantic state and its evidence atomic:
+
+- profile generation;
+- acquisition source;
+- current draft revision;
+- optional confirmed RAM draft revision;
+- verified write-range count;
+- optional last reconciliation draft revision;
+- verified transaction count;
+- total transaction count;
+- reconciliation completeness.
+
+Kotlin decodes and validates this snapshot and fails closed on contradictory or unsupported evidence. Kotlin does not derive synchronization by comparing unrelated getters and does not own the classification rules.
+
+`NativeEngine.readRamSynchronizationState()` is the app-facing read boundary. It returns no state when the active source has no applicable live RAM provenance.
 
 ---
 
@@ -170,7 +200,7 @@ return request bytes to Android
 physical USB transaction
 ```
 
-That gap is now closed for the current single-engine app architecture by `EngineAuthoritySerialization`, a process-local fair reentrant authority gate.
+That gap is closed for the current single-engine app architecture by `EngineAuthoritySerialization`, a process-local fair reentrant authority gate.
 
 The real guarded write executor holds the gate continuously across:
 
@@ -193,7 +223,7 @@ Current authority-mutating paths use the same gate:
 
 The gate is deliberately reentrant so authority helpers can compose without introducing lock-order inversions. JVM tests prove that a competing authority mutation cannot enter while a guarded transfer owns the gate and that transport + reconciliation occur inside one serializer scope.
 
-Read-only tune/profile operations are not serialized unnecessarily. USB disconnect/transport lifetime remains a transport concern and is represented as transport failure rather than being conflated with tune/profile/source authority mutation.
+Read-only tune/profile/RAM-state operations are not serialized unnecessarily. Rust engine/source authority locks still produce an atomic RAM-state snapshot. USB disconnect/transport lifetime remains a transport concern and is represented as transport failure rather than being conflated with tune/profile/source authority mutation.
 
 Do not bypass the gated app-level mutation wrappers with direct bridge mutations in future code. If the architecture ever expands beyond the current single app-level `NativeEngine`, revisit the serialization ownership model rather than assuming this process-global gate scales unchanged.
 
@@ -216,7 +246,9 @@ Do not bypass the gated app-level mutation wrappers with direct bridge mutations
 - guarded writes require pre-read exact verification, ACK verification, and mandatory readback verification;
 - every physical guarded write executes under the same serialization authority as active tune/profile/source mutations;
 - partial write success is represented only as an exact verified prefix;
+- zero-prefix interruptions still update native provenance and invalidate unsupported whole-draft RAM confirmation;
 - stale profile generation, draft revision, or retained source fails closed;
+- app-facing RAM synchronization state is Rust-classified from one atomic evidence snapshot rather than guessed in UI code;
 - disconnect/reconnect invalidates unsupported live synchronization claims;
 - Burn remains separate from RAM write.
 
@@ -224,22 +256,30 @@ Do not bypass the gated app-level mutation wrappers with direct bridge mutations
 
 # Immediate next work
 
-Before exposing a user-facing RAM-write action, inspect and deliberately resolve one provenance edge case:
+Proceed toward the smallest explicit user-facing **Write to RAM** workflow. Do not add Burn/persistence in this slice.
 
-- when physical execution is interrupted with a verified transaction prefix of `0`, the current `UsbVerifiedGuardedWriteBatchExecutor` returns `Interrupted(0, ...)` without invoking native reconciliation;
-- because the provenance model treats an incomplete write attempt as meaningful uncertainty even when zero transactions were verified, confirm whether this path must explicitly record incomplete-zero-prefix provenance before any UI can present RAM state.
+Before changing UI, inspect the current Tuner/live-connection ownership and identify the narrowest existing integration point that already has:
 
-Do not silently reinterpret this as success or whole-session synchronization.
+- the active `NativeEngine`;
+- the active profile registry / exact runtime signature authority;
+- the retained live-controller source;
+- the connected USB transaction channel;
+- the current exact draft revision.
 
-After that edge case is resolved and qualified, proceed toward the smallest explicit user-facing **Write to RAM** workflow. That workflow should:
+The Write-to-RAM workflow should then:
 
-1. require a live, exactly selected controller/profile/source authority;
-2. operate on the current exact draft revision;
-3. plan through native source-relative/definition-owned authority only;
-4. show clearly that the action writes volatile ECU RAM, not persistent storage;
-5. execute through the already-qualified guarded + serialized USB path;
-6. surface exact success / partial verification / failure state from native provenance rather than a guessed boolean;
-7. keep Burn/persist as a later, separate capability and user action.
+1. be available only when a live, exactly selected controller/profile/source authority exists;
+2. target the current exact draft revision;
+3. create the opaque guarded batch through native source-relative / definition-owned authority only;
+4. never accept raw page, offset, byte geometry, or write request construction from UI code;
+5. communicate clearly that the action changes **volatile ECU RAM** and is not persistent storage;
+6. execute only through the already-qualified serialized guarded USB executor;
+7. read `NativeEngine.readRamSynchronizationState()` after execution and surface exact native-owned outcomes such as current-draft confirmed, partial verification, or RAM unconfirmed after interruption;
+8. preserve the original transport/authority/reconciliation failure details for diagnostics rather than collapsing everything into a generic failure;
+9. avoid claiming synchronization merely because the transport returned success;
+10. keep Burn/persist as a later, separate capability and explicit user action.
+
+Prefer a small workflow/state owner that can later feed Compose over putting write orchestration directly inside a composable. Reuse the existing live connection/profile/session ownership instead of creating a second parallel connection or tune authority.
 
 No Burn/persistence behavior should be added as part of the RAM-write UI slice.
 
