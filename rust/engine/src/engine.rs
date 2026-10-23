@@ -225,6 +225,39 @@ impl EngineRegistry {
         })
     }
 
+    fn nonvolatile_page_snapshot(
+        &self,
+        handle: i64,
+        page: usize,
+        signature_response: &[u8],
+    ) -> Option<[u8; 48]> {
+        let engine = self.engines.get(&handle)?;
+        let mut bytes = [0u8; 48];
+        bytes[0..4].copy_from_slice(b"NVP1");
+        bytes[5] = 1;
+        let generation = engine.tune_session.profile_generation();
+        let revision = engine.tune_session.revision();
+        bytes[8..16].copy_from_slice(&generation.to_le_bytes());
+        bytes[16..24].copy_from_slice(&revision.to_le_bytes());
+        bytes[24..32].copy_from_slice(&engine.tune_session_epoch.to_le_bytes());
+        bytes[32..36].copy_from_slice(&u32::try_from(page).ok()?.to_le_bytes());
+        if let Some(proof) = engine.nonvolatile_proofs.get(&page) {
+            let source_crc = engine.tune_source_image.as_ref()
+                .and_then(|source| page.checked_sub(1).and_then(|index| source.page(index)))
+                .map(crate::ms_envelope_codec::crc32_ieee);
+            bytes[36..40].copy_from_slice(&proof.expected_page_crc32.to_le_bytes());
+            bytes[40..44].copy_from_slice(&proof.signature_crc32.to_le_bytes());
+            let valid = engine.tune_source_image.is_some()
+                && engine.tune_session.baseline().origin == crate::tuning::TuneSnapshotOrigin::LiveController
+                && proof.profile_generation == generation
+                && proof.draft_revision == revision
+                && source_crc == Some(proof.expected_page_crc32)
+                && proof.signature_crc32 == crate::ms_envelope_codec::crc32_ieee(signature_response);
+            bytes[4] = if valid { 1 } else { 2 };
+        }
+        Some(bytes)
+    }
+
     fn replace_tune_session(&mut self, handle: i64, session: TuneSession) -> bool {
         let Some(engine) = self.engines.get_mut(&handle) else {
             return false;
@@ -352,6 +385,14 @@ pub(crate) fn confirm_nonvolatile_page(
 
 pub fn nonvolatile_page_proof(handle: i64, page: usize) -> Option<Option<NonvolatilePageProof>> {
     with_registry(|registry| registry.nonvolatile_proof(handle, page))
+}
+
+pub fn nonvolatile_page_snapshot(
+    handle: i64,
+    page: usize,
+    signature_response: &[u8],
+) -> Option<[u8; 48]> {
+    with_registry(|registry| registry.nonvolatile_page_snapshot(handle, page, signature_response))
 }
 
 pub(crate) fn replace_tune_session(handle: i64, session: TuneSession) -> bool {
