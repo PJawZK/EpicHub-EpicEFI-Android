@@ -155,6 +155,16 @@ impl EngineRegistry {
             .map(|engine| operation(&engine.tune_session, engine.tune_source_image.as_ref()))
     }
 
+    fn tune_source_authority_with_epoch<T>(
+        &self,
+        handle: i64,
+        operation: impl FnOnce(u64, &TuneSession, Option<&TuneSourcePageImage>) -> T,
+    ) -> Option<T> {
+        self.engines.get(&handle).map(|engine| {
+            operation(engine.tune_session_epoch, &engine.tune_session, engine.tune_source_image.as_ref())
+        })
+    }
+
     fn tune_source_authority_mut<T>(
         &mut self,
         handle: i64,
@@ -178,6 +188,7 @@ impl EngineRegistry {
         handle: i64,
         proof: NonvolatilePageProof,
         expected_page_bytes: &[u8],
+        expected_session_epoch: u64,
     ) -> bool {
         let Some(engine) = self.engines.get_mut(&handle) else {
             return false;
@@ -185,7 +196,8 @@ impl EngineRegistry {
         let Some(source) = engine.tune_source_image.as_ref() else {
             return false;
         };
-        if engine.tune_session.profile_generation() != proof.profile_generation
+        if engine.tune_session_epoch != expected_session_epoch
+            || engine.tune_session.profile_generation() != proof.profile_generation
             || engine.tune_session.revision() != proof.draft_revision
             || source.page(proof.page.saturating_sub(1)) != Some(expected_page_bytes)
             || crate::ms_envelope_codec::crc32_ieee(expected_page_bytes)
@@ -301,6 +313,13 @@ pub(crate) fn with_tune_source_authority<T>(
     with_registry(|registry| registry.tune_source_authority(handle, operation))
 }
 
+pub(crate) fn with_tune_source_authority_with_epoch<T>(
+    handle: i64,
+    operation: impl FnOnce(u64, &TuneSession, Option<&TuneSourcePageImage>) -> T,
+) -> Option<T> {
+    with_registry(|registry| registry.tune_source_authority_with_epoch(handle, operation))
+}
+
 pub(crate) fn with_tune_source_authority_mut<T>(
     handle: i64,
     operation: impl FnOnce(&TuneSession, Option<&mut TuneSourcePageImage>) -> T,
@@ -316,8 +335,9 @@ pub(crate) fn confirm_nonvolatile_page(
     handle: i64,
     proof: NonvolatilePageProof,
     expected_page_bytes: &[u8],
+    expected_session_epoch: u64,
 ) -> bool {
-    with_registry(|registry| registry.confirm_nonvolatile_page(handle, proof, expected_page_bytes))
+    with_registry(|registry| registry.confirm_nonvolatile_page(handle, proof, expected_page_bytes, expected_session_epoch))
 }
 
 #[cfg(test)]
