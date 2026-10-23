@@ -6,7 +6,7 @@ use jni::sys::{JNI_FALSE, JNI_TRUE, jboolean, jint, jlong};
 
 use crate::engine_guarded_burn::EngineGuardedPageBurnError;
 use crate::guarded_burn_plan_store::{
-    GuardedBurnPlanStoreError, active_guarded_burn_plan_count, close_guarded_burn_plan,
+    GuardedBurnPlanStoreError, GuardedBurnStage, active_guarded_burn_plan_count, close_guarded_burn_plan,
     create_selected_engine_guarded_burn_plan, guarded_burn_plan_is_alive,
     guarded_burn_plan_summary, stage_guarded_burn_plan, verify_guarded_burn_ack,
     verify_guarded_burn_crc,
@@ -38,6 +38,7 @@ const BURN_ACK_FAILURE: jint = -19;
 const BURN_CRC_FAILURE: jint = -20;
 const BURN_INVALID_ARGUMENT: jint = -21;
 const BURN_REGISTRY_FAILURE: jint = -22;
+const BURN_INVALID_PROOF_STAGE: jint = -23;
 const BURN_PANIC: jint = -255;
 
 const STAGE_BURN: jint = 0;
@@ -105,6 +106,7 @@ fn map_transport_error(error: GuardedPageBurnTransportError) -> jint {
 fn map_store_error(error: GuardedBurnPlanStoreError) -> jint {
     match error {
         GuardedBurnPlanStoreError::InvalidHandle => BURN_INVALID_HANDLE,
+        GuardedBurnPlanStoreError::InvalidProofStage => BURN_INVALID_PROOF_STAGE,
         GuardedBurnPlanStoreError::Authority(error) => map_authority_error(error),
         GuardedBurnPlanStoreError::Transport(error) => map_transport_error(error),
     }
@@ -312,6 +314,7 @@ pub extern "system" fn Java_com_epicefi_epichub_engine_NativeGuardedBurnBridge_f
             registry_handle,
             &signature,
             signature_limit,
+            if stage == STAGE_BURN { GuardedBurnStage::Burn } else { GuardedBurnStage::Crc },
         ) {
             Ok(value) => value,
             Err(error) => return i64::from(map_store_error(error)),
