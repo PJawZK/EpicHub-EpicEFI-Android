@@ -1,6 +1,5 @@
 pub mod burn_envelope_plan;
 mod channel_store;
-pub mod live_channel_store;
 pub mod compiled_ecu_profile;
 pub mod compiled_profile_bundle;
 #[cfg(test)]
@@ -38,6 +37,7 @@ mod jni_readonly_tune_metadata;
 mod jni_runtime_identity;
 mod jni_tune_session;
 mod jni_tune_session_epoch;
+pub mod live_channel_store;
 pub mod live_tune_install;
 mod mega144h7_profile;
 pub mod ms_envelope_codec;
