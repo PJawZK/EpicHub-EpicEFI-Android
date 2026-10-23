@@ -1,5 +1,15 @@
 # EpicHub Current Handoff
 
+## Qualified Burn source-epoch safety checkpoint — 2026-10-23
+
+Foundation run [39912522960](https://github.com/PJawZK/EpicHub-EpicEFI-Android/actions/runs/39912522960) succeeded at commit `c7445fe4e5410a64fda704ec10023597edf86304`, and `main` was fast-forwarded to that exact SHA. The guarded native Burn plan now captures the engine tune-session epoch, rejects equal-byte source reinstallation before Burn or after Burn ACK, and requires the epoch again before recording page persistence evidence. Native regressions passed. No Burn UI or hardware testing was introduced.
+
+The immediately prior qualified checkpoint `24c0d6a` introduced separate native page-scoped nonvolatile Burn evidence, cleared upon source replacement and invalidated on later edits. Read-only production projection, explicit connection/session teardown authority, concurrency/interleaving audit, independent physical persistence checks, and final user Burn controls remain open. Prioritize these narrow safety boundaries before expanding the agreed generic ECU connection, live Dashboard and full tuning capabilities. EpicScope owns Analyzer functionality.
+
+This documentation update requires its own exact-head Foundation qualification.
+
+---
+
 ## Product focus update — 2026-10-23
 
 The user confirmed that **EpicHub's product focus is generic ECU connections, live gauges/Dashboard, and complete ECU tuning capabilities**. EpicScope is the mature Analyzer product; do not build a competing EpicHub Analyzer. Keep optional future integration open but do not make EpicScope an implementation prerequisite. Supporting logging/interoperability remains secondary to the core ECU experience.
