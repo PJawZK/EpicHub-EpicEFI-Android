@@ -1,5 +1,54 @@
 # EpicHub Current Handoff
 
+## Current continuation authority — 2026-10-23
+
+**Read this section first.** This section consolidates the October 23 continuation after the source audit and successive qualification checkpoints. The sections below are retained as **historical evidence**; older phrases such as "Latest qualified implementation — 2026-10-17", "next Burn proof-state gate" and "runtime compiler not implemented" are **not current instructions**. Verify branch heads, recent commits and Actions again before editing.
+
+**Branch state observed while authoring:** `main` = `0918702a5378cda977118d8d06f0ac9a92d79fe8`, last production/docs qualified by Foundation [39931896516](https://github.com/PJawZK/EpicHub-EpicEFI-Android/actions/runs/39931896516). `current-work` = `0918702a5378cda977118d8d06f0ac9a92d79fe8` before this documentation commit, with the separate new native `live_channel_store.rs` work under exact-head Foundation [39934286409](https://github.com/PJawZK/EpicHub-EpicEFI-Android/actions/runs/39934286409) **in progress at the time of observation**. The latter is **NOT yet qualified merely because it is committed**. The actual head/run may advance; query GitHub before making claims. This handoff update is documentation-only and itself needs successful Foundation at its **new exact SHA** before any `main` promotion. Do not rewrite, bypass or silently cancel concurrent qualification work.
+
+### Product decision and priorities
+
+**EpicHub = Connect · Monitor · Tune**: reliable definition-driven connections to different ECUs, live gauges/Dashboard, and complete ECU tuning (not only tables). No hardcoded Mega144H7-only product architecture. TunerStudio is a *behavioral and workflow reference*, not a source to copy. The accepted EpicEFI Table Interaction Lab is the existing table interaction reference; preserve its mature 2D/3D work. **EpicScope owns Analyzer / VE analysis**, and its implementation is much more mature; do not invest in a duplicate EpicHub Analyzer. Optional future integration through compatible channels, tune/source fingerprints and exports is welcome, but is **not** a blocking task.
+
+Use [Connection, Dashboard and Full-Tuning Roadmap](architecture/CONNECTION_DASHBOARD_TUNING_ROADMAP_2026-10-23.md) for product breadth, but interpret its earlier Burn and runtime status through this newer handoff. Never confuse source-present, native-test-qualified, Android-CI-qualified, ECU-hardware-qualified, and product-complete.
+
+### Completed and CI-qualified foundation since the earlier October handoff
+
+| Milestone | Qualified commit / Foundation run | What that qualifies — and what it does not |
+| --- | --- | --- |
+| Native page-scoped nonvolatile Burn evidence | `24c0d6a` / [39909934322](https://github.com/PJawZK/EpicHub-EpicEFI-Android/actions/runs/39909934322) | Burn-ACK-plus-post-Burn-CRC evidence, not independent flash power-cycle proof |
+| Epoch-bound guarded Burn handles | `c7445fe` / [39912522960](https://github.com/PJawZK/EpicHub-EpicEFI-Android/actions/runs/39912522960) | Equal-byte source reinstallation cannot authorize an old planned Burn |
+| Read-only persistence state projection | `84b77de` / [39914326976](https://github.com/PJawZK/EpicHub-EpicEFI-Android/actions/runs/39914326976) | Native/JNI/Kotlin Unknown, PostBurnCrcVerified and StaleEvidence; not connection-owned UI authority |
+| Bounded definition-neutral typed runtime decoder | `95b4055` / [39918299554](https://github.com/PJawZK/EpicHub-EpicEFI-Android/actions/runs/39918299554) | Offset/type/endian/scale validation; more than the synthetic four-channel ABI |
+| Strict INI output scalar compiler | `2dc7abe` / [39921602400](https://github.com/PJawZK/EpicHub-EpicEFI-Android/actions/runs/39921602400) | Fixed-offset numeric `[OutputChannels]` subset; not all generated definitions |
+| INI bitfield support | `2b5d938` / [39924037372](https://github.com/PJawZK/EpicHub-EpicEFI-Android/actions/runs/39924037372) | Unsigned U08/U16/U32 inclusive bit ranges and firmware mini-fixture examples; not calculated expressions |
+| Read-only output request protocol plan | `61fd7d3` / [39927675749](https://github.com/PJawZK/EpicHub-EpicEFI-Android/actions/runs/39927675749) | Exact `O%2o%2c` offset/count framing and `msEnvelope_1.0` CRC/status/length validation for examined firmware; no USB polling |
+| Native session-fenced runtime acquisition skeleton | `dc51b71` / [39930630762](https://github.com/PJawZK/EpicHub-EpicEFI-Android/actions/runs/39930630762) | One in-flight full-frame request, token/timeouts/fail-closed state and native tests; no live owner/JNI/consumer hookup |
+| Handoff for native acquisition | `b2dabdd` / [39931896516](https://github.com/PJawZK/EpicHub-EpicEFI-Android/actions/runs/39931896516) | Documentation-only, qualified and promoted |
+
+**Currently unqualified work at the observed `current-work` head:** `rust/engine/src/live_channel_store.rs` and its `lib.rs` export (latest observed `0918702`). This adds an isolated bounded live batch store with session, monotonic sequence/time, freshness and disconnect/expiry checks. Treat tests and implementation as **pending** until its exact-head Foundation passes and `main` is advanced deliberately. It remains separate from `ChannelStore`, which still represents synthetic Dashboard data.
+
+### Firmware and definition evidence
+
+Source audit was pinned to `PJawZK/epicefi_fw_jzfork` (`master` during this work): `firmware/console/binary/tunerstudio.cpp`, `tunerstudio_commands.cpp`, `output_channels.txt`, `firmware/tunerstudio/tunerstudio.template_zh.ini`, `readme.md` and `firmware/tools/ts_ini_testdata/mini.ini`. The examined EpicEFI CRC envelope uses a definition-declared `O%2o%2c` command, 16-bit offset/count and exactly bounded output bytes. The firmware mini-INI is a **test fixture**, not a fully generated Mega144H7 INI. No fully generated, firmware-SHA/signature-pinned Mega144H7 and uaEFI INI corpus was available as tracked files during the audit. Generate the real outputs using the firmware's documented `ConfigDefinition.jar` plus board-specific source; record provenance and classify all forms including scalars, bits, calculations, arrays, conditionals and command metadata. The exact command/envelope assumptions are **per verified ECU definition**, not universal for every ECU.
+
+### Next work in dependency order — close each gate before the next
+
+1. **Qualify the in-flight live batch-store change.** Check `current-work`, `main`, exact Foundation run and source-diff status. Fix any real failures; promote only an exact passing source SHA. Preserve history and never label the work green prematurely.
+2. **Close runtime authority binding.** Bind verified active connection identity, signature, firmware/profile generation, definition digest, compiled channel catalog, output-read plan and unique connection/session epoch atomically. Enforce disconnect, permission revocation, firmware/profile switch, stale token and retry semantics. Do not allow a caller-chosen numeric token alone to stand in for device identity.
+3. **Finish bounded acquisition/publishing contract.** One full-block read is already modeled; introduce rigorously sequenced chunk assembly only if output size requires it. All chunks must match range, response CRC/status, token, epoch and definition. Publish whole-frame batches with timestamps, validity and generation; keep history visibly non-live after timeout or disconnect. No leaking synthetic samples into live channels.
+4. **Expose a guarded batched JNI/Kotlin read model and integrate under the existing `AndroidUsbLiveConnectionSessionOwner` and `EngineAuthoritySerialization`.** No second USB owner, no unauthorized concurrent stream with tune load, RAM Write or Burn, and no unbounded allocations or per-channel JNI calls. Exercise transport fake/offline replay and interleaving tests before hardware.
+5. **Make Dashboard and Tuner consume one real channel source.** Replace synthetic data *only after* valid live session selection; add stable names/units, unknown/stale/fault display, actual gauges, configurable persisted layouts and phone/tablet behavior. Finish the definition-driven scalar/enum/bitfield/curve/dialog tuning controls and their guards as separate acceptance gates; keep the mature table editor.
+6. **Physical qualification remains last.** Test real ECU identity, repeated polling, unplug/replug, performance and safety on the user's available Mega144H7 and Android devices once the theoretical/source and host-test gates are finished. Independently check nonvolatile persistence across power cycles before Burn UI. No firmware modification or ECU hardware work was done in this conversation.
+
+**Open safety boundary:** Burn UI is still intentionally disabled. Native post-Burn CRC proof is not physical flash durability; read-only persistence projection cannot be shown as current ECU authority until tied to the verified retained connection and tested across reconnects. Never conflate Write RAM, Burn, and project-save operations.
+
+### Continuation protocol
+
+Review this summary, the detailed historical sections below, the cited roadmap, and current GitHub heads/actions. Continue in **small, exact-head CI-verified commits** on `current-work`; fast-forward `main` only after the entire Foundation workflow passes at that exact head. Avoid restarting completed work or pursuing a competing Analyzer. Do not call a synthetic Dashboard, transport-free runtime decoder, fixture-only definition compiler or unexposed Burn flow user-complete.
+
+---
+
 ## Qualified native runtime acquisition session skeleton — 2026-10-23
 
 **Qualified production commit:** `dc51b71730440a0fb20940d6b7f09f0805a98dd6` on `main`, exact-head Foundation [39930630762](https://github.com/PJawZK/EpicHub-EpicEFI-Android/actions/runs/39930630762) **success**. `current-work` matched before promotion.
