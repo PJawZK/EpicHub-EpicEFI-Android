@@ -1,5 +1,15 @@
 # EpicHub Current Handoff
 
+## Qualified generic runtime scalar definition compiler — 2026-10-23
+
+Foundation [39921602400](https://github.com/PJawZK/EpicHub-EpicEFI-Android/actions/runs/39921602400) passed at exact commit `2dc7abe7a106b1a6df6e86acd489f3a94775c9e5`, promoted to `main`. The native `runtime_definition_catalog.rs` now compiles strictly supported fixed-offset numeric `scalar` declarations from *resolved* `[OutputChannels]` definitions into the previously qualified `CompiledRuntimeChannelCatalog`. Channel name, units and deterministic name-derived ID are retained. Parsing bounds, duplicate names, unsupported expression/type rejection, byte ordering and sample decode tests qualified.
+
+**Limitations / next boundary:** This is a strict subset compiler, not compatibility with all real/generated EpicEFI INIs. Real definitions may include bits, expressions, arrays, extra metadata, macros, alternate command/block layouts and runtime conditionals not yet accepted. A representative generated INI corpus must establish actual syntax and compatibility before live activation. No `ochGetCommand` request is issued by this compiler, no continuous USB output stream is connected, no JNI runtime batches are wired to the native channel store, and the Dashboard remains synthetic. Do not claim hardware qualification or complete definition support. Next: fixture-backed generated INI coverage with explicitly classified unsupported declarations, command/envelope acquisition contract, then guarded live-session runtime publisher and bounded batched snapshots.
+
+This documentation-only commit must qualify at its own exact Foundation SHA before promoting `main` further.
+
+---
+
 ## Qualified read-only nonvolatile projection — 2026-10-23
 
 The native page-scoped Burn evidence projection is qualified at `84b77de1788bd932875bc116115af7844361f498` by Foundation [39914326976](https://github.com/PJawZK/EpicHub-EpicEFI-Android/actions/runs/39914326976), and this exact SHA was promoted to `main`.
