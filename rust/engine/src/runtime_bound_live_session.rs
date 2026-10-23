@@ -102,7 +102,7 @@ impl RuntimeBoundLiveSession {
         // exact-text revision; the two are not assumed interchangeable.
         let compiled = compile_runtime_output_channels(resolved_definition)
             .map_err(BoundRuntimeError::Definition)?;
-        let (command, envelope) = resolved_output_wire_contract(resolved_definition)?;
+        let (command, envelope) = resolved_output_wire_contract(resolved_definition, observed_signature)?;
         let plan = RuntimeOutputReadPlan::compile(&command, compiled.decoder.frame_length(), &envelope)
             .map_err(BoundRuntimeError::ReadPlan)?;
         let acquisition = RuntimeAcquisitionSession::new(epoch, compiled.decoder, plan)
@@ -244,10 +244,14 @@ impl RuntimeBoundLiveSession {
 
 /// Strictly require both declarations in the same resolved definition.
 /// Unsupported command templates are rejected by RuntimeOutputReadPlan.
-fn resolved_output_wire_contract(text: &str) -> Result<(String, String), BoundRuntimeError> {
+fn resolved_output_wire_contract(
+    text: &str,
+    observed_signature: &str,
+) -> Result<(String, String), BoundRuntimeError> {
     let mut section = "";
     let mut command: Option<String> = None;
     let mut envelope: Option<String> = None;
+    let mut definition_signature: Option<String> = None;
     for raw in text.lines() {
         let line = raw.split(';').next().unwrap_or("").trim();
         if line.starts_with('[') && line.ends_with(']') {
@@ -257,6 +261,15 @@ fn resolved_output_wire_contract(text: &str) -> Result<(String, String), BoundRu
         let Some((key, value)) = line.split_once('=') else { continue };
         let key = key.trim();
         let value = value.trim();
+        if section.eq_ignore_ascii_case("TunerStudio") && key == "signature" {
+            // Do not combine a verified profile with arbitrary channel bytes
+            // from a different resolved ECU definition.
+            if !value.starts_with('"') || !value.ends_with('"')
+                || definition_signature.replace(value.trim_matches('"').to_owned()).is_some()
+            {
+                return Err(BoundRuntimeError::DefinitionCommand);
+            }
+        }
         if section.eq_ignore_ascii_case("OutputChannels") && key == "ochGetCommand" {
             if command.replace(value.trim_matches('"').to_owned()).is_some() {
                 return Err(BoundRuntimeError::DefinitionCommand);
@@ -269,7 +282,11 @@ fn resolved_output_wire_contract(text: &str) -> Result<(String, String), BoundRu
         }
     }
     match (command, envelope) {
-        (Some(command), Some(envelope)) => Ok((command, envelope)),
+        (Some(command), Some(envelope))
+            if definition_signature.as_deref() == Some(observed_signature) =>
+        {
+            Ok((command, envelope))
+        },
         _ => Err(BoundRuntimeError::DefinitionCommand),
     }
 }
@@ -361,6 +378,10 @@ rpm = scalar, F32, 0, "RPM", 1, 0
         );
         assert_eq!(
             broker.bind("usb:test", "runtime.test.1", &Profile, &SOURCE.replace("messageEnvelopeFormat = msEnvelope_1.0", "")),
+            Err(BoundRuntimeError::DefinitionCommand)
+        );
+        assert_eq!(
+            broker.bind("usb:test", "runtime.test.1", &Profile, &SOURCE.replace("signature = \"runtime.test.1\"", "signature = \"runtime.test.2\"")),
             Err(BoundRuntimeError::DefinitionCommand)
         );
         assert_eq!(
