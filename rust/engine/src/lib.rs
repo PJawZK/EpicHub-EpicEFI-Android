@@ -1,5 +1,6 @@
 pub mod burn_envelope_plan;
 mod channel_store;
+pub mod live_channel_store;
 pub mod compiled_ecu_profile;
 pub mod compiled_profile_bundle;
 #[cfg(test)]
