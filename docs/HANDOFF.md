@@ -221,3 +221,51 @@ At the start of the next session:
 5. continue with the native guarded-Burn proof-state machine above.
 
 Do not recreate old phase branches, old RAM-write work, or the already-qualified Burn planner/envelope/opaque-wrapper/USB-routing layers.
+
+
+---
+
+# Consolidated project chronology from the long EpicHub development conversation (2026-10)
+
+This section preserves the development decisions and audit trail from the long conversation that led to the current Burn boundary. The qualified implementation and "Immediate next correctness boundary" sections above override older intermediate states below. Do not restart completed slices based on older chat messages.
+
+## Repository consolidation and qualification policy
+
+The repository formerly used dozens of stacked \`phase1/*\`, \`phase2/*\`, and research branches with draft PR checkpoints. The user approved consolidation after qualifying PR #81. The original guarded-source-reconciliation primitive initially failed rustfmt, then a concurrent test's assertion against a process-global guarded-batch count exposed nondeterministic test isolation. Both were corrected without expanding production write behavior. PR #81 reached exact green checkpoint \`8f7bd82dfaf967d7576b37482af5f9a4b3699fc7\` (Foundation \`38858098167\`).
+
+\`main\` was advanced to the qualified stacked lineage while preserving commit history, \`current-work\` was established as the only active development line, Foundation triggering was updated for the new branch, and stale overview documentation was corrected. The historical PR queue was closed (zero open at cleanup) and the user physically removed historical remote branch refs from a local clone, verifying that only \`main\` and \`current-work\` remained and matched \`d44bd6b121301bf25ce1afd2c1858c29d7f1722e\`. Do not recreate the stacked-PR branch forest.
+
+Repository rule: edit only \`current-work\`; require a completed green Foundation run for **the exact candidate SHA** (format, Clippy, Rust tests, Android JVM, builds, signatures/native libraries, artifacts); then advance \`main\` only to that qualified SHA. Intermediate failed/cancelled runs are not qualification. A handoff-only change also triggers qualification; avoid unnecessary self-referential documentation commits. Use the explicit branch-ref operation for promotion, not the file update endpoint (which formerly produced content-identical accidental commits).
+
+## Completed RAM-write architecture, in development order
+
+The Tuner is definition-driven rather than Mega144H7-hardcoded. The exact full runtime signature selects a coherent compiled definition/profile/protocol bundle; Rust owns semantic IDs, \`TuneSession\`, \`TuneDraft\`, page geometry, encoding, and write planning. Android is an authorized transport/UI executor, never a second source of raw write geometry.
+
+- Guarded RAM writing developed through retained \`TuneSourcePageImage\`, source-relative semantic edit intents, an opaque native batch store, exact-before precondition reads, framed writes with firmware ACK, mandatory exact readback, and contiguous verified-prefix reconciliation.
+- Engine-owned reconciliation atomically advances retained bytes without rewriting draft/history; the batch store clones the batch under its mutex and releases that mutex before entering engine/profile authority. The engine-owned slice qualified at \`97f7f2add2421e86d2ea3ef979e6af7b768e129c\`; opaque batch-store reconciliation at \`d44bd6b121301bf25ce1afd2c1858c29d7f1722e\`.
+- Dedicated JNI reconciliation and Kotlin verified batch executor propagate the exact verified contiguous prefix, preserve transport errors, and fail closed on reconciliation errors. Qualified at \`0fa9e3867a62492563c42b180a33bfe81e8fade7\` (Foundation \`38866632546\`).
+- Explicit native \`RamSourceProvenance\` separates verified source bytes, current draft revision, confirmed RAM revision, exact verified ranges and interrupted write evidence; partial verification is never presented as whole-draft synchronization. Qualified at \`65a588d2b48dfaba460ccacfbfdb75ce2209c4ff\` (Foundation \`38869610375\`).
+- \`EngineAuthoritySerialization\` closes the authorization-to-physical-USB race across JIT native authority, pre-read/write/readback and native reconciliation, with competing tune/profile/source mutations sharing the same gate. Qualified with handoff at \`a96f3fccff328661466553b954c0c33cc46f8801\` (Foundation \`38873022777\`).
+- Critical zero-prefix correction: even \`Interrupted(0, …)\` invokes native reconciliation with prefix zero; retained bytes remain unchanged while whole-draft RAM confirmation becomes unconfirmed. Qualified at \`2e024fa8c54ef3e730b99e8dbf84599093da9695\` (Foundation \`38875188598\`).
+- Native RAM-state classification/JNI snapshot supplies atomic app-facing evidence (not a generic \`isSynced\` Boolean), distinguishing live confirmed, current-draft confirmed, local draft ahead, partially verified, and interrupted/unconfirmed states. The snapshot is versioned and Kotlin rejects inconsistent/malformed data.
+- High-level current-draft write orchestration resolves identity/authority through the loaded live owner and retained authorized USB session; Compose never supplies a raw page or offset. A compact Tuner ECU RAM panel displays provenance and conditional volatile \`Write draft to RAM\` / retry / RAM-current states. No Burn is implied. The visible slice qualified at \`a5ea66476561390e6f70775449c28c013fbdf7ce\` (Foundation \`38895119391\`) with documentation at \`4c1c3794ee96d1e8899cad1569bb0ca9f7dba977\` (Foundation \`38896125204\`).
+
+Local Apply, volatile RAM write and nonvolatile Burn remain three distinct actions. Disconnection, source replacement or stale profile must not resurrect live authorization; fresh live load is required. Offline/imported source must not be falsely presented as current ECU RAM. Subsequent qualified work cleaned up \`TunerScreen\` source-aware presentation, multi-table behavior, and session-lifecycle coherence; consult current code and the qualified Burn sections above rather than revisiting obsolete offline-only UI assumptions.
+
+## Burn research, safeguards and completed boundaries
+
+The user approved progressing from RAM-write completeness into independently guarded Burn/persistence, but explicitly **not** exposing an unsafe Burn button before proof and provenance are established. Firmware investigation confirmed:
+
+- EpicEFI uses the definition-owned Burn command (\`B\`, \`0x42\` for the examined implementation; profile/page variants must remain definition-driven), carried in the MegaSquirt CRC-framed envelope.
+- Burn acknowledgement has success status \`4\` (\`TS_RESPONSE_BURN_OK\`), not normal success \`0\`, and must have the expected empty payload. The firmware invokes \`requestBurn()\` before responding.
+- Burn ACK is **not proof of persistent storage**. Require the exact definition-owned full-page post-Burn CRC read and comparison with the guarded retained source.
+- Eligibility requires a verified live-controller source, exact selected generation/session/source identity and the current draft confirmed in ECU RAM; page-scoped capability, multi-page limits and stale authority fail closed.
+- No arbitrary Burn geometry, firmware commands or response interpretation should become Android/UI authority.
+
+Checkpoint \`e3fd57ad…\` qualified native guarded Burn eligibility; \`5b585b6096c862d704d90fec61c7e6bdd8edb10e\` (Foundation \`38949529443\`) qualified firmware-backed Burn request/ACK framing and verification. The guarded transport stage encountered only formatter failure in its first run; the later completed and qualified steps are **not** limited to that intermediate checkpoint: opaque Burn handle/store + JNI/Android owner qualified at \`d894c50b683e814723ca58faa13a30e64265e7e5\` (Foundation \`38954935032\`); serialized Burn then CRC USB execution qualified at \`c8c4a8bf52b0734aa09875b2eb48fc434b9bed96\` (Foundation \`38981181683\`); retained live-session routing qualified at \`9c5e332b737085e93ab84531199909b9d5b5c9a6\` (Foundation \`38982149150\`).
+
+**Do not interpret prior interrupted chat responses or their last pending CI run as the current repository state.** The current implementation already reaches the retained physical Burn transport channel. The **next correctness slice** remains a native opaque Burn handle proof-state machine enforcing \`Planned → BurnAckVerified → PostBurnCrcVerified\` in the native store, including out-of-order/repeat rejection and stale/closed/race tests. After it qualifies, add distinct page-scoped nonvolatile persistence provenance and read-only projection. Only then design the user-facing Burn workflow; do not equate a successful physical Burn command, or an arbitrary CRC response, with persisted proof.
+
+## Branch and CI state when this historical appendix was added (2026-10-23)
+
+Before the appendix commit, \`main\` was \`9c5e332b737085e93ab84531199909b9d5b5c9a6\` (Foundation \`38982149150\`, success), while \`current-work\` was one handoff-only commit ahead at \`202c4e72f38ef21347c24d9b72774ba272f314a0\` (Foundation \`38982939249\`, success). This appendix itself is another documentation-only commit and requires its own exact-head Foundation qualification before promoting \`main\`. Do not describe the appendix SHA as qualified merely because its parent is green.
