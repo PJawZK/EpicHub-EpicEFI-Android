@@ -175,7 +175,9 @@ impl CompiledRuntimeChannelCatalog {
                         }
                         RuntimeValueType::BitsU32 { first, last } => {
                             let raw = match channel.endian {
-                                RuntimeEndian::Little => u32::from_le_bytes(bytes.try_into().unwrap()),
+                                RuntimeEndian::Little => {
+                                    u32::from_le_bytes(bytes.try_into().unwrap())
+                                }
                                 RuntimeEndian::Big => u32::from_be_bytes(bytes.try_into().unwrap()),
                             };
                             extract_unsigned_bits(raw, first, last)
@@ -204,7 +206,11 @@ impl CompiledRuntimeChannelCatalog {
 
 fn extract_unsigned_bits(raw: u32, first: u8, last: u8) -> f64 {
     let width = u32::from(last - first) + 1;
-    let mask = if width == 32 { u32::MAX } else { (1u32 << width) - 1 };
+    let mask = if width == 32 {
+        u32::MAX
+    } else {
+        (1u32 << width) - 1
+    };
     f64::from((raw >> first) & mask)
 }
 
@@ -317,8 +323,11 @@ mod tests {
                 descriptor(2, 1, RuntimeValueType::BitsU16 { first: 0, last: 15 }),
                 big,
             ],
-        ).unwrap();
-        let samples = catalog.decode(&[0b0000_1010, 0x34, 0x12, 0, 0, 1, 0]).unwrap();
+        )
+        .unwrap();
+        let samples = catalog
+            .decode(&[0b0000_1010, 0x34, 0x12, 0, 0, 1, 0])
+            .unwrap();
         assert_eq!(samples[0].value, 5.0);
         assert_eq!(samples[1].value, 0x1234 as f32);
         assert_eq!(samples[2].value, 256.0);
