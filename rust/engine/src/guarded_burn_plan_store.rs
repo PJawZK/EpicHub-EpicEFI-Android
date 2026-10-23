@@ -276,7 +276,7 @@ mod tests {
     use super::*;
     use crate::burn_envelope_plan::BURN_OK_STATUS;
     use crate::compiled_profile_bundle::OwnedDefinitionBundleImport;
-    use crate::engine::{close_engine, create_engine, with_tune_session};
+    use crate::engine::{close_engine, create_engine, nonvolatile_page_proof, with_tune_session};
     use crate::live_tune_install::install_selected_live_pages;
     use crate::ms_envelope_codec::crc32_ieee;
     use crate::profile_import::OwnedSemanticTableBindingSpec;
@@ -658,4 +658,130 @@ table = valuesTable, valuesMap, "Values", 1
         close_profile_registry(registry);
         close_engine(engine);
     }
+    #[test]
+    fn persistence_proof_requires_complete_ordered_crc_and_survives_handle_close() {
+        let (engine, registry) = live_engine();
+        assert_eq!(nonvolatile_page_proof(engine, 1), Some(None));
+        let handle = create_selected_engine_guarded_burn_plan(
+            engine,
+            registry,
+            SIGNATURE.as_bytes(),
+            256,
+            1,
+        )
+        .unwrap();
+        let staged = stage_guarded_burn_plan(
+            handle,
+            engine,
+            registry,
+            SIGNATURE.as_bytes(),
+            256,
+            GuardedBurnStage::Burn,
+        )
+        .unwrap();
+        assert_eq!(nonvolatile_page_proof(engine, 1), Some(None));
+        verify_guarded_burn_ack(
+            handle,
+            engine,
+            registry,
+            SIGNATURE.as_bytes(),
+            256,
+            &response_frame(BURN_OK_STATUS, &[]),
+        )
+        .unwrap();
+        assert_eq!(nonvolatile_page_proof(engine, 1), Some(None));
+        stage_guarded_burn_plan(
+            handle,
+            engine,
+            registry,
+            SIGNATURE.as_bytes(),
+            256,
+            GuardedBurnStage::Crc,
+        )
+        .unwrap();
+        assert_eq!(nonvolatile_page_proof(engine, 1), Some(None));
+        verify_guarded_burn_crc(
+            handle,
+            engine,
+            registry,
+            SIGNATURE.as_bytes(),
+            256,
+            &response_frame(0, &staged.expected_page_crc32.to_be_bytes()),
+        )
+        .unwrap();
+        let proof = nonvolatile_page_proof(engine, 1).unwrap().unwrap();
+        assert_eq!(proof.profile_generation, 113);
+        assert_eq!(proof.draft_revision, 0);
+        assert_eq!(proof.page, 1);
+        assert_eq!(proof.expected_page_crc32, staged.expected_page_crc32);
+        assert_eq!(proof.signature_crc32, crc32_ieee(SIGNATURE.as_bytes()));
+        assert_eq!(nonvolatile_page_proof(engine, 2), Some(None));
+        close_guarded_burn_plan(handle);
+        assert_eq!(nonvolatile_page_proof(engine, 1), Some(Some(proof)));
+
+        with_tune_session(engine, |session| {
+            session
+                .apply_rectangle_numeric(42, 0, 0, 0, 0, 0, "101", 0)
+                .unwrap();
+        })
+        .unwrap();
+        assert_eq!(nonvolatile_page_proof(engine, 1), Some(None));
+        close_profile_registry(registry);
+        close_engine(engine);
+        assert_eq!(nonvolatile_page_proof(engine, 1), None);
+    }
+
+    #[test]
+    fn rejected_crc_does_not_create_persistence_proof() {
+        let (engine, registry) = live_engine();
+        let handle = create_selected_engine_guarded_burn_plan(
+            engine,
+            registry,
+            SIGNATURE.as_bytes(),
+            256,
+            1,
+        )
+        .unwrap();
+        let staged = stage_guarded_burn_plan(
+            handle,
+            engine,
+            registry,
+            SIGNATURE.as_bytes(),
+            256,
+            GuardedBurnStage::Burn,
+        )
+        .unwrap();
+        verify_guarded_burn_ack(
+            handle,
+            engine,
+            registry,
+            SIGNATURE.as_bytes(),
+            256,
+            &response_frame(BURN_OK_STATUS, &[]),
+        )
+        .unwrap();
+        stage_guarded_burn_plan(
+            handle,
+            engine,
+            registry,
+            SIGNATURE.as_bytes(),
+            256,
+            GuardedBurnStage::Crc,
+        )
+        .unwrap();
+        assert!(verify_guarded_burn_crc(
+            handle,
+            engine,
+            registry,
+            SIGNATURE.as_bytes(),
+            256,
+            &response_frame(0, &(staged.expected_page_crc32 ^ 1).to_be_bytes()),
+        )
+        .is_err());
+        assert_eq!(nonvolatile_page_proof(engine, 1), Some(None));
+        close_guarded_burn_plan(handle);
+        close_profile_registry(registry);
+        close_engine(engine);
+    }
+
 }
