@@ -104,7 +104,10 @@ impl CompiledRuntimeChannelCatalog {
                 return Err(RuntimeDecodeError::OffsetOutsideFrame(channel.id));
             }
         }
-        Ok(Self { frame_length, channels })
+        Ok(Self {
+            frame_length,
+            channels,
+        })
     }
 
     pub fn frame_length(&self) -> usize {
@@ -154,7 +157,11 @@ impl CompiledRuntimeChannelCatalog {
                     let converted = value as f32;
                     DecodedRuntimeSample {
                         id: channel.id,
-                        value: if converted.is_finite() { converted } else { 0.0 },
+                        value: if converted.is_finite() {
+                            converted
+                        } else {
+                            0.0
+                        },
                         valid: converted.is_finite(),
                     }
                 })
@@ -167,10 +174,18 @@ impl CompiledRuntimeChannelCatalog {
 mod tests {
     use super::*;
 
-    fn descriptor(id: u32, offset: usize, value_type: RuntimeValueType) -> RuntimeChannelDescriptor {
+    fn descriptor(
+        id: u32,
+        offset: usize,
+        value_type: RuntimeValueType,
+    ) -> RuntimeChannelDescriptor {
         RuntimeChannelDescriptor {
-            id, offset, value_type, endian: RuntimeEndian::Little,
-            scale: 1.0, translate: 0.0,
+            id,
+            offset,
+            value_type,
+            endian: RuntimeEndian::Little,
+            scale: 1.0,
+            translate: 0.0,
         }
     }
 
@@ -182,28 +197,69 @@ mod tests {
         let mut big = descriptor(3, 4, RuntimeValueType::U32);
         big.endian = RuntimeEndian::Big;
         let catalog = CompiledRuntimeChannelCatalog::compile(
-            12, vec![descriptor(1, 0, RuntimeValueType::U16), signed, big, descriptor(4, 8, RuntimeValueType::F32)],
-        ).unwrap();
+            12,
+            vec![
+                descriptor(1, 0, RuntimeValueType::U16),
+                signed,
+                big,
+                descriptor(4, 8, RuntimeValueType::F32),
+            ],
+        )
+        .unwrap();
         let frame = [0xE8, 0x03, 0xFC, 0xFF, 0, 0, 1, 0, 0, 0, 0x20, 0x41];
         let result = catalog.decode(&frame).unwrap();
-        assert_eq!(result.iter().map(|sample| sample.value).collect::<Vec<_>>(), vec![1000.0, 1.0, 256.0, 10.0]);
+        assert_eq!(
+            result.iter().map(|sample| sample.value).collect::<Vec<_>>(),
+            vec![1000.0, 1.0, 256.0, 10.0]
+        );
         assert!(result.iter().all(|sample| sample.valid));
     }
 
     #[test]
     fn rejects_duplicate_ids_bad_offsets_and_invalid_scaling() {
-        assert_eq!(CompiledRuntimeChannelCatalog::compile(2, vec![]).unwrap_err(), RuntimeDecodeError::EmptyCatalog);
-        assert_eq!(CompiledRuntimeChannelCatalog::compile(0, vec![descriptor(1, 0, RuntimeValueType::U8)]).unwrap_err(), RuntimeDecodeError::EmptyFrame);
-        assert_eq!(CompiledRuntimeChannelCatalog::compile(2, vec![descriptor(1, 0, RuntimeValueType::U8), descriptor(1, 1, RuntimeValueType::U8)]).unwrap_err(), RuntimeDecodeError::DuplicateId(1));
-        assert_eq!(CompiledRuntimeChannelCatalog::compile(2, vec![descriptor(1, usize::MAX, RuntimeValueType::U32)]).unwrap_err(), RuntimeDecodeError::OffsetOutsideFrame(1));
+        assert_eq!(
+            CompiledRuntimeChannelCatalog::compile(2, vec![]).unwrap_err(),
+            RuntimeDecodeError::EmptyCatalog
+        );
+        assert_eq!(
+            CompiledRuntimeChannelCatalog::compile(0, vec![descriptor(1, 0, RuntimeValueType::U8)])
+                .unwrap_err(),
+            RuntimeDecodeError::EmptyFrame
+        );
+        assert_eq!(
+            CompiledRuntimeChannelCatalog::compile(
+                2,
+                vec![
+                    descriptor(1, 0, RuntimeValueType::U8),
+                    descriptor(1, 1, RuntimeValueType::U8)
+                ]
+            )
+            .unwrap_err(),
+            RuntimeDecodeError::DuplicateId(1)
+        );
+        assert_eq!(
+            CompiledRuntimeChannelCatalog::compile(
+                2,
+                vec![descriptor(1, usize::MAX, RuntimeValueType::U32)]
+            )
+            .unwrap_err(),
+            RuntimeDecodeError::OffsetOutsideFrame(1)
+        );
         let mut invalid = descriptor(1, 0, RuntimeValueType::U8);
         invalid.scale = f64::NAN;
-        assert_eq!(CompiledRuntimeChannelCatalog::compile(2, vec![invalid]).unwrap_err(), RuntimeDecodeError::InvalidScaling(1));
+        assert_eq!(
+            CompiledRuntimeChannelCatalog::compile(2, vec![invalid]).unwrap_err(),
+            RuntimeDecodeError::InvalidScaling(1)
+        );
     }
 
     #[test]
     fn bad_frame_does_not_partially_reuse_samples_and_nan_is_invalid() {
-        let catalog = CompiledRuntimeChannelCatalog::compile(4, vec![descriptor(77, 0, RuntimeValueType::F32)]).unwrap();
+        let catalog = CompiledRuntimeChannelCatalog::compile(
+            4,
+            vec![descriptor(77, 0, RuntimeValueType::F32)],
+        )
+        .unwrap();
         assert!(catalog.decode(&[0, 0]).is_none());
         assert!(catalog.decode(&[0, 0, 0, 0, 0]).is_none());
         let result = catalog.decode(&f32::NAN.to_le_bytes()).unwrap();
@@ -214,7 +270,9 @@ mod tests {
 
     #[test]
     fn supports_more_than_legacy_four_channels_without_truncation() {
-        let channels = (1..=32).map(|id| descriptor(id, (id - 1) as usize, RuntimeValueType::U8)).collect();
+        let channels = (1..=32)
+            .map(|id| descriptor(id, (id - 1) as usize, RuntimeValueType::U8))
+            .collect();
         let catalog = CompiledRuntimeChannelCatalog::compile(32, channels).unwrap();
         let result = catalog.decode(&[12; 32]).unwrap();
         assert_eq!(result.len(), 32);
