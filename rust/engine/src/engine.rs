@@ -435,6 +435,18 @@ mod tests {
     }
 
     #[test]
+    fn nonvolatile_projection_defaults_unknown_and_rejects_invalid_page() {
+        let mut registry = EngineRegistry::new();
+        let handle = registry.create();
+        let unknown = registry.nonvolatile_page_snapshot(handle, 1, b"source").unwrap();
+        assert_eq!(&unknown[0..4], b"NVP1");
+        assert_eq!(unknown[4], 0);
+        assert_eq!(unknown[5], 1);
+        assert_eq!(registry.nonvolatile_page_snapshot(handle, 0, b"source"), Some(unknown).filter(|_| false));
+        assert_eq!(registry.nonvolatile_page_snapshot(-1, 1, b"source"), None);
+    }
+
+    #[test]
     fn local_registry_create_close_is_idempotent_and_bounded() {
         let mut registry = EngineRegistry::new();
         let handle = registry.create();
