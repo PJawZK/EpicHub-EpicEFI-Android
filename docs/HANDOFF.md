@@ -1,5 +1,17 @@
 # EpicHub Current Handoff
 
+## Qualified session-fenced live channel store — 2026-10-23
+
+**Qualified production SHA:** `0918702a5378cda977118d8d06f0ac9a92d79fe8`; exact-head Foundation [39934286409](https://github.com/PJawZK/EpicHub-EpicEFI-Android/actions/runs/39934286409) **success**; promoted to `main`.
+
+Added `rust/engine/src/live_channel_store.rs` as a bounded, real-data-only batch store separate from the pre-existing synthetic `ChannelStore` and ABI-v1 4-slot synthetic `RuntimeSnapshot`. `LiveChannelStore` accepts only nonzero session IDs, Fresh full-batch `RuntimePublishedSnapshot` inputs from the earlier acquisition state machine, nonzero unique channel IDs, finite values, at most `MAX_RUNTIME_CHANNELS`, strictly increasing sequence numbers and nonregressing monotonic millisecond timestamps. Snapshot publication replaces the entire accepted batch atomically; rejected requests leave the prior batch unmodified. It tracks current batch session, sequence, receive time and per-channel validity. `expire`, `mark_stale`, `mark_invalid` and `disconnect` remove Fresh authority without hiding prior numbers. Post-disconnect publication is rejected. Tests verify session/sequence/time rejection, timeout and disconnect invalidation, duplicate channel and non-finite value rejection. Rust + Android Foundation passed. No Android JNI, USB polling, synthetic display source change or physical ECU operations were made.
+
+**Open integration boundary:** Bind the active, exact-selected ECU profile generation, signature, resolved definition fingerprint, `CompiledRuntimeChannelCatalog`, `RuntimeOutputReadPlan`, acquisition session and live batch store to the existing serialized `AndroidUsbLiveConnectionSessionOwner`. A caller-provided integer `session` alone is **not** proof of a live ECU identity. The Android owner must gate all calls and invalidate the native session/store synchronously on disconnect, rejected reconnect, owner close, timeout or USB failure; no live Dashboard reads should bypass these fences. Design JNI batched projections with explicit live source marker, catalog generation, validity, sample age and bounded channel count. Preserve the current synthetic ABI until a separately qualified versioned live ABI exists. Hardware-free fake-port tests should verify reconnect, incomplete frames, timeout, invalid CRC, stale callbacks and stale display prevention; generated real ECU INI compatibility is still outstanding. Physical ECU validation stays last.
+
+This documentation-only checkpoint requires its own exact-head Foundation qualification.
+
+---
+
 ## Current continuation authority — 2026-10-23
 
 **Read this section first.** This section consolidates the October 23 continuation after the source audit and successive qualification checkpoints. The sections below are retained as **historical evidence**; older phrases such as "Latest qualified implementation — 2026-10-17", "next Burn proof-state gate" and "runtime compiler not implemented" are **not current instructions**. Verify branch heads, recent commits and Actions again before editing.
