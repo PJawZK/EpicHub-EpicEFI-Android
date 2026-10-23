@@ -245,17 +245,21 @@ impl EngineRegistry {
         bytes[24..32].copy_from_slice(&engine.tune_session_epoch.to_le_bytes());
         bytes[32..36].copy_from_slice(&u32::try_from(page).ok()?.to_le_bytes());
         if let Some(proof) = engine.nonvolatile_proofs.get(&page) {
-            let source_crc = engine.tune_source_image.as_ref()
+            let source_crc = engine
+                .tune_source_image
+                .as_ref()
                 .and_then(|source| page.checked_sub(1).and_then(|index| source.page(index)))
                 .map(crate::ms_envelope_codec::crc32_ieee);
             bytes[36..40].copy_from_slice(&proof.expected_page_crc32.to_le_bytes());
             bytes[40..44].copy_from_slice(&proof.signature_crc32.to_le_bytes());
             let valid = engine.tune_source_image.is_some()
-                && engine.tune_session.baseline().origin == crate::tuning::TuneSnapshotOrigin::LiveController
+                && engine.tune_session.baseline().origin
+                    == crate::tuning::TuneSnapshotOrigin::LiveController
                 && proof.profile_generation == generation
                 && proof.draft_revision == revision
                 && source_crc == Some(proof.expected_page_crc32)
-                && proof.signature_crc32 == crate::ms_envelope_codec::crc32_ieee(signature_response);
+                && proof.signature_crc32
+                    == crate::ms_envelope_codec::crc32_ieee(signature_response);
             bytes[4] = if valid { 1 } else { 2 };
         }
         Some(bytes)
@@ -441,11 +445,16 @@ mod tests {
     fn nonvolatile_projection_defaults_unknown_and_rejects_invalid_page() {
         let mut registry = EngineRegistry::new();
         let handle = registry.create();
-        let unknown = registry.nonvolatile_page_snapshot(handle, 1, b"source").unwrap();
+        let unknown = registry
+            .nonvolatile_page_snapshot(handle, 1, b"source")
+            .unwrap();
         assert_eq!(&unknown[0..4], b"NVP1");
         assert_eq!(unknown[4], 0);
         assert_eq!(unknown[5], 1);
-        assert_eq!(registry.nonvolatile_page_snapshot(handle, 0, b"source"), None);
+        assert_eq!(
+            registry.nonvolatile_page_snapshot(handle, 0, b"source"),
+            None
+        );
         assert_eq!(registry.nonvolatile_page_snapshot(-1, 1, b"source"), None);
     }
 
