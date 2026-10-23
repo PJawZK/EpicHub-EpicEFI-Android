@@ -1,5 +1,16 @@
 # EpicHub Current Handoff
 
+## Product focus update — 2026-10-23
+
+The user confirmed that **EpicHub's product focus is generic ECU connections, live gauges/Dashboard, and complete ECU tuning capabilities**. EpicScope is the mature Analyzer product; do not build a competing EpicHub Analyzer. Keep optional future integration open but do not make EpicScope an implementation prerequisite. Supporting logging/interoperability remains secondary to the core ECU experience.
+
+The source-linked feature inventory, identified gaps, and dependency-ordered roadmap are in [`docs/architecture/CONNECTION_DASHBOARD_TUNING_ROADMAP_2026-10-23.md`](architecture/CONNECTION_DASHBOARD_TUNING_ROADMAP_2026-10-23.md). This product-direction update **does not supersede the immediate native guarded-Burn proof-state correctness gate below**. First qualify that gate, then prioritize sustained definition-driven live runtime acquisition and gauges in parallel with full non-table tuning breadth. Treat code presence, automated CI qualification, physical hardware qualification, and user-facing completeness as separate statuses.
+
+This is a documentation-only update; Foundation must qualify its exact resulting `current-work` SHA before `main` advances.
+
+---
+
+
 ## Continuation instruction
 
 Read this file first, then verify the exact `main`, `current-work`, and Foundation state before changing anything.
