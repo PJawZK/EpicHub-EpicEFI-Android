@@ -776,6 +776,164 @@ table = registryBundleTable, registryBundleMap, "Registry Bundle Table", 1
         assert!(!store.register_recognized_signature(999, "rusEFI known.600"));
     }
 
+    fn runtime_bundle_import() -> OwnedDefinitionBundleImport {
+        let mut import = bundle_import();
+        import.includes.insert(
+            "bundle.inc".to_string(),
+            format!(
+                "{BUNDLE_INCLUDE}\n[OutputChannels]\nochGetCommand = \"O%2o%2c\"\nochBlockSize = 4\nrpm = scalar, F32, 0, \"RPM\", 1, 0\n"
+            ),
+        );
+        import
+    }
+
+    fn runtime_response(value: f32) -> Vec<u8> {
+        let mut body = vec![0];
+        body.extend_from_slice(&value.to_le_bytes());
+        let mut frame = Vec::new();
+        frame.extend_from_slice(&(body.len() as u16).to_be_bytes());
+        frame.extend_from_slice(&body);
+        frame.extend_from_slice(&crate::ms_envelope_codec::crc32_ieee(&body).to_be_bytes());
+        frame
+    }
+
+    const RUNTIME_SIGNATURE: &[u8] = b"rusEFI registry.bundle.800";
+
+    #[test]
+    fn exact_registry_owned_bundle_binds_decoder_command_and_live_batch() {
+        let mut store = ProfileRegistryStore::new();
+        let handle = store.create();
+        store
+            .register_definition_bundle(handle, &runtime_bundle_import())
+            .unwrap();
+        let lease = store
+            .bind_runtime_candidate(handle, "usb:one", RUNTIME_SIGNATURE, 256, 800)
+            .unwrap();
+        assert_eq!(lease.signature(), "rusEFI registry.bundle.800");
+        assert_eq!(lease.profile_generation(), 800);
+        assert_eq!(lease.profile_fingerprint(), "registry-bundle-fingerprint");
+        let (token, request) = store.begin_runtime_read(handle, &lease, 10, 40).unwrap();
+        assert_eq!(&request[2..7], &[b'O', 0, 0, 4, 0]);
+        let batch = store
+            .complete_runtime_read(handle, &lease, token, 11, &runtime_response(920.0))
+            .unwrap();
+        assert_eq!(batch.samples.len(), 1);
+        assert_eq!(batch.samples[0].value, 920.0);
+        assert_eq!(batch.validity, crate::runtime_acquisition_session::RuntimeSampleState::Fresh);
+        assert_eq!(
+            store.latest_runtime_batch(handle, &lease, 20, 10)
+                .unwrap()
+                .unwrap()
+                .validity,
+            crate::runtime_acquisition_session::RuntimeSampleState::Fresh
+        );
+        assert_eq!(
+            store.latest_runtime_batch(handle, &lease, 21, 10)
+                .unwrap()
+                .unwrap()
+                .validity,
+            crate::runtime_acquisition_session::RuntimeSampleState::Stale
+        );
+    }
+
+    #[test]
+    fn wrong_signature_or_generation_revokes_prior_registry_runtime_lease() {
+        let mut store = ProfileRegistryStore::new();
+        let handle = store.create();
+        store
+            .register_definition_bundle(handle, &runtime_bundle_import())
+            .unwrap();
+        let prior = store
+            .bind_runtime_candidate(handle, "usb:one", RUNTIME_SIGNATURE, 256, 800)
+            .unwrap();
+        let (old_token, _) = store.begin_runtime_read(handle, &prior, 0, 100).unwrap();
+        assert_eq!(
+            store.bind_runtime_candidate(handle, "usb:one", RUNTIME_SIGNATURE, 256, 801),
+            Err(RuntimeRegistryBindingError::GenerationMismatch)
+        );
+        assert_eq!(
+            store.complete_runtime_read(handle, &prior, old_token, 1, &runtime_response(930.0)),
+            Err(RuntimeRegistryBindingError::Bound(BoundRuntimeError::SessionClosed))
+        );
+        let next = store
+            .bind_runtime_candidate(handle, "usb:one", RUNTIME_SIGNATURE, 256, 800)
+            .unwrap();
+        assert_ne!(prior.session_epoch(), next.session_epoch());
+        assert_eq!(
+            store.bind_runtime_candidate(handle, "usb:two", b"rusEFI registry.bundle.801", 256, 800),
+            Err(RuntimeRegistryBindingError::Registry(
+                RegistryStoreError::Authority(RuntimeProfileAuthorityError::UnknownController)
+            ))
+        );
+        assert_eq!(
+            store.begin_runtime_read(handle, &next, 2, 100),
+            Err(RuntimeRegistryBindingError::Bound(BoundRuntimeError::SessionClosed))
+        );
+    }
+
+    #[test]
+    fn missing_or_unsupported_registry_runtime_bundle_fails_closed() {
+        let mut store = ProfileRegistryStore::new();
+        let handle = store.create();
+        store.register_compiled_import(handle, &compiled_import()).unwrap();
+        assert_eq!(
+            store.bind_runtime_candidate(handle, "usb:one", b"rusEFI registry.import.700", 256, 700),
+            Err(RuntimeRegistryBindingError::Registry(
+                RegistryStoreError::MissingCompiledBundle("rusEFI registry.import.700".to_string())
+            ))
+        );
+        let handle = store.create();
+        let mut unsupported = runtime_bundle_import();
+        unsupported.includes.insert(
+            "bundle.inc".to_string(),
+            format!(
+                "{BUNDLE_INCLUDE}\n[OutputChannels]\nochGetCommand = \"O%2o%2c\"\nochBlockSize = 4\nrpm = {{ 100 + 1 }}\n"
+            ),
+        );
+        store.register_definition_bundle(handle, &unsupported).unwrap();
+        assert_eq!(
+            store.bind_runtime_candidate(handle, "usb:one", RUNTIME_SIGNATURE, 256, 800),
+            Err(RuntimeRegistryBindingError::Bound(
+                BoundRuntimeError::Definition(
+                    crate::runtime_definition_catalog::RuntimeDefinitionError::UnsupportedChannel(
+                        "rpm".to_string()
+                    )
+                )
+            ))
+        );
+    }
+
+    #[test]
+    fn registry_close_mutation_and_cross_handle_lease_are_fail_closed() {
+        let mut store = ProfileRegistryStore::new();
+        let one = store.create();
+        let two = store.create();
+        store.register_definition_bundle(one, &runtime_bundle_import()).unwrap();
+        store.register_definition_bundle(two, &runtime_bundle_import()).unwrap();
+        let first = store
+            .bind_runtime_candidate(one, "usb:one", RUNTIME_SIGNATURE, 256, 800)
+            .unwrap();
+        let second = store
+            .bind_runtime_candidate(two, "usb:two", RUNTIME_SIGNATURE, 256, 800)
+            .unwrap();
+        assert_eq!(
+            store.begin_runtime_read(two, &first, 1, 100),
+            Err(RuntimeRegistryBindingError::Bound(BoundRuntimeError::StaleAuthority))
+        );
+        store.register_recognized_signature(one, "rusEFI other.900");
+        assert_eq!(
+            store.latest_runtime_batch(one, &first, 2, 100),
+            Err(RuntimeRegistryBindingError::Bound(BoundRuntimeError::SessionClosed))
+        );
+        store.close(two);
+        assert_eq!(
+            store.begin_runtime_read(two, &second, 1, 100),
+            Err(RuntimeRegistryBindingError::Registry(RegistryStoreError::InvalidHandle))
+        );
+        let replacement = store.create();
+        assert_ne!(two, replacement);
+    }
+
     #[test]
     fn authority_error_type_keeps_profile_selection_categories_explicit() {
         let _ = ProfileSelectionError::UnknownController;
