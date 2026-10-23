@@ -310,18 +310,19 @@ fn resolved_output_wire_contract(
                 return Err(BoundRuntimeError::DefinitionCommand);
             }
         }
-        if section.eq_ignore_ascii_case("OutputChannels") && key == "ochGetCommand" {
-            if command
+        if section.eq_ignore_ascii_case("OutputChannels")
+            && key == "ochGetCommand"
+            && command
                 .replace(value.trim_matches('"').to_owned())
                 .is_some()
-            {
-                return Err(BoundRuntimeError::DefinitionCommand);
-            }
+        {
+            return Err(BoundRuntimeError::DefinitionCommand);
         }
-        if section.eq_ignore_ascii_case("Constants") && key == "messageEnvelopeFormat" {
-            if envelope.replace(value.to_owned()).is_some() {
-                return Err(BoundRuntimeError::DefinitionCommand);
-            }
+        if section.eq_ignore_ascii_case("Constants")
+            && key == "messageEnvelopeFormat"
+            && envelope.replace(value.to_owned()).is_some()
+        {
+            return Err(BoundRuntimeError::DefinitionCommand);
         }
     }
     match (command, envelope) {
