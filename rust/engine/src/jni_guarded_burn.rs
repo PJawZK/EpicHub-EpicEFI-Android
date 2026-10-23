@@ -87,6 +87,7 @@ fn map_authority_error(error: EngineGuardedPageBurnError) -> jint {
         | EngineGuardedPageBurnError::RamProvenanceGenerationMismatch { .. } => BURN_STALE_PROFILE,
         EngineGuardedPageBurnError::RamNotConfirmedForCurrentDraft { .. } => BURN_RAM_NOT_CURRENT,
         EngineGuardedPageBurnError::SourceImageChanged => BURN_SOURCE_CHANGED,
+        EngineGuardedPageBurnError::StaleSessionEpoch { .. } => BURN_SOURCE_CHANGED,
         EngineGuardedPageBurnError::MissingSourcePage { .. }
         | EngineGuardedPageBurnError::SourcePageSizeMismatch { .. }
         | EngineGuardedPageBurnError::BurnPlan(_)
