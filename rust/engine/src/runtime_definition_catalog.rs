@@ -301,7 +301,7 @@ afr = scalar, F32, 8, "AFR", 1, 0
     fn unsupported_channels_fail_closed_instead_of_partial_catalog() {
         let unsupported = DEFINITION.replace(
             "afr = scalar, F32, 8, \"AFR\", 1, 0",
-            "afr = bits, U08, 8, [0:2]",
+            "afr = { 100 + 1 }",
         );
         assert_eq!(
             compile_runtime_output_channels(&unsupported).unwrap_err(),
