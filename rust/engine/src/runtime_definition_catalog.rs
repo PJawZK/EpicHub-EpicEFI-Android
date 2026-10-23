@@ -4,8 +4,8 @@
 use std::collections::HashSet;
 
 use crate::runtime_channel_decode::{
-    CompiledRuntimeChannelCatalog, RuntimeChannelDescriptor, RuntimeDecodeError,
-    RuntimeEndian, RuntimeValueType,
+    CompiledRuntimeChannelCatalog, RuntimeChannelDescriptor, RuntimeDecodeError, RuntimeEndian,
+    RuntimeValueType,
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -105,7 +105,11 @@ pub fn compile_runtime_output_channels(
             endian = match value.trim() {
                 "little" => RuntimeEndian::Little,
                 "big" => RuntimeEndian::Big,
-                _ => return Err(RuntimeDefinitionError::InvalidScalar("endianness".to_string())),
+                _ => {
+                    return Err(RuntimeDefinitionError::InvalidScalar(
+                        "endianness".to_string(),
+                    ));
+                }
             };
         }
     }
@@ -135,7 +139,9 @@ pub fn compile_runtime_output_channels(
         let name = name.trim();
         let value = value.trim();
         if name == "ochBlockSize" {
-            let size = value.parse::<usize>().map_err(|_| RuntimeDefinitionError::InvalidBlockSize)?;
+            let size = value
+                .parse::<usize>()
+                .map_err(|_| RuntimeDefinitionError::InvalidBlockSize)?;
             if block_size.replace(size).is_some() {
                 return Err(RuntimeDefinitionError::InvalidBlockSize);
             }
@@ -143,10 +149,17 @@ pub fn compile_runtime_output_channels(
         }
         // Command and metadata interpretation is intentionally deferred; no
         // transport read can be issued based on this decoder-only stage.
-        if matches!(name, "ochGetCommand" | "ochBlockShape" | "ochBlockCount" | "ochBlockSizeSelector") {
+        if matches!(
+            name,
+            "ochGetCommand" | "ochBlockShape" | "ochBlockCount" | "ochBlockSizeSelector"
+        ) {
             continue;
         }
-        if name.is_empty() || !name.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'_') {
+        if name.is_empty()
+            || !name
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+        {
             return Err(RuntimeDefinitionError::InvalidName(name.to_string()));
         }
         if !names.insert(name.to_string()) {
@@ -169,13 +182,16 @@ pub fn compile_runtime_output_channels(
             "F32" => RuntimeValueType::F32,
             other => return Err(RuntimeDefinitionError::UnsupportedType(other.to_string())),
         };
-        let offset = parts[2].parse::<usize>()
+        let offset = parts[2]
+            .parse::<usize>()
             .map_err(|_| RuntimeDefinitionError::InvalidScalar(name.to_string()))?;
         let units = unquote(parts[3])
             .ok_or_else(|| RuntimeDefinitionError::InvalidScalar(name.to_string()))?;
-        let scale = parts[4].parse::<f64>()
+        let scale = parts[4]
+            .parse::<f64>()
             .map_err(|_| RuntimeDefinitionError::InvalidScaling(name.to_string()))?;
-        let translate = parts[5].parse::<f64>()
+        let translate = parts[5]
+            .parse::<f64>()
             .map_err(|_| RuntimeDefinitionError::InvalidScaling(name.to_string()))?;
         let id = stable_name_id(name);
         if id == 0 || !ids.insert(id) {
@@ -233,8 +249,13 @@ afr = scalar, F32, 8, "AFR", 1, 0
         assert_eq!(catalog.channel_info[0].id, stable_name_id("rpm"));
         let frame = [0x20, 0x03, 0x64, 0, 0x10, 0x27, 0, 0, 0, 0, 0x70, 0x41];
         let samples = catalog.decoder.decode(&frame).unwrap();
-        assert_eq!(samples.iter().map(|sample| sample.value).collect::<Vec<_>>(),
-                   vec![800.0, 0.0, 100.0, 15.0]);
+        assert_eq!(
+            samples
+                .iter()
+                .map(|sample| sample.value)
+                .collect::<Vec<_>>(),
+            vec![800.0, 0.0, 100.0, 15.0]
+        );
     }
 
     #[test]
@@ -254,7 +275,9 @@ afr = scalar, F32, 8, "AFR", 1, 0
         let bad = DEFINITION.replace("ochBlockSize = 12", "ochBlockSize = 2");
         assert_eq!(
             compile_runtime_output_channels(&bad).unwrap_err(),
-            RuntimeDefinitionError::Decode(RuntimeDecodeError::OffsetOutsideFrame(stable_name_id("clt")))
+            RuntimeDefinitionError::Decode(RuntimeDecodeError::OffsetOutsideFrame(stable_name_id(
+                "clt"
+            )))
         );
         let duplicate = format!("{DEFINITION}\nrpm = scalar, U16, 0, \"RPM\", 1, 0\n");
         assert_eq!(
