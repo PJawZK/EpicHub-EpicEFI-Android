@@ -1,5 +1,17 @@
 # EpicHub Current Handoff
 
+## Qualified native runtime acquisition session skeleton — 2026-10-23
+
+**Qualified production commit:** `dc51b71730440a0fb20940d6b7f09f0805a98dd6` on `main`, exact-head Foundation [39930630762](https://github.com/PJawZK/EpicHub-EpicEFI-Android/actions/runs/39930630762) **success**. `current-work` matched before promotion.
+
+New `rust/engine/src/runtime_acquisition_session.rs` is a **transport-free, read-only native state machine**, not yet live ECU telemetry. It composes the previously qualified `CompiledRuntimeChannelCatalog` and `RuntimeOutputReadPlan`; enforces a nonzero session token, catalog/request frame-length agreement and single-frame representability (<= 65,535 bytes); serializes one in-flight output request; issues tokenized request bytes for transport execution; validates matching session/sequence, elapsed monotonic timeout, CRC/status/exact response body via plan; decodes an entire frame before publishing a new snapshot; and marks existing samples stale/invalid on timeout, CRC/status/length failure or disconnect. Explicitly invalid samples are never promoted to Fresh. Five native regressions cover full successful frame, request collision/wrong token, timed-out late reply, bad CRC recovery, disconnect/session replacement and NaN invalidity. No USB, JNI, Dashboard or synthetic channel-store behavior changed.
+
+**Hard limits / next work:** This stage only supports one atomic entire-block request, bounded to 16-bit count. Larger output blocks require sequenced chunk assembly with strictly matched offset/length and atomic whole-frame publish. Session token uniqueness across reconnects MUST be enforced by the retained Android `AndroidUsbLiveConnectionSessionOwner` or a native handle-generation authority; a caller-provided numeric token alone is not verified device identity. A completed native state-machine frame still must not be considered an authorized current ECU sample without binding exact profile signature + definition hash + catalog + command plan to the active transport owner. The current `ChannelStore` remains synthetic fixed channels and must not silently mix real/synthetic observations. Add bounded live batch store with timestamps, validity, generation and stale markers; shared consumer-facing ABI; cancellation/disconnect tests; thereafter integrate under the existing serialized USB connection owner and evaluate offline replay before any single-ECU hardware validation. Current Dashboard remains synthetic. Full generated Mega144H7/uaEFI INI compatibility and expression support are still outstanding.
+
+This documentation-only checkpoint requires its own exact-head Foundation qualification before promotion.
+
+---
+
 ## Qualified read-only output request contract and firmware-source audit — 2026-10-23
 
 **Qualified production SHA:** `61fd7d371e646b586dc2a5085f98e7645d738b46`; Foundation [39927675749](https://github.com/PJawZK/EpicHub-EpicEFI-Android/actions/runs/39927675749) **success**, fast-forwarded to `main`.
