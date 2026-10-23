@@ -39,6 +39,7 @@ mod jni_tune_session_epoch;
 pub mod live_tune_install;
 mod mega144h7_profile;
 pub mod ms_envelope_codec;
+pub mod nonvolatile_page_provenance;
 mod offline_tune_source;
 pub mod page_burn_planner;
 pub mod page_crc32_check_planner;
