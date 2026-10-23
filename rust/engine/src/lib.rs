@@ -35,6 +35,7 @@ mod jni_ram_source_state;
 mod jni_readonly_page_acquisition;
 mod jni_readonly_tune_metadata;
 mod jni_runtime_identity;
+mod jni_runtime_candidate;
 mod jni_tune_session;
 mod jni_tune_session_epoch;
 pub mod live_channel_store;
