@@ -51,6 +51,7 @@ pub mod profile_registry_store;
 pub mod ram_source_provenance;
 pub mod readonly_page_acquisition;
 pub mod resolved_profile_source;
+pub mod runtime_channel_decode;
 pub mod runtime_identity_probe;
 #[cfg(test)]
 mod runtime_probe_selection_tests;
@@ -58,7 +59,6 @@ pub mod runtime_profile_authority;
 #[cfg(test)]
 mod runtime_profile_selection_tests;
 mod runtime_snapshot;
-pub mod runtime_channel_decode;
 pub mod session_write_intent;
 mod table_projection_abi;
 mod tune_catalog_abi;
