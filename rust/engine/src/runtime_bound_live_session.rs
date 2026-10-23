@@ -8,6 +8,8 @@
 //! resolved definition, binds them to the exact selected profile and observed
 //! signature, and owns acquisition plus the real-data-only batch store together.
 //! No caller-chosen session number is accepted.
+use std::sync::atomic::{AtomicU64, Ordering};
+
 use crate::ecu_profile::ResolvedEcuProfile;
 use crate::live_channel_store::{LiveChannelBatch, LiveChannelStore, LiveChannelStoreError};
 use crate::runtime_acquisition_session::{
@@ -73,11 +75,15 @@ struct ActiveRuntime {
     store: LiveChannelStore,
 }
 
+/// Process-wide monotonic epochs prevent the ABA case where a destroyed
+/// broker is recreated for the same endpoint and definition. Callback tokens
+/// cannot outlive the process, so process-local uniqueness is sufficient here.
+static NEXT_RUNTIME_EPOCH: AtomicU64 = AtomicU64::new(0);
+
 /// Single-owner native candidate authority. A replacement always revokes the
 /// preceding session first, even if the replacement definition is rejected.
 #[derive(Default)]
 pub struct RuntimeBoundLiveSession {
-    last_epoch: u64,
     active: Option<ActiveRuntime>,
 }
 
@@ -96,11 +102,12 @@ impl RuntimeBoundLiveSession {
         resolved_definition: &str,
     ) -> Result<BoundRuntimeIdentity, BoundRuntimeError> {
         self.disconnect();
-        let epoch = self
-            .last_epoch
-            .checked_add(1)
-            .ok_or(BoundRuntimeError::EpochExhausted)?;
-        self.last_epoch = epoch;
+        let epoch = NEXT_RUNTIME_EPOCH
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |last| {
+                last.checked_add(1)
+            })
+            .map_err(|_| BoundRuntimeError::EpochExhausted)?
+            + 1;
         let profile = selected_profile.identity();
         let fingerprint = profile
             .definition_fingerprint
@@ -495,6 +502,39 @@ rpm = scalar, F32, 0, "RPM", 1, 0
                 .unwrap()
                 .sequence,
             1
+        );
+    }
+
+    #[test]
+    fn replacing_native_owner_cannot_reuse_prior_epoch_or_callback_token() {
+        let old = {
+            let mut first = RuntimeBoundLiveSession::new();
+            bind(&mut first)
+        };
+        let mut second = RuntimeBoundLiveSession::new();
+        let current = bind(&mut second);
+        assert_ne!(current.session_epoch(), old.session_epoch());
+        assert_eq!(
+            second.begin(&old, 10, 20),
+            Err(BoundRuntimeError::StaleAuthority)
+        );
+        let (new_token, _) = second.begin(&current, 10, 20).unwrap();
+        let stale_token = RuntimeRequestToken {
+            session: old.session_epoch(),
+            sequence: new_token.sequence,
+        };
+        assert_eq!(
+            second.complete(&current, stale_token, 11, &frame(900.0)),
+            Err(BoundRuntimeError::Acquisition(
+                RuntimeAcquisitionError::StaleSession
+            ))
+        );
+        assert_eq!(
+            second.complete(&current, new_token, 12, &frame(800.0))
+                .unwrap()
+                .samples[0]
+                .value,
+            800.0
         );
     }
 
