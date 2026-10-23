@@ -39,6 +39,7 @@ const BURN_CRC_FAILURE: jint = -20;
 const BURN_INVALID_ARGUMENT: jint = -21;
 const BURN_REGISTRY_FAILURE: jint = -22;
 const BURN_INVALID_PROOF_STAGE: jint = -23;
+const BURN_ENGINE_STATE_CHANGED: jint = -24;
 const BURN_PANIC: jint = -255;
 
 const STAGE_BURN: jint = 0;
@@ -107,6 +108,7 @@ fn map_store_error(error: GuardedBurnPlanStoreError) -> jint {
     match error {
         GuardedBurnPlanStoreError::InvalidHandle => BURN_INVALID_HANDLE,
         GuardedBurnPlanStoreError::InvalidProofStage => BURN_INVALID_PROOF_STAGE,
+        GuardedBurnPlanStoreError::EngineStateChanged => BURN_ENGINE_STATE_CHANGED,
         GuardedBurnPlanStoreError::Authority(error) => map_authority_error(error),
         GuardedBurnPlanStoreError::Transport(error) => map_transport_error(error),
     }
