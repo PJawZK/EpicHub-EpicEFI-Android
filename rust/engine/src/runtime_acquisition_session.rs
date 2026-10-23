@@ -1,12 +1,8 @@
 //! Session-fenced read-only runtime acquisition. No transport or JNI calls.
 //! One atomic full-frame request is supported in this stage. Requests for
 //! larger blocks must be handled by a later explicitly sequenced chunk reader.
-use crate::runtime_channel_decode::{
-    CompiledRuntimeChannelCatalog, DecodedRuntimeSample,
-};
-use crate::runtime_output_read_plan::{
-    RuntimeOutputReadError, RuntimeOutputReadPlan,
-};
+use crate::runtime_channel_decode::{CompiledRuntimeChannelCatalog, DecodedRuntimeSample};
+use crate::runtime_output_read_plan::{RuntimeOutputReadError, RuntimeOutputReadPlan};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RuntimeAcquisitionError {
@@ -170,11 +166,7 @@ impl RuntimeAcquisitionSession {
         Ok(&self.published)
     }
 
-    pub fn expire(
-        &mut self,
-        session: u64,
-        now_ms: u64,
-    ) -> Result<bool, RuntimeAcquisitionError> {
+    pub fn expire(&mut self, session: u64, now_ms: u64) -> Result<bool, RuntimeAcquisitionError> {
         self.check_session(session)?;
         let Some(pending) = self.pending else {
             return Ok(false);
@@ -262,8 +254,7 @@ mod tests {
             }],
         )
         .unwrap();
-        let plan =
-            RuntimeOutputReadPlan::compile("O%2o%2c", 4, "msEnvelope_1.0").unwrap();
+        let plan = RuntimeOutputReadPlan::compile("O%2o%2c", 4, "msEnvelope_1.0").unwrap();
         RuntimeAcquisitionSession::new(epoch, catalog, plan).unwrap()
     }
 
@@ -296,7 +287,9 @@ mod tests {
             Err(RuntimeAcquisitionError::RequestTokenMismatch)
         );
         assert_eq!(reader.snapshot().state, RuntimeSampleState::Unknown);
-        let result = reader.complete(token, 120, &response(&800f32.to_le_bytes())).unwrap();
+        let result = reader
+            .complete(token, 120, &response(&800f32.to_le_bytes()))
+            .unwrap();
         assert_eq!(result.state, RuntimeSampleState::Fresh);
         assert_eq!(result.samples[0].value, 800.0);
     }
@@ -305,7 +298,9 @@ mod tests {
     fn timeout_and_late_response_never_restore_old_sample() {
         let mut reader = session(11);
         let (first, _) = reader.begin(11, 0, 50).unwrap();
-        reader.complete(first, 1, &response(&600f32.to_le_bytes())).unwrap();
+        reader
+            .complete(first, 1, &response(&600f32.to_le_bytes()))
+            .unwrap();
         let (late, _) = reader.begin(11, 10, 50).unwrap();
         assert!(reader.expire(11, 60).unwrap());
         assert_eq!(reader.snapshot().state, RuntimeSampleState::Stale);
@@ -328,7 +323,9 @@ mod tests {
         ));
         assert_eq!(reader.snapshot().state, RuntimeSampleState::Invalid);
         let (next, _) = reader.begin(3, 2, 100).unwrap();
-        reader.complete(next, 3, &response(&15f32.to_le_bytes())).unwrap();
+        reader
+            .complete(next, 3, &response(&15f32.to_le_bytes()))
+            .unwrap();
         assert_eq!(reader.snapshot().state, RuntimeSampleState::Fresh);
     }
 
@@ -337,7 +334,14 @@ mod tests {
         let mut reader = session(6);
         let (token, _) = reader.begin(6, 0, 50).unwrap();
         assert_eq!(
-            reader.complete(RuntimeRequestToken { session: 5, sequence: token.sequence }, 1, &[]),
+            reader.complete(
+                RuntimeRequestToken {
+                    session: 5,
+                    sequence: token.sequence
+                },
+                1,
+                &[]
+            ),
             Err(RuntimeAcquisitionError::StaleSession)
         );
         reader.disconnect();
@@ -357,7 +361,9 @@ mod tests {
     fn nan_data_is_explicitly_invalid_and_not_fresh() {
         let mut reader = session(1);
         let (token, _) = reader.begin(1, 0, 50).unwrap();
-        let state = reader.complete(token, 1, &response(&f32::NAN.to_le_bytes())).unwrap();
+        let state = reader
+            .complete(token, 1, &response(&f32::NAN.to_le_bytes()))
+            .unwrap();
         assert_eq!(state.state, RuntimeSampleState::Invalid);
         assert_eq!(state.samples[0].state, RuntimeSampleState::Invalid);
     }
