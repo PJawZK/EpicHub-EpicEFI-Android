@@ -164,6 +164,7 @@ class LiveTuneConnectionOwner internal constructor(
     private val probeQueryCompiler: DefinitionProbeQueryCompileOperation? = null,
     private val ramWriteOperation: LiveTuneRamWriteOperation? = null,
     private val burnOperation: LiveTuneBurnOperation? = null,
+    private val runtimeCandidateBinding: RuntimeCandidateBindingOperation? = null,
 ) : AutoCloseable {
     @Volatile
     private var closed = false
@@ -173,6 +174,26 @@ class LiveTuneConnectionOwner internal constructor(
 
     val state: LiveTuneSourceLifecycleState
         get() = lifecycle.state
+
+    /**
+     * Only the retained Android USB owner may request this after exact profile selection.
+     * Failure is a nonlive runtime capability result, not a rejected tune connection.
+     */
+    internal fun bindRuntimeCandidate(
+        endpointId: String,
+        identity: ValidatedRuntimeIdentity,
+        profileGeneration: Long,
+        signatureLimit: Int,
+    ): RuntimeCandidateBindingResult {
+        if (!isAlive) return RuntimeCandidateBindingResult.Unavailable("Profile owner is closed.")
+        val connected = lifecycle.state as? LiveTuneSourceLifecycleState.Connected
+        if (connected?.identity != identity || profileGeneration <= 0L) {
+            return RuntimeCandidateBindingResult.Unavailable("Current ECU identity is not authorized.")
+        }
+        val binder = runtimeCandidateBinding
+            ?: return RuntimeCandidateBindingResult.Unavailable("Runtime candidate binding is not installed.")
+        return binder.bind(endpointId, identity.signature, profileGeneration, signatureLimit)
+    }
 
     fun probeAndConnect(
         channel: UsbReadOnlyTransactionChannel,
@@ -184,6 +205,7 @@ class LiveTuneConnectionOwner internal constructor(
 
         return when (val probed = identityProbe.probe(channel, plan)) {
             is UsbRuntimeIdentityProbeResult.Identified -> {
+                runtimeCandidateBinding?.disconnect()
                 lifecycle.onConnected(probed.identity)
                 LiveTuneConnectResult.Connected(probed.identity)
             }
@@ -242,6 +264,7 @@ class LiveTuneConnectionOwner internal constructor(
             )
         }
 
+        runtimeCandidateBinding?.disconnect()
         lifecycle.onDisconnected()
         var lastProbe: UsbRuntimeIdentityProbeResult? = null
         var lastProfileRejection: RuntimeProfileSelectionRejection? = null
@@ -360,6 +383,7 @@ class LiveTuneConnectionOwner internal constructor(
 
     fun disconnect() {
         if (!closed) {
+            runtimeCandidateBinding?.disconnect()
             lifecycle.onDisconnected()
         }
     }
@@ -367,6 +391,7 @@ class LiveTuneConnectionOwner internal constructor(
     @Synchronized
     override fun close() {
         if (closed) return
+        runtimeCandidateBinding?.disconnect()
         lifecycle.onDisconnected()
         registryOwner.close()
         closed = true
@@ -399,6 +424,7 @@ class LiveTuneConnectionOwner internal constructor(
                                 probeQueryCompiler = DefinitionProbeQueryCompileOperation(probeCompiler::compile),
                                 ramWriteOperation = NativeLiveTuneRamWriteOperation(engine, nativeRegistry),
                                 burnOperation = NativeLiveTuneBurnOperation(engine, nativeRegistry),
+                                runtimeCandidateBinding = NativeRegistryRuntimeCandidateBinding(nativeRegistry),
                             ),
                         importedBundleCount = opened.importedBundleCount,
                     )
