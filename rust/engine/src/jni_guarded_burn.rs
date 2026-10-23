@@ -6,8 +6,8 @@ use jni::sys::{JNI_FALSE, JNI_TRUE, jboolean, jint, jlong};
 
 use crate::engine_guarded_burn::EngineGuardedPageBurnError;
 use crate::guarded_burn_plan_store::{
-    GuardedBurnPlanStoreError, GuardedBurnStage, active_guarded_burn_plan_count, close_guarded_burn_plan,
-    create_selected_engine_guarded_burn_plan, guarded_burn_plan_is_alive,
+    GuardedBurnPlanStoreError, GuardedBurnStage, active_guarded_burn_plan_count,
+    close_guarded_burn_plan, create_selected_engine_guarded_burn_plan, guarded_burn_plan_is_alive,
     guarded_burn_plan_summary, stage_guarded_burn_plan, verify_guarded_burn_ack,
     verify_guarded_burn_crc,
 };
@@ -314,7 +314,11 @@ pub extern "system" fn Java_com_epicefi_epichub_engine_NativeGuardedBurnBridge_f
             registry_handle,
             &signature,
             signature_limit,
-            if stage == STAGE_BURN { GuardedBurnStage::Burn } else { GuardedBurnStage::Crc },
+            if stage == STAGE_BURN {
+                GuardedBurnStage::Burn
+            } else {
+                GuardedBurnStage::Crc
+            },
         ) {
             Ok(value) => value,
             Err(error) => return i64::from(map_store_error(error)),
