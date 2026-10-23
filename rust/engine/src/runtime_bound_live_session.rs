@@ -29,14 +29,26 @@ pub struct BoundRuntimeIdentity {
 }
 
 impl BoundRuntimeIdentity {
-    pub fn endpoint_id(&self) -> &str { &self.endpoint_id }
-    pub fn signature(&self) -> &str { &self.signature }
-    pub fn profile_generation(&self) -> u64 { self.profile_generation }
-    pub fn profile_fingerprint(&self) -> &str { &self.profile_fingerprint }
+    pub fn endpoint_id(&self) -> &str {
+        &self.endpoint_id
+    }
+    pub fn signature(&self) -> &str {
+        &self.signature
+    }
+    pub fn profile_generation(&self) -> u64 {
+        self.profile_generation
+    }
+    pub fn profile_fingerprint(&self) -> &str {
+        &self.profile_fingerprint
+    }
     /// Non-cryptographic revision marker for exact resolved-text coherence.
     /// This is NOT firmware authenticity or a replacement for an INI digest.
-    pub fn definition_revision(&self) -> u64 { self.definition_revision }
-    pub fn session_epoch(&self) -> u64 { self.session_epoch }
+    pub fn definition_revision(&self) -> u64 {
+        self.definition_revision
+    }
+    pub fn session_epoch(&self) -> u64 {
+        self.session_epoch
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -70,7 +82,9 @@ pub struct RuntimeBoundLiveSession {
 }
 
 impl RuntimeBoundLiveSession {
-    pub fn new() -> Self { Self::default() }
+    pub fn new() -> Self {
+        Self::default()
+    }
 
     /// Call only after exact runtime identity and profile selection under the
     /// same serialized USB owner. This is not itself evidence of a live device.
@@ -82,10 +96,15 @@ impl RuntimeBoundLiveSession {
         resolved_definition: &str,
     ) -> Result<BoundRuntimeIdentity, BoundRuntimeError> {
         self.disconnect();
-        let epoch = self.last_epoch.checked_add(1).ok_or(BoundRuntimeError::EpochExhausted)?;
+        let epoch = self
+            .last_epoch
+            .checked_add(1)
+            .ok_or(BoundRuntimeError::EpochExhausted)?;
         self.last_epoch = epoch;
         let profile = selected_profile.identity();
-        let fingerprint = profile.definition_fingerprint.filter(|value| !value.trim().is_empty());
+        let fingerprint = profile
+            .definition_fingerprint
+            .filter(|value| !value.trim().is_empty());
         if endpoint_id.trim().is_empty() {
             return Err(BoundRuntimeError::InvalidEndpoint);
         }
@@ -102,9 +121,11 @@ impl RuntimeBoundLiveSession {
         // exact-text revision; the two are not assumed interchangeable.
         let compiled = compile_runtime_output_channels(resolved_definition)
             .map_err(BoundRuntimeError::Definition)?;
-        let (command, envelope) = resolved_output_wire_contract(resolved_definition, observed_signature)?;
-        let plan = RuntimeOutputReadPlan::compile(&command, compiled.decoder.frame_length(), &envelope)
-            .map_err(BoundRuntimeError::ReadPlan)?;
+        let (command, envelope) =
+            resolved_output_wire_contract(resolved_definition, observed_signature)?;
+        let plan =
+            RuntimeOutputReadPlan::compile(&command, compiled.decoder.frame_length(), &envelope)
+                .map_err(BoundRuntimeError::ReadPlan)?;
         let acquisition = RuntimeAcquisitionSession::new(epoch, compiled.decoder, plan)
             .map_err(BoundRuntimeError::Acquisition)?;
         let store = LiveChannelStore::new(epoch).ok_or(BoundRuntimeError::EpochExhausted)?;
@@ -140,7 +161,9 @@ impl RuntimeBoundLiveSession {
         timeout_ms: u64,
     ) -> Result<(RuntimeRequestToken, Vec<u8>), BoundRuntimeError> {
         let active = self.authorized_mut(binding)?;
-        active.acquisition.begin(binding.session_epoch, now_ms, timeout_ms)
+        active
+            .acquisition
+            .begin(binding.session_epoch, now_ms, timeout_ms)
             .map_err(BoundRuntimeError::Acquisition)
     }
 
@@ -167,7 +190,10 @@ impl RuntimeBoundLiveSession {
                     active.store.mark_invalid();
                     return Err(BoundRuntimeError::Store(error));
                 }
-                Ok(active.store.latest().expect("accepted publication must retain a batch"))
+                Ok(active
+                    .store
+                    .latest()
+                    .expect("accepted publication must retain a batch"))
             }
             Err(error) => {
                 match error {
@@ -222,8 +248,14 @@ impl RuntimeBoundLiveSession {
         }
     }
 
-    fn authorized(&self, binding: &BoundRuntimeIdentity) -> Result<&ActiveRuntime, BoundRuntimeError> {
-        let active = self.active.as_ref().ok_or(BoundRuntimeError::SessionClosed)?;
+    fn authorized(
+        &self,
+        binding: &BoundRuntimeIdentity,
+    ) -> Result<&ActiveRuntime, BoundRuntimeError> {
+        let active = self
+            .active
+            .as_ref()
+            .ok_or(BoundRuntimeError::SessionClosed)?;
         if active.binding != *binding {
             return Err(BoundRuntimeError::StaleAuthority);
         }
@@ -234,7 +266,10 @@ impl RuntimeBoundLiveSession {
         &mut self,
         binding: &BoundRuntimeIdentity,
     ) -> Result<&mut ActiveRuntime, BoundRuntimeError> {
-        let active = self.active.as_mut().ok_or(BoundRuntimeError::SessionClosed)?;
+        let active = self
+            .active
+            .as_mut()
+            .ok_or(BoundRuntimeError::SessionClosed)?;
         if active.binding != *binding {
             return Err(BoundRuntimeError::StaleAuthority);
         }
@@ -258,20 +293,28 @@ fn resolved_output_wire_contract(
             section = &line[1..line.len() - 1];
             continue;
         }
-        let Some((key, value)) = line.split_once('=') else { continue };
+        let Some((key, value)) = line.split_once('=') else {
+            continue;
+        };
         let key = key.trim();
         let value = value.trim();
         if section.eq_ignore_ascii_case("TunerStudio") && key == "signature" {
             // Do not combine a verified profile with arbitrary channel bytes
             // from a different resolved ECU definition.
-            if !value.starts_with('"') || !value.ends_with('"')
-                || definition_signature.replace(value.trim_matches('"').to_owned()).is_some()
+            if !value.starts_with('"')
+                || !value.ends_with('"')
+                || definition_signature
+                    .replace(value.trim_matches('"').to_owned())
+                    .is_some()
             {
                 return Err(BoundRuntimeError::DefinitionCommand);
             }
         }
         if section.eq_ignore_ascii_case("OutputChannels") && key == "ochGetCommand" {
-            if command.replace(value.trim_matches('"').to_owned()).is_some() {
+            if command
+                .replace(value.trim_matches('"').to_owned())
+                .is_some()
+            {
                 return Err(BoundRuntimeError::DefinitionCommand);
             }
         }
@@ -286,7 +329,7 @@ fn resolved_output_wire_contract(
             if definition_signature.as_deref() == Some(observed_signature) =>
         {
             Ok((command, envelope))
-        },
+        }
         _ => Err(BoundRuntimeError::DefinitionCommand),
     }
 }
@@ -327,7 +370,9 @@ rpm = scalar, F32, 0, "RPM", 1, 0
                 definition_fingerprint: Some("profile-42"),
             }
         }
-        fn page_sizes(&self) -> &[usize] { &[] }
+        fn page_sizes(&self) -> &[usize] {
+            &[]
+        }
         fn resolve_pages(
             &self,
             _pages: &[&[u8]],
@@ -346,7 +391,9 @@ rpm = scalar, F32, 0, "RPM", 1, 0
         data
     }
     fn bind(broker: &mut RuntimeBoundLiveSession) -> BoundRuntimeIdentity {
-        broker.bind("usb:test", "runtime.test.1", &Profile, SOURCE).unwrap()
+        broker
+            .bind("usb:test", "runtime.test.1", &Profile, SOURCE)
+            .unwrap()
     }
 
     #[test]
@@ -373,20 +420,47 @@ rpm = scalar, F32, 0, "RPM", 1, 0
             Err(BoundRuntimeError::UnverifiedProfile)
         );
         assert_eq!(
-            broker.bind("usb:test", "runtime.test.1", &Profile, &SOURCE.replace("O%2o%2c", "P")),
-            Err(BoundRuntimeError::ReadPlan(RuntimeOutputReadError::UnsupportedCommand))
+            broker.bind(
+                "usb:test",
+                "runtime.test.1",
+                &Profile,
+                &SOURCE.replace("O%2o%2c", "P")
+            ),
+            Err(BoundRuntimeError::ReadPlan(
+                RuntimeOutputReadError::UnsupportedCommand
+            ))
         );
         assert_eq!(
-            broker.bind("usb:test", "runtime.test.1", &Profile, &SOURCE.replace("messageEnvelopeFormat = msEnvelope_1.0", "")),
+            broker.bind(
+                "usb:test",
+                "runtime.test.1",
+                &Profile,
+                &SOURCE.replace("messageEnvelopeFormat = msEnvelope_1.0", "")
+            ),
             Err(BoundRuntimeError::DefinitionCommand)
         );
         assert_eq!(
-            broker.bind("usb:test", "runtime.test.1", &Profile, &SOURCE.replace("signature = \"runtime.test.1\"", "signature = \"runtime.test.2\"")),
+            broker.bind(
+                "usb:test",
+                "runtime.test.1",
+                &Profile,
+                &SOURCE.replace(
+                    "signature = \"runtime.test.1\"",
+                    "signature = \"runtime.test.2\""
+                )
+            ),
             Err(BoundRuntimeError::DefinitionCommand)
         );
         assert_eq!(
-            broker.bind("usb:test", "runtime.test.1", &Profile, &SOURCE.replace("rpm = scalar, F32, 0, \"RPM\", 1, 0", "rpm = { 100 + 1 }")),
-            Err(BoundRuntimeError::Definition(RuntimeDefinitionError::UnsupportedChannel("rpm".into())))
+            broker.bind(
+                "usb:test",
+                "runtime.test.1",
+                &Profile,
+                &SOURCE.replace("rpm = scalar, F32, 0, \"RPM\", 1, 0", "rpm = { 100 + 1 }")
+            ),
+            Err(BoundRuntimeError::Definition(
+                RuntimeDefinitionError::UnsupportedChannel("rpm".into())
+            ))
         );
     }
 
@@ -399,13 +473,28 @@ rpm = scalar, F32, 0, "RPM", 1, 0
             broker.bind("usb:test", "mismatch", &Profile, SOURCE),
             Err(BoundRuntimeError::UnverifiedProfile)
         );
-        assert_eq!(broker.complete(&old, old_token, 2, &frame(50.0)), Err(BoundRuntimeError::SessionClosed));
+        assert_eq!(
+            broker.complete(&old, old_token, 2, &frame(50.0)),
+            Err(BoundRuntimeError::SessionClosed)
+        );
         let next = bind(&mut broker);
         assert!(next.session_epoch() > old.session_epoch());
-        assert_eq!(broker.begin(&old, 3, 100), Err(BoundRuntimeError::StaleAuthority));
-        assert_eq!(broker.complete(&old, old_token, 3, &frame(50.0)), Err(BoundRuntimeError::StaleAuthority));
+        assert_eq!(
+            broker.begin(&old, 3, 100),
+            Err(BoundRuntimeError::StaleAuthority)
+        );
+        assert_eq!(
+            broker.complete(&old, old_token, 3, &frame(50.0)),
+            Err(BoundRuntimeError::StaleAuthority)
+        );
         let (new_token, _) = broker.begin(&next, 4, 100).unwrap();
-        assert_eq!(broker.complete(&next, new_token, 5, &frame(900.0)).unwrap().sequence, 1);
+        assert_eq!(
+            broker
+                .complete(&next, new_token, 5, &frame(900.0))
+                .unwrap()
+                .sequence,
+            1
+        );
     }
 
     #[test]
@@ -420,18 +509,32 @@ rpm = scalar, F32, 0, "RPM", 1, 0
         *corrupted.last_mut().unwrap() ^= 1;
         assert!(matches!(
             broker.complete(&lease, bad, 3, &corrupted),
-            Err(BoundRuntimeError::Acquisition(RuntimeAcquisitionError::Protocol(_)))
+            Err(BoundRuntimeError::Acquisition(
+                RuntimeAcquisitionError::Protocol(_)
+            ))
         ));
-        assert_eq!(broker.latest(&lease, 4, 100).unwrap().unwrap().validity, RuntimeSampleState::Invalid);
+        assert_eq!(
+            broker.latest(&lease, 4, 100).unwrap().unwrap().validity,
+            RuntimeSampleState::Invalid
+        );
 
         let (nan, _) = broker.begin(&lease, 5, 100).unwrap();
         assert_eq!(
             broker.complete(&lease, nan, 6, &frame(f32::NAN)),
             Err(BoundRuntimeError::Store(LiveChannelStoreError::NotFresh))
         );
-        assert_eq!(broker.latest(&lease, 7, 100).unwrap().unwrap().validity, RuntimeSampleState::Invalid);
+        assert_eq!(
+            broker.latest(&lease, 7, 100).unwrap().unwrap().validity,
+            RuntimeSampleState::Invalid
+        );
         let (recovery, _) = broker.begin(&lease, 8, 100).unwrap();
-        assert_eq!(broker.complete(&lease, recovery, 9, &frame(850.0)).unwrap().validity, RuntimeSampleState::Fresh);
+        assert_eq!(
+            broker
+                .complete(&lease, recovery, 9, &frame(850.0))
+                .unwrap()
+                .validity,
+            RuntimeSampleState::Fresh
+        );
     }
 
     #[test]
@@ -440,17 +543,31 @@ rpm = scalar, F32, 0, "RPM", 1, 0
         let lease = bind(&mut broker);
         let (token, _) = broker.begin(&lease, 10, 20).unwrap();
         broker.complete(&lease, token, 15, &frame(800.0)).unwrap();
-        assert_eq!(broker.latest(&lease, 24, 10).unwrap().unwrap().validity, RuntimeSampleState::Fresh);
-        assert_eq!(broker.latest(&lease, 25, 10).unwrap().unwrap().validity, RuntimeSampleState::Stale);
+        assert_eq!(
+            broker.latest(&lease, 24, 10).unwrap().unwrap().validity,
+            RuntimeSampleState::Fresh
+        );
+        assert_eq!(
+            broker.latest(&lease, 25, 10).unwrap().unwrap().validity,
+            RuntimeSampleState::Stale
+        );
         let (late, _) = broker.begin(&lease, 30, 10).unwrap();
         assert!(broker.expire(&lease, 40, 100).unwrap());
         assert_eq!(
             broker.complete(&lease, late, 41, &frame(990.0)),
-            Err(BoundRuntimeError::Acquisition(RuntimeAcquisitionError::NoPendingRequest))
+            Err(BoundRuntimeError::Acquisition(
+                RuntimeAcquisitionError::NoPendingRequest
+            ))
         );
         broker.disconnect();
-        assert_eq!(broker.latest(&lease, 42, 100), Err(BoundRuntimeError::SessionClosed));
-        assert_eq!(broker.begin(&lease, 43, 100), Err(BoundRuntimeError::SessionClosed));
+        assert_eq!(
+            broker.latest(&lease, 42, 100),
+            Err(BoundRuntimeError::SessionClosed)
+        );
+        assert_eq!(
+            broker.begin(&lease, 43, 100),
+            Err(BoundRuntimeError::SessionClosed)
+        );
     }
 
     #[test]
@@ -459,12 +576,21 @@ rpm = scalar, F32, 0, "RPM", 1, 0
         let lease = bind(&mut broker);
         let mut forged = lease.clone();
         forged.profile_generation += 1;
-        assert_eq!(broker.begin(&forged, 1, 100), Err(BoundRuntimeError::StaleAuthority));
+        assert_eq!(
+            broker.begin(&forged, 1, 100),
+            Err(BoundRuntimeError::StaleAuthority)
+        );
         let mut forged = lease.clone();
         forged.definition_revision ^= 1;
-        assert_eq!(broker.channel_info(&forged), Err(BoundRuntimeError::StaleAuthority));
+        assert_eq!(
+            broker.channel_info(&forged),
+            Err(BoundRuntimeError::StaleAuthority)
+        );
         let mut forged = lease.clone();
         forged.endpoint_id = "usb:other".to_owned();
-        assert_eq!(broker.latest(&forged, 1, 100), Err(BoundRuntimeError::StaleAuthority));
+        assert_eq!(
+            broker.latest(&forged, 1, 100),
+            Err(BoundRuntimeError::StaleAuthority)
+        );
     }
 }
