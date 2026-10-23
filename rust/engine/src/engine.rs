@@ -161,7 +161,11 @@ impl EngineRegistry {
         operation: impl FnOnce(u64, &TuneSession, Option<&TuneSourcePageImage>) -> T,
     ) -> Option<T> {
         self.engines.get(&handle).map(|engine| {
-            operation(engine.tune_session_epoch, &engine.tune_session, engine.tune_source_image.as_ref())
+            operation(
+                engine.tune_session_epoch,
+                &engine.tune_session,
+                engine.tune_source_image.as_ref(),
+            )
         })
     }
 
@@ -337,7 +341,14 @@ pub(crate) fn confirm_nonvolatile_page(
     expected_page_bytes: &[u8],
     expected_session_epoch: u64,
 ) -> bool {
-    with_registry(|registry| registry.confirm_nonvolatile_page(handle, proof, expected_page_bytes, expected_session_epoch))
+    with_registry(|registry| {
+        registry.confirm_nonvolatile_page(
+            handle,
+            proof,
+            expected_page_bytes,
+            expected_session_epoch,
+        )
+    })
 }
 
 #[cfg(test)]
