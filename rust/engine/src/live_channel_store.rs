@@ -1,9 +1,7 @@
 //! Bounded live-channel store, deliberately separate from synthetic dashboard data.
 //! Publication accepts only verified acquisition snapshots from one selected
 //! session and monotonically increasing request sequence and sample time.
-use crate::runtime_acquisition_session::{
-    RuntimePublishedSnapshot, RuntimeSampleState,
-};
+use crate::runtime_acquisition_session::{RuntimePublishedSnapshot, RuntimeSampleState};
 use crate::runtime_channel_decode::MAX_RUNTIME_CHANNELS;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -137,7 +135,9 @@ impl LiveChannelStore {
         let Some(batch) = &self.latest else {
             return false;
         };
-        if self.closed || max_age_ms == 0 || now_ms < batch.received_at_ms
+        if self.closed
+            || max_age_ms == 0
+            || now_ms < batch.received_at_ms
             || now_ms - batch.received_at_ms >= max_age_ms
         {
             self.mark_stale();
@@ -152,12 +152,20 @@ mod tests {
     use super::*;
     use crate::runtime_acquisition_session::RuntimePublishedSample;
 
-    fn snapshot(session: u64, sequence: u64, state: RuntimeSampleState) -> RuntimePublishedSnapshot {
+    fn snapshot(
+        session: u64,
+        sequence: u64,
+        state: RuntimeSampleState,
+    ) -> RuntimePublishedSnapshot {
         RuntimePublishedSnapshot {
             session,
             sequence,
             state,
-            samples: vec![RuntimePublishedSample { id: 101, value: 800.0, state }],
+            samples: vec![RuntimePublishedSample {
+                id: 101,
+                value: 800.0,
+                state,
+            }],
         }
     }
 
@@ -165,39 +173,79 @@ mod tests {
     fn stores_only_fresh_same_session_monotonic_samples() {
         let mut store = LiveChannelStore::new(9).unwrap();
         assert!(store.latest().is_none());
-        assert_eq!(store.publish(&snapshot(8, 1, RuntimeSampleState::Fresh), 10), Err(LiveChannelStoreError::SessionMismatch));
-        assert_eq!(store.publish(&snapshot(9, 1, RuntimeSampleState::Stale), 10), Err(LiveChannelStoreError::NotFresh));
-        assert_eq!(store.publish(&snapshot(9, 1, RuntimeSampleState::Fresh), 10).unwrap().samples[0].value, 800.0);
-        assert_eq!(store.publish(&snapshot(9, 1, RuntimeSampleState::Fresh), 11), Err(LiveChannelStoreError::DuplicateSequence));
-        assert_eq!(store.publish(&snapshot(9, 2, RuntimeSampleState::Fresh), 9), Err(LiveChannelStoreError::ClockRegression));
+        assert_eq!(
+            store.publish(&snapshot(8, 1, RuntimeSampleState::Fresh), 10),
+            Err(LiveChannelStoreError::SessionMismatch)
+        );
+        assert_eq!(
+            store.publish(&snapshot(9, 1, RuntimeSampleState::Stale), 10),
+            Err(LiveChannelStoreError::NotFresh)
+        );
+        assert_eq!(
+            store
+                .publish(&snapshot(9, 1, RuntimeSampleState::Fresh), 10)
+                .unwrap()
+                .samples[0]
+                .value,
+            800.0
+        );
+        assert_eq!(
+            store.publish(&snapshot(9, 1, RuntimeSampleState::Fresh), 11),
+            Err(LiveChannelStoreError::DuplicateSequence)
+        );
+        assert_eq!(
+            store.publish(&snapshot(9, 2, RuntimeSampleState::Fresh), 9),
+            Err(LiveChannelStoreError::ClockRegression)
+        );
         assert_eq!(store.latest().unwrap().sequence, 1);
     }
 
     #[test]
     fn timeout_and_disconnect_never_keep_valid_live_readings() {
         let mut store = LiveChannelStore::new(3).unwrap();
-        store.publish(&snapshot(3, 1, RuntimeSampleState::Fresh), 100).unwrap();
+        store
+            .publish(&snapshot(3, 1, RuntimeSampleState::Fresh), 100)
+            .unwrap();
         assert!(!store.expire(109, 10));
         assert!(store.expire(110, 10));
         assert_eq!(store.latest().unwrap().validity, RuntimeSampleState::Stale);
-        store.publish(&snapshot(3, 2, RuntimeSampleState::Fresh), 120).unwrap();
+        store
+            .publish(&snapshot(3, 2, RuntimeSampleState::Fresh), 120)
+            .unwrap();
         store.disconnect();
-        assert_eq!(store.latest().unwrap().samples[0].validity, RuntimeSampleState::Stale);
-        assert_eq!(store.publish(&snapshot(3, 3, RuntimeSampleState::Fresh), 130), Err(LiveChannelStoreError::SessionClosed));
+        assert_eq!(
+            store.latest().unwrap().samples[0].validity,
+            RuntimeSampleState::Stale
+        );
+        assert_eq!(
+            store.publish(&snapshot(3, 3, RuntimeSampleState::Fresh), 130),
+            Err(LiveChannelStoreError::SessionClosed)
+        );
     }
 
     #[test]
     fn invalid_and_duplicate_data_fail_without_overwriting_last_frame() {
         let mut store = LiveChannelStore::new(1).unwrap();
-        store.publish(&snapshot(1, 1, RuntimeSampleState::Fresh), 10).unwrap();
+        store
+            .publish(&snapshot(1, 1, RuntimeSampleState::Fresh), 10)
+            .unwrap();
         let mut bad = snapshot(1, 2, RuntimeSampleState::Fresh);
         bad.samples.push(bad.samples[0].clone());
-        assert_eq!(store.publish(&bad, 11), Err(LiveChannelStoreError::DuplicateChannel));
+        assert_eq!(
+            store.publish(&bad, 11),
+            Err(LiveChannelStoreError::DuplicateChannel)
+        );
         bad.samples.pop();
         bad.samples[0].value = f32::NAN;
-        assert_eq!(store.publish(&bad, 11), Err(LiveChannelStoreError::NotFresh));
+        assert_eq!(
+            store.publish(&bad, 11),
+            Err(LiveChannelStoreError::NotFresh)
+        );
         assert_eq!(store.latest().unwrap().sequence, 1);
         store.mark_invalid();
-        assert_eq!(store.latest().unwrap().validity, RuntimeSampleState::Invalid);
+        assert_eq!(
+            store.latest().unwrap().validity,
+            RuntimeSampleState::Invalid
+        );
     }
 }
