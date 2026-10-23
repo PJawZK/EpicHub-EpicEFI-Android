@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock, Mutex};
 
+use crate::engine::{confirm_nonvolatile_page, invalidate_nonvolatile_page};
+use crate::nonvolatile_page_provenance::NonvolatilePageProof;
 use crate::engine_guarded_burn::{
     EngineGuardedPageBurnError, EngineGuardedPageBurnPlan, plan_selected_engine_guarded_page_burn,
 };
@@ -23,6 +25,7 @@ pub enum GuardedBurnPlanStoreError {
     InvalidProofStage,
     Authority(EngineGuardedPageBurnError),
     Transport(GuardedPageBurnTransportError),
+    EngineStateChanged,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -191,6 +194,9 @@ pub fn stage_guarded_burn_plan(
         &entry.plan,
     )
     .map_err(GuardedBurnPlanStoreError::Transport)?;
+    if stage == GuardedBurnStage::Burn && !invalidate_nonvolatile_page(engine_handle, entry.plan.page) {
+        return Err(GuardedBurnPlanStoreError::EngineStateChanged);
+    }
     *proof = match stage {
         GuardedBurnStage::Burn => BurnProofState::BurnStaged,
         GuardedBurnStage::Crc => BurnProofState::CrcStaged,
@@ -246,6 +252,19 @@ pub fn verify_guarded_burn_crc(
         response_frame,
     )
     .map_err(GuardedBurnPlanStoreError::Transport)?;
+    // Only evidence from the ordered native ACK -> CRC sequence may be recorded.
+    // Engine ownership checks the exact page/revision again under the engine mutex,
+    // rejecting replacement or local edits between CRC verification and this write.
+    let record = NonvolatilePageProof::from_guarded_burn(
+        entry.plan.profile_generation,
+        entry.plan.draft_revision,
+        entry.plan.page,
+        entry.plan.expected_page_crc32,
+        runtime_signature_response,
+    );
+    if !confirm_nonvolatile_page(engine_handle, record, &entry.plan.expected_page_bytes) {
+        return Err(GuardedBurnPlanStoreError::EngineStateChanged);
+    }
     *proof = BurnProofState::PostBurnCrcVerified;
     Ok(())
 }
