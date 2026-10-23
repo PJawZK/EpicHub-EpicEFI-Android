@@ -29,6 +29,7 @@ mod jni_guarded_ram_write;
 mod jni_guarded_write_batch;
 mod jni_guarded_write_batch_reconciliation;
 mod jni_live_tune_install;
+mod jni_nonvolatile_page_state;
 mod jni_profile_registry;
 mod jni_ram_source_state;
 mod jni_readonly_page_acquisition;
