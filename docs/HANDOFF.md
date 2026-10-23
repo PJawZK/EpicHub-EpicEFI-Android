@@ -1,5 +1,17 @@
 # EpicHub Current Handoff
 
+## Qualified read-only nonvolatile projection — 2026-10-23
+
+The native page-scoped Burn evidence projection is qualified at `84b77de1788bd932875bc116115af7844361f498` by Foundation [39914326976](https://github.com/PJawZK/EpicHub-EpicEFI-Android/actions/runs/39914326976), and this exact SHA was promoted to `main`.
+
+Implemented: a versioned 48-byte `NVP1` native snapshot, read-only JNI `fillNonvolatilePageState`, Kotlin `NonvolatilePageState` decoder, and `NativeEngine.readNonvolatilePageState(page, verifiedSignature)`. States are **Unknown**, **PostBurnCrcVerified** (evidence from the existing ordered guarded Burn ACK + post-Burn CRC contract) and **StaleEvidence**. Projection is read under the engine registry lock and compares signature fingerprint, page CRC, profile generation, current revision and live-source origin. Unknown carries no CRC evidence. Kotlin/native malformed-state tests qualified. No Burn UI was added; the Android UI does not yet consume this API.
+
+Do **not** treat post-Burn CRC evidence as verified flash contents after a power cycle. The public read method accepts a signature provided by its caller: only use it in UI once the active verified connection/session owner supplies and gates the current signature, and connection teardown invalidates/prohibits stale displays. Independent physical ECU tests and explicit reconnect/disconnect authority are still outstanding. The snapshot's session epoch describes the current engine session and is not an externally validated ECU identity. The immediate next safety work is binding this read-only projection to the retained Android live connection owner, checking source teardown and interleavings, then proceeding to generic continuous telemetry, live gauges and full tuning controls. EpicScope remains the Analyzer.
+
+The documentation-only commit adding this note must pass Foundation at its own exact SHA before promotion.
+
+---
+
 ## Qualified Burn source-epoch safety checkpoint — 2026-10-23
 
 Foundation run [39912522960](https://github.com/PJawZK/EpicHub-EpicEFI-Android/actions/runs/39912522960) succeeded at commit `c7445fe4e5410a64fda704ec10023597edf86304`, and `main` was fast-forwarded to that exact SHA. The guarded native Burn plan now captures the engine tune-session epoch, rejects equal-byte source reinstallation before Burn or after Burn ACK, and requires the epoch again before recording page persistence evidence. Native regressions passed. No Burn UI or hardware testing was introduced.
