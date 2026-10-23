@@ -530,7 +530,8 @@ rpm = scalar, F32, 0, "RPM", 1, 0
             ))
         );
         assert_eq!(
-            second.complete(&current, new_token, 12, &frame(800.0))
+            second
+                .complete(&current, new_token, 12, &frame(800.0))
                 .unwrap()
                 .samples[0]
                 .value,
