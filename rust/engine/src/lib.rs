@@ -52,6 +52,7 @@ pub mod ram_source_provenance;
 pub mod readonly_page_acquisition;
 pub mod resolved_profile_source;
 pub mod runtime_channel_decode;
+pub mod runtime_definition_catalog;
 pub mod runtime_identity_probe;
 #[cfg(test)]
 mod runtime_probe_selection_tests;
