@@ -26,10 +26,20 @@ pub enum GuardedBurnPlanStoreError {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum GuardedBurnStage { Burn, Crc }
+pub enum GuardedBurnStage {
+    Burn,
+    Crc,
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum BurnProofState { Planned, BurnStaged, BurnAckVerified, CrcStaged, PostBurnCrcVerified, Closed }
+enum BurnProofState {
+    Planned,
+    BurnStaged,
+    BurnAckVerified,
+    CrcStaged,
+    PostBurnCrcVerified,
+    Closed,
+}
 
 struct GuardedBurnEntry {
     plan: EngineGuardedPageBurnPlan,
@@ -55,10 +65,13 @@ impl GuardedBurnPlanStore {
             return 0;
         }
         self.next_handle += 1;
-        self.plans.insert(handle, Arc::new(GuardedBurnEntry {
-            plan,
-            proof: Mutex::new(BurnProofState::Planned),
-        }));
+        self.plans.insert(
+            handle,
+            Arc::new(GuardedBurnEntry {
+                plan,
+                proof: Mutex::new(BurnProofState::Planned),
+            }),
+        );
         handle
     }
 
@@ -76,10 +89,7 @@ impl GuardedBurnPlanStore {
         i32::try_from(self.plans.len()).unwrap_or(i32::MAX)
     }
 
-    pub fn get(
-        &self,
-        handle: i64,
-    ) -> Result<Arc<GuardedBurnEntry>, GuardedBurnPlanStoreError> {
+    pub fn get(&self, handle: i64) -> Result<Arc<GuardedBurnEntry>, GuardedBurnPlanStoreError> {
         self.plans
             .get(&handle)
             .cloned()
@@ -170,11 +180,17 @@ pub fn stage_guarded_burn_plan(
         GuardedBurnStage::Burn => BurnProofState::Planned,
         GuardedBurnStage::Crc => BurnProofState::BurnAckVerified,
     };
-    if *proof != expected { return Err(GuardedBurnPlanStoreError::InvalidProofStage); }
+    if *proof != expected {
+        return Err(GuardedBurnPlanStoreError::InvalidProofStage);
+    }
     let staged = stage_selected_engine_guarded_page_burn(
-        engine_handle, registry_handle, runtime_signature_response,
-        max_signature_response_bytes, &entry.plan,
-    ).map_err(GuardedBurnPlanStoreError::Transport)?;
+        engine_handle,
+        registry_handle,
+        runtime_signature_response,
+        max_signature_response_bytes,
+        &entry.plan,
+    )
+    .map_err(GuardedBurnPlanStoreError::Transport)?;
     *proof = match stage {
         GuardedBurnStage::Burn => BurnProofState::BurnStaged,
         GuardedBurnStage::Crc => BurnProofState::CrcStaged,
@@ -196,9 +212,14 @@ pub fn verify_guarded_burn_ack(
         return Err(GuardedBurnPlanStoreError::InvalidProofStage);
     }
     verify_selected_engine_guarded_page_burn_ack(
-        engine_handle, registry_handle, runtime_signature_response,
-        max_signature_response_bytes, &entry.plan, response_frame,
-    ).map_err(GuardedBurnPlanStoreError::Transport)?;
+        engine_handle,
+        registry_handle,
+        runtime_signature_response,
+        max_signature_response_bytes,
+        &entry.plan,
+        response_frame,
+    )
+    .map_err(GuardedBurnPlanStoreError::Transport)?;
     *proof = BurnProofState::BurnAckVerified;
     Ok(())
 }
@@ -217,9 +238,14 @@ pub fn verify_guarded_burn_crc(
         return Err(GuardedBurnPlanStoreError::InvalidProofStage);
     }
     verify_selected_engine_guarded_page_burn_crc(
-        engine_handle, registry_handle, runtime_signature_response,
-        max_signature_response_bytes, &entry.plan, response_frame,
-    ).map_err(GuardedBurnPlanStoreError::Transport)?;
+        engine_handle,
+        registry_handle,
+        runtime_signature_response,
+        max_signature_response_bytes,
+        &entry.plan,
+        response_frame,
+    )
+    .map_err(GuardedBurnPlanStoreError::Transport)?;
     *proof = BurnProofState::PostBurnCrcVerified;
     Ok(())
 }
@@ -341,8 +367,15 @@ table = valuesTable, valuesMap, "Values", 1
                 page: 1,
             }
         );
-        let staged =
-            stage_guarded_burn_plan(handle, engine, registry, SIGNATURE.as_bytes(), 256, GuardedBurnStage::Burn).unwrap();
+        let staged = stage_guarded_burn_plan(
+            handle,
+            engine,
+            registry,
+            SIGNATURE.as_bytes(),
+            256,
+            GuardedBurnStage::Burn,
+        )
+        .unwrap();
         assert_eq!(staged.burn.expected_response_size, 7);
 
         close_guarded_burn_plan(handle);
@@ -373,7 +406,14 @@ table = valuesTable, valuesMap, "Values", 1
         .unwrap();
 
         assert!(matches!(
-            stage_guarded_burn_plan(handle, engine, registry, SIGNATURE.as_bytes(), 256, GuardedBurnStage::Burn),
+            stage_guarded_burn_plan(
+                handle,
+                engine,
+                registry,
+                SIGNATURE.as_bytes(),
+                256,
+                GuardedBurnStage::Burn
+            ),
             Err(GuardedBurnPlanStoreError::Transport(
                 GuardedPageBurnTransportError::Authority(
                     EngineGuardedPageBurnError::RamNotConfirmedForCurrentDraft { .. }
@@ -397,8 +437,15 @@ table = valuesTable, valuesMap, "Values", 1
             1,
         )
         .unwrap();
-        let staged =
-            stage_guarded_burn_plan(handle, engine, registry, SIGNATURE.as_bytes(), 256, GuardedBurnStage::Burn).unwrap();
+        let staged = stage_guarded_burn_plan(
+            handle,
+            engine,
+            registry,
+            SIGNATURE.as_bytes(),
+            256,
+            GuardedBurnStage::Burn,
+        )
+        .unwrap();
 
         assert_eq!(
             verify_guarded_burn_ack(
@@ -412,8 +459,14 @@ table = valuesTable, valuesMap, "Values", 1
             Ok(())
         );
         stage_guarded_burn_plan(
-            handle, engine, registry, SIGNATURE.as_bytes(), 256, GuardedBurnStage::Crc,
-        ).unwrap();
+            handle,
+            engine,
+            registry,
+            SIGNATURE.as_bytes(),
+            256,
+            GuardedBurnStage::Crc,
+        )
+        .unwrap();
         assert_eq!(
             verify_guarded_burn_crc(
                 handle,
@@ -435,8 +488,13 @@ table = valuesTable, valuesMap, "Values", 1
     fn crc_cannot_verify_or_stage_before_burn_ack() {
         let (engine, registry) = live_engine();
         let handle = create_selected_engine_guarded_burn_plan(
-            engine, registry, SIGNATURE.as_bytes(), 256, 1,
-        ).unwrap();
+            engine,
+            registry,
+            SIGNATURE.as_bytes(),
+            256,
+            1,
+        )
+        .unwrap();
         let crc = response_frame(0, &crc32_ieee(&source_page()).to_be_bytes());
 
         assert_eq!(
@@ -445,7 +503,12 @@ table = valuesTable, valuesMap, "Values", 1
         );
         assert_eq!(
             stage_guarded_burn_plan(
-                handle, engine, registry, SIGNATURE.as_bytes(), 256, GuardedBurnStage::Crc,
+                handle,
+                engine,
+                registry,
+                SIGNATURE.as_bytes(),
+                256,
+                GuardedBurnStage::Crc,
             ),
             Err(GuardedBurnPlanStoreError::InvalidProofStage)
         );
@@ -458,20 +521,40 @@ table = valuesTable, valuesMap, "Values", 1
     fn proof_stage_is_one_shot_and_rejects_duplicates_and_closed_handles() {
         let (engine, registry) = live_engine();
         let handle = create_selected_engine_guarded_burn_plan(
-            engine, registry, SIGNATURE.as_bytes(), 256, 1,
-        ).unwrap();
+            engine,
+            registry,
+            SIGNATURE.as_bytes(),
+            256,
+            1,
+        )
+        .unwrap();
         let burn = stage_guarded_burn_plan(
-            handle, engine, registry, SIGNATURE.as_bytes(), 256, GuardedBurnStage::Burn,
-        ).unwrap();
+            handle,
+            engine,
+            registry,
+            SIGNATURE.as_bytes(),
+            256,
+            GuardedBurnStage::Burn,
+        )
+        .unwrap();
         assert_eq!(
             stage_guarded_burn_plan(
-                handle, engine, registry, SIGNATURE.as_bytes(), 256, GuardedBurnStage::Burn,
+                handle,
+                engine,
+                registry,
+                SIGNATURE.as_bytes(),
+                256,
+                GuardedBurnStage::Burn,
             ),
             Err(GuardedBurnPlanStoreError::InvalidProofStage)
         );
         assert_eq!(
             verify_guarded_burn_ack(
-                handle, engine, registry, SIGNATURE.as_bytes(), 256,
+                handle,
+                engine,
+                registry,
+                SIGNATURE.as_bytes(),
+                256,
                 &response_frame(0, &[]),
             ),
             Err(GuardedBurnPlanStoreError::Transport(
@@ -481,41 +564,74 @@ table = valuesTable, valuesMap, "Values", 1
             ))
         );
         verify_guarded_burn_ack(
-            handle, engine, registry, SIGNATURE.as_bytes(), 256,
+            handle,
+            engine,
+            registry,
+            SIGNATURE.as_bytes(),
+            256,
             &response_frame(BURN_OK_STATUS, &[]),
-        ).unwrap();
+        )
+        .unwrap();
         assert_eq!(
             verify_guarded_burn_ack(
-                handle, engine, registry, SIGNATURE.as_bytes(), 256,
+                handle,
+                engine,
+                registry,
+                SIGNATURE.as_bytes(),
+                256,
                 &response_frame(BURN_OK_STATUS, &[]),
             ),
             Err(GuardedBurnPlanStoreError::InvalidProofStage)
         );
         let _ = burn;
         let crc = stage_guarded_burn_plan(
-            handle, engine, registry, SIGNATURE.as_bytes(), 256, GuardedBurnStage::Crc,
-        ).unwrap();
+            handle,
+            engine,
+            registry,
+            SIGNATURE.as_bytes(),
+            256,
+            GuardedBurnStage::Crc,
+        )
+        .unwrap();
         verify_guarded_burn_crc(
-            handle, engine, registry, SIGNATURE.as_bytes(), 256,
+            handle,
+            engine,
+            registry,
+            SIGNATURE.as_bytes(),
+            256,
             &response_frame(0, &crc.expected_page_crc32.to_be_bytes()),
-        ).unwrap();
+        )
+        .unwrap();
         assert_eq!(
             verify_guarded_burn_crc(
-                handle, engine, registry, SIGNATURE.as_bytes(), 256,
+                handle,
+                engine,
+                registry,
+                SIGNATURE.as_bytes(),
+                256,
                 &response_frame(0, &crc.expected_page_crc32.to_be_bytes()),
             ),
             Err(GuardedBurnPlanStoreError::InvalidProofStage)
         );
         assert_eq!(
             stage_guarded_burn_plan(
-                handle, engine, registry, SIGNATURE.as_bytes(), 256, GuardedBurnStage::Burn,
+                handle,
+                engine,
+                registry,
+                SIGNATURE.as_bytes(),
+                256,
+                GuardedBurnStage::Burn,
             ),
             Err(GuardedBurnPlanStoreError::InvalidProofStage)
         );
         close_guarded_burn_plan(handle);
         assert_eq!(
             verify_guarded_burn_ack(
-                handle, engine, registry, SIGNATURE.as_bytes(), 256,
+                handle,
+                engine,
+                registry,
+                SIGNATURE.as_bytes(),
+                256,
                 &response_frame(BURN_OK_STATUS, &[]),
             ),
             Err(GuardedBurnPlanStoreError::InvalidHandle)
