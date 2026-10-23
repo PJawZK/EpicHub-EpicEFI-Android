@@ -1,5 +1,24 @@
 # EpicHub Current Handoff
 
+## Qualified read-only output request contract and firmware-source audit — 2026-10-23
+
+**Qualified production SHA:** `61fd7d371e646b586dc2a5085f98e7645d738b46`; Foundation [39927675749](https://github.com/PJawZK/EpicHub-EpicEFI-Android/actions/runs/39927675749) **success**, fast-forwarded to `main`.
+
+New native module `rust/engine/src/runtime_output_read_plan.rs` represents a **read-only protocol plan**, not a live transport operation. It accepts only exact resolved `ochGetCommand = "O%2o%2c"` plus `msEnvelope_1.0`, and bounds output offsets/counts against the compiled output block length and the underlying 16-bit request fields. The request body is `O` + 16-bit little-endian offset + 16-bit little-endian count in the existing ms-envelope CRC32 request codec. Responses must pass the existing envelope CRC and status checks and carry exactly the requested payload length. Tests cover request bytes, bounds, unsupported command/envelope, error statuses, CRC corruption, and short payloads. No USB polling or Dashboard changes were made.
+
+**Firmware-source evidence (separate repository):** `PJawZK/epicefi_fw_jzfork`, default branch `master`, source paths:
+- `firmware/tunerstudio/tunerstudio.template_zh.ini` [OutputChannels] declares `ochGetCommand = "O%2o%2c"`, `ochBlockSize = @@TS_TOTAL_OUTPUT_SIZE@@`, generated `@@OUTPUTS_SECTION_FROM_FILE@@` and multiple calculated `{ ... }` channels.
+- `firmware/console/binary/tunerstudio.cpp` `TunerStudio::handleCrcCommand` reads offset/count via native 16-bit `memcpy` and dispatches `TS_OUTPUT_COMMAND`; this supports the fixed little-endian output request shape for the examined firmware build target. Do **not** generalize that assumption to other ECU protocols.
+- `firmware/console/binary/tunerstudio_commands.cpp` `TunerStudio::cmdOutputChannels` checks offset + count against `TS_TOTAL_OUTPUT_SIZE`, writes `TS_RESPONSE_OK` plus exactly the requested output bytes through CRC-framed response.
+- `firmware/console/binary/output_channels.txt` is generator input, **not** a final INI. `firmware/tools/ts_ini_testdata/mini.ini` is a synthetic validator fixture.
+- `firmware/tunerstudio/readme.md` documents generating final `rusefi*.ini` with `ConfigDefinition.jar` from project and board inputs (`gen_config.bat` on Windows). Fully generated Mega144H7 and uaEFI INIs were **not present as tracked files** in the inspected fork; no release assets were available in that fork's GitHub release listing.
+
+**Outstanding:** obtain reproducible *fully generated* Mega144H7 and uaEFI INI outputs with firmware SHA/signature, complete the compatibility matrix (scalar/bits/expressions/arrays/metadata/scattered commands), couple selected profile + compiled runtime catalog + command plan atomically, add bounded acquired frame assembly and failure/stale/transport cancellation semantics, then share live data with Dashboard and Tuner. Real ECU validation stays separate and last, respecting one-ECU hardware constraints. Treat `ochGetCommand` and ms-envelope compatibility as per-profile capabilities, not global defaults.
+
+The documentation-only commit adding this checkpoint requires its own Foundation qualification.
+
+---
+
 ## Qualified firmware-fixture runtime bitfield support — 2026-10-23
 
 Foundation [39924037372](https://github.com/PJawZK/EpicHub-EpicEFI-Android/actions/runs/39924037372) passed at **exact SHA `2b5d9385b4e82eae8985d4b30475d26166e0fa1f`**, promoted to `main`. Native `runtime_channel_decode.rs` now decodes unsigned 8/16/32-bit inclusive `bits` ranges with explicit range bounds and byte order. `runtime_definition_catalog.rs` compiles `bits, U08/U16/U32, offset, [first:last]` entries alongside supported numeric scalars. The fixture-derived tests check `RPMValue` and `miniOch` from `PJawZK/epicefi_fw_jzfork` `firmware/tools/ts_ini_testdata/mini.ini`, plus unsupported `miniFormula = { 100 + 1 }` and invalid bit ranges. Compatibility is verified **for the extracted fixture declaration syntax**, not for complete real generated ECU definitions.
