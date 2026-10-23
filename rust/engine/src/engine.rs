@@ -231,6 +231,9 @@ impl EngineRegistry {
         page: usize,
         signature_response: &[u8],
     ) -> Option<[u8; 48]> {
+        if page == 0 || page > u32::MAX as usize || signature_response.is_empty() {
+            return None;
+        }
         let engine = self.engines.get(&handle)?;
         let mut bytes = [0u8; 48];
         bytes[0..4].copy_from_slice(b"NVP1");
@@ -442,7 +445,7 @@ mod tests {
         assert_eq!(&unknown[0..4], b"NVP1");
         assert_eq!(unknown[4], 0);
         assert_eq!(unknown[5], 1);
-        assert_eq!(registry.nonvolatile_page_snapshot(handle, 0, b"source"), Some(unknown).filter(|_| false));
+        assert_eq!(registry.nonvolatile_page_snapshot(handle, 0, b"source"), None);
         assert_eq!(registry.nonvolatile_page_snapshot(-1, 1, b"source"), None);
     }
 
