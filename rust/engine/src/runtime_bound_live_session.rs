@@ -161,14 +161,13 @@ impl RuntimeBoundLiveSession {
                     active.store.mark_invalid();
                     return Err(BoundRuntimeError::Store(LiveChannelStoreError::NotFresh));
                 }
-                match active.store.publish(snapshot, now_ms) {
-                    Ok(batch) => Ok(batch),
-                    Err(error) => {
-                        // Invalid decoded batches never leave the old batch Fresh.
-                        active.store.mark_invalid();
-                        Err(BoundRuntimeError::Store(error))
-                    }
+                // End the mutable publication borrow before any invalidation,
+                // then fetch the accepted batch from the same bounded store.
+                if let Err(error) = active.store.publish(snapshot, now_ms).map(|_| ()) {
+                    active.store.mark_invalid();
+                    return Err(BoundRuntimeError::Store(error));
                 }
+                Ok(active.store.latest().expect("accepted publication must retain a batch"))
             }
             Err(error) => {
                 match error {
