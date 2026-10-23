@@ -51,10 +51,10 @@ pub mod profile_registry_store;
 pub mod ram_source_provenance;
 pub mod readonly_page_acquisition;
 pub mod resolved_profile_source;
+pub mod runtime_acquisition_session;
 pub mod runtime_channel_decode;
 pub mod runtime_definition_catalog;
 pub mod runtime_identity_probe;
-pub mod runtime_acquisition_session;
 pub mod runtime_output_read_plan;
 #[cfg(test)]
 mod runtime_probe_selection_tests;
