@@ -1,5 +1,24 @@
 # EpicHub Current Handoff
 
+## Qualified Android-owned runtime candidate bridge — 2026-10-23
+
+**Exact qualified implementation SHA:** `87fb1e35e876ba7bb75fe3f7bf0031a334253cc2`. Full [Foundation 39945006875](https://github.com/PJawZK/EpicHub-EpicEFI-Android/actions/runs/39945006875) **success** (Rust formatting, Clippy, tests; Android JVM tests, debug/performance/macrobenchmark build and packaging gates). Verified `current-work` was 10 commits ahead and 0 behind `main`; fast-forwarded `main` to this SHA. This handoff-only commit must separately qualify at its exact SHA before promoting.
+
+### New verified boundary
+
+Added `rust/engine/src/jni_runtime_candidate.rs` and global mutex-serialized registry bind/revoke wrappers. Native JNI resolves the selected *registered compiled bundle* using signature bytes and expected generation, returning a positive, process-unique candidate epoch or a negative rejection code; revocation invalidates the native candidate. JNI performs **no USB IO**, accepts no arbitrary runtime channel definitions, and publishes no real telemetry. Added Kotlin `RuntimeCandidateBindingOperation` and `NativeRegistryRuntimeCandidateBinding` to dispatch this JNI only from `LiveTuneConnectionOwner` after an exact definition-query/profile selection. The retained `AndroidUsbLiveConnectionSessionOwner` binds the candidate following successful identity selection, retains an internal typed `Bound(epoch)` vs `Unavailable(reason)` candidate status and revokes on disconnect, reconnect or owner closure. An unsupported runtime definition does **not** reject an otherwise authorized tune connection. Connection, load, RAM Write, Burn entrypoints and disconnect now hold `EngineAuthoritySerialization` across the existing single USB owner. Tests with a fake USB port/candidate binder check success, unsupported runtime candidate, reconnect rejection cleanup, profile owner closure and stale display authority.
+
+### Crucial limitations — do not mistake this for Task 1 completion
+
+- This is the **candidate-bind/revoke JNI subgate**, not the complete acquisition/publication boundary. There is no JNI `begin/complete/latest` read model, no USB `transactExact` runtime polling, no versioned live batch projection, no Dashboard/Tuner live channel consumption, and no ECU hardware testing.
+- `RuntimeCandidateBindingResult.Bound` is **not live data**; it means only the active selected definition has supported runtime protocol and channels in the current limited subset. Existing four-channel synthetic ABI remains unchanged; Burn UI stays disabled.
+- Offline Android tests inject a fake binding operation, and Rust tests independently exercise registry-bound native runtime. A combined JNI+fake-port runtime transaction/interleaving proof is **still required**. No generated real Mega144H7/uaEFI output INI corpus is yet qualified.
+- Closing a selected profile registry synchronously revokes its native candidate; a stale Android USB channel is closed when the retained connection owner next reconciles its dead authority (for example, next load). Proactive physical channel cleanup on catalog replacement/USB detach and handling native bridge exceptions or transport IO failure remain separate ownership hardening gates.
+
+**Next step in Task 1 (do not skip):** Implement an explicitly connection-owned, bounded runtime read cycle: expose the registry-owned request plan and token through versioned batched JNI; issue exactly one `transactExact` on the retained USB channel; complete with the same token and bound epoch; return copy-bounded real sample batches with source/generation/validity/time/freshness; reject CRC/status/length/timeouts, stale callbacks, disconnect/permission loss, profile replacements and concurrent tune operations. Add deterministic fake-port tests for full success and every failure/interleaving class, then exact-head Foundation qualification. No other USB owner, unguarded poller or synthetic/live blending. Physical ECU work stays last; EpicScope continues owning the Analyzer.
+
+---
+
 ## Qualified registry-owned runtime candidate — 2026-10-23
 
 **Exact production implementation SHA:** `2c3467d510e8ea396eface7974a9f51af5b94dd9` on `main`, qualified by complete [Foundation 39941582220](https://github.com/PJawZK/EpicHub-EpicEFI-Android/actions/runs/39941582220) **success**. Both Android and Rust build/test/lint/signature/packaging gates passed. The fast-forward from prior `main` succeeded (3 commits ahead, 0 behind). The documentation update carrying this paragraph is a **separate CI checkpoint** and is not qualified until its own exact SHA succeeds.
