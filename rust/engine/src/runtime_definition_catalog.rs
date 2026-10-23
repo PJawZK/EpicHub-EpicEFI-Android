@@ -299,10 +299,8 @@ afr = scalar, F32, 8, "AFR", 1, 0
 
     #[test]
     fn unsupported_channels_fail_closed_instead_of_partial_catalog() {
-        let unsupported = DEFINITION.replace(
-            "afr = scalar, F32, 8, \"AFR\", 1, 0",
-            "afr = { 100 + 1 }",
-        );
+        let unsupported =
+            DEFINITION.replace("afr = scalar, F32, 8, \"AFR\", 1, 0", "afr = { 100 + 1 }");
         assert_eq!(
             compile_runtime_output_channels(&unsupported).unwrap_err(),
             RuntimeDefinitionError::UnsupportedChannel("afr".to_string())
