@@ -30,29 +30,29 @@ impl RuntimeOutputReadPlan {
         frame_length: usize,
         envelope: &str,
     ) -> Result<Self, RuntimeOutputReadError> {
-        if envelope != "msEnvelope_1.0"
-            || och_get_command != "O%2o%2c"
-        {
+        if envelope != "msEnvelope_1.0" || och_get_command != "O%2o%2c" {
             return Err(RuntimeOutputReadError::UnsupportedCommand);
         }
         if frame_length == 0 || frame_length > MAX_RUNTIME_FRAME_BYTES {
             return Err(RuntimeOutputReadError::InvalidFrameLength);
         }
-        Ok(Self { command: b'O', frame_length })
+        Ok(Self {
+            command: b'O',
+            frame_length,
+        })
     }
 
     pub fn frame_length(&self) -> usize {
         self.frame_length
     }
 
-    pub fn request(
-        &self,
-        offset: usize,
-        count: usize,
-    ) -> Result<Vec<u8>, RuntimeOutputReadError> {
-        if count == 0 || count > u16::MAX as usize
+    pub fn request(&self, offset: usize, count: usize) -> Result<Vec<u8>, RuntimeOutputReadError> {
+        if count == 0
+            || count > u16::MAX as usize
             || offset > u16::MAX as usize
-            || offset.checked_add(count).is_none_or(|end| end > self.frame_length)
+            || offset
+                .checked_add(count)
+                .is_none_or(|end| end > self.frame_length)
         {
             return Err(RuntimeOutputReadError::InvalidRange);
         }
@@ -73,10 +73,12 @@ impl RuntimeOutputReadPlan {
         if expected_count == 0 || expected_count > self.frame_length {
             return Err(RuntimeOutputReadError::InvalidRange);
         }
-        let decoded = decode_ms_envelope_response(frame)
-            .map_err(RuntimeOutputReadError::Envelope)?;
+        let decoded =
+            decode_ms_envelope_response(frame).map_err(RuntimeOutputReadError::Envelope)?;
         if decoded.status != 0 {
-            return Err(RuntimeOutputReadError::UnexpectedResponseStatus(decoded.status));
+            return Err(RuntimeOutputReadError::UnexpectedResponseStatus(
+                decoded.status,
+            ));
         }
         if decoded.payload.len() != expected_count {
             return Err(RuntimeOutputReadError::WrongPayloadLength {
@@ -115,21 +117,53 @@ mod tests {
     #[test]
     fn rejects_range_overflow_oversize_and_unsupported_templates() {
         let plan = RuntimeOutputReadPlan::compile("O%2o%2c", 80, "msEnvelope_1.0").unwrap();
-        assert_eq!(plan.request(79, 2), Err(RuntimeOutputReadError::InvalidRange));
-        assert_eq!(plan.request(0, 0), Err(RuntimeOutputReadError::InvalidRange));
-        assert_eq!(plan.request(usize::MAX, 1), Err(RuntimeOutputReadError::InvalidRange));
-        assert_eq!(RuntimeOutputReadPlan::compile("O", 80, "msEnvelope_1.0"), Err(RuntimeOutputReadError::UnsupportedCommand));
-        assert_eq!(RuntimeOutputReadPlan::compile("O%2o%2c", 80, "other"), Err(RuntimeOutputReadError::UnsupportedCommand));
+        assert_eq!(
+            plan.request(79, 2),
+            Err(RuntimeOutputReadError::InvalidRange)
+        );
+        assert_eq!(
+            plan.request(0, 0),
+            Err(RuntimeOutputReadError::InvalidRange)
+        );
+        assert_eq!(
+            plan.request(usize::MAX, 1),
+            Err(RuntimeOutputReadError::InvalidRange)
+        );
+        assert_eq!(
+            RuntimeOutputReadPlan::compile("O", 80, "msEnvelope_1.0"),
+            Err(RuntimeOutputReadError::UnsupportedCommand)
+        );
+        assert_eq!(
+            RuntimeOutputReadPlan::compile("O%2o%2c", 80, "other"),
+            Err(RuntimeOutputReadError::UnsupportedCommand)
+        );
     }
 
     #[test]
     fn rejects_bad_crc_status_and_mismatched_payload_length() {
         let plan = RuntimeOutputReadPlan::compile("O%2o%2c", 80, "msEnvelope_1.0").unwrap();
-        assert_eq!(plan.response(&fixture_response(0, &[3, 4]), 2).unwrap(), vec![3, 4]);
-        assert_eq!(plan.response(&fixture_response(0x82, &[3, 4]), 2), Err(RuntimeOutputReadError::UnexpectedResponseStatus(0x82)));
-        assert_eq!(plan.response(&fixture_response(0, &[3]), 2), Err(RuntimeOutputReadError::WrongPayloadLength { expected: 2, actual: 1 }));
+        assert_eq!(
+            plan.response(&fixture_response(0, &[3, 4]), 2).unwrap(),
+            vec![3, 4]
+        );
+        assert_eq!(
+            plan.response(&fixture_response(0x82, &[3, 4]), 2),
+            Err(RuntimeOutputReadError::UnexpectedResponseStatus(0x82))
+        );
+        assert_eq!(
+            plan.response(&fixture_response(0, &[3]), 2),
+            Err(RuntimeOutputReadError::WrongPayloadLength {
+                expected: 2,
+                actual: 1
+            })
+        );
         let mut bad_crc = fixture_response(0, &[3, 4]);
         *bad_crc.last_mut().unwrap() ^= 1;
-        assert!(matches!(plan.response(&bad_crc, 2), Err(RuntimeOutputReadError::Envelope(EnvelopeCodecError::CrcMismatch { .. }))));
+        assert!(matches!(
+            plan.response(&bad_crc, 2),
+            Err(RuntimeOutputReadError::Envelope(
+                EnvelopeCodecError::CrcMismatch { .. }
+            ))
+        ));
     }
 }
