@@ -21,14 +21,17 @@ pub enum RuntimeValueType {
     U32,
     S32,
     F32,
+    BitsU8 { first: u8, last: u8 },
+    BitsU16 { first: u8, last: u8 },
+    BitsU32 { first: u8, last: u8 },
 }
 
 impl RuntimeValueType {
     const fn width(self) -> usize {
         match self {
-            Self::U8 | Self::S8 => 1,
-            Self::U16 | Self::S16 => 2,
-            Self::U32 | Self::S32 | Self::F32 => 4,
+            Self::U8 | Self::S8 | Self::BitsU8 { .. } => 1,
+            Self::U16 | Self::S16 | Self::BitsU16 { .. } => 2,
+            Self::U32 | Self::S32 | Self::F32 | Self::BitsU32 { .. } => 4,
         }
     }
 }
@@ -53,6 +56,7 @@ pub enum RuntimeDecodeError {
     InvalidId,
     InvalidScaling(u32),
     OffsetOutsideFrame(u32),
+    InvalidBitRange(u32),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -92,6 +96,17 @@ impl CompiledRuntimeChannelCatalog {
             }
             if !ids.insert(channel.id) {
                 return Err(RuntimeDecodeError::DuplicateId(channel.id));
+            }
+            let bit_range = match channel.value_type {
+                RuntimeValueType::BitsU8 { first, last } => Some((first, last, 8)),
+                RuntimeValueType::BitsU16 { first, last } => Some((first, last, 16)),
+                RuntimeValueType::BitsU32 { first, last } => Some((first, last, 32)),
+                _ => None,
+            };
+            if let Some((first, last, width)) = bit_range
+                && (first > last || last >= width)
+            {
+                return Err(RuntimeDecodeError::InvalidBitRange(channel.id));
             }
             if !channel.scale.is_finite() || !channel.translate.is_finite() {
                 return Err(RuntimeDecodeError::InvalidScaling(channel.id));
@@ -148,6 +163,23 @@ impl CompiledRuntimeChannelCatalog {
                             RuntimeEndian::Little => i32::from_le_bytes(bytes.try_into().unwrap()),
                             RuntimeEndian::Big => i32::from_be_bytes(bytes.try_into().unwrap()),
                         }),
+                        RuntimeValueType::BitsU8 { first, last } => {
+                            extract_unsigned_bits(u32::from(bytes[0]), first, last)
+                        }
+                        RuntimeValueType::BitsU16 { first, last } => {
+                            let raw = match channel.endian {
+                                RuntimeEndian::Little => u16::from_le_bytes([bytes[0], bytes[1]]),
+                                RuntimeEndian::Big => u16::from_be_bytes([bytes[0], bytes[1]]),
+                            };
+                            extract_unsigned_bits(u32::from(raw), first, last)
+                        }
+                        RuntimeValueType::BitsU32 { first, last } => {
+                            let raw = match channel.endian {
+                                RuntimeEndian::Little => u32::from_le_bytes(bytes.try_into().unwrap()),
+                                RuntimeEndian::Big => u32::from_be_bytes(bytes.try_into().unwrap()),
+                            };
+                            extract_unsigned_bits(raw, first, last)
+                        }
                         RuntimeValueType::F32 => f64::from(match channel.endian {
                             RuntimeEndian::Little => f32::from_le_bytes(bytes.try_into().unwrap()),
                             RuntimeEndian::Big => f32::from_be_bytes(bytes.try_into().unwrap()),
@@ -168,6 +200,12 @@ impl CompiledRuntimeChannelCatalog {
                 .collect(),
         )
     }
+}
+
+fn extract_unsigned_bits(raw: u32, first: u8, last: u8) -> f64 {
+    let width = u32::from(last - first) + 1;
+    let mask = if width == 32 { u32::MAX } else { (1u32 << width) - 1 };
+    f64::from((raw >> first) & mask)
 }
 
 #[cfg(test)]
@@ -266,6 +304,38 @@ mod tests {
         assert_eq!(result[0].id, 77);
         assert!(!result[0].valid);
         assert_eq!(result[0].value, 0.0);
+    }
+
+    #[test]
+    fn bitfields_decode_inclusive_ranges_with_16_and_32_bit_endian() {
+        let mut big = descriptor(3, 3, RuntimeValueType::BitsU32 { first: 0, last: 31 });
+        big.endian = RuntimeEndian::Big;
+        let catalog = CompiledRuntimeChannelCatalog::compile(
+            7,
+            vec![
+                descriptor(1, 0, RuntimeValueType::BitsU8 { first: 1, last: 3 }),
+                descriptor(2, 1, RuntimeValueType::BitsU16 { first: 0, last: 15 }),
+                big,
+            ],
+        ).unwrap();
+        let samples = catalog.decode(&[0b0000_1010, 0x34, 0x12, 0, 0, 1, 0]).unwrap();
+        assert_eq!(samples[0].value, 5.0);
+        assert_eq!(samples[1].value, 0x1234 as f32);
+        assert_eq!(samples[2].value, 256.0);
+    }
+
+    #[test]
+    fn invalid_bit_ranges_rejected_before_frame_decoding() {
+        let invalid = descriptor(17, 0, RuntimeValueType::BitsU8 { first: 3, last: 8 });
+        assert_eq!(
+            CompiledRuntimeChannelCatalog::compile(1, vec![invalid]).unwrap_err(),
+            RuntimeDecodeError::InvalidBitRange(17)
+        );
+        let reverse = descriptor(18, 0, RuntimeValueType::BitsU16 { first: 7, last: 2 });
+        assert_eq!(
+            CompiledRuntimeChannelCatalog::compile(2, vec![reverse]).unwrap_err(),
+            RuntimeDecodeError::InvalidBitRange(18)
+        );
     }
 
     #[test]
