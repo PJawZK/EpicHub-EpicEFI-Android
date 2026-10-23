@@ -28,6 +28,7 @@ private const val BURN_CRC_FAILURE = -20
 private const val BURN_INVALID_ARGUMENT = -21
 private const val BURN_REGISTRY_FAILURE = -22
 private const val BURN_INVALID_PROOF_STAGE = -23
+private const val BURN_ENGINE_STATE_CHANGED = -24
 
 private const val STAGE_BURN = 0
 private const val STAGE_CRC = 1
@@ -54,6 +55,7 @@ enum class GuardedBurnRejection {
     CrcVerificationFailure,
     RegistryFailure,
     InvalidProofStage,
+    EngineStateChanged,
     NativeFailure,
 }
 
@@ -336,6 +338,7 @@ class NativeGuardedBurn private constructor(
                 BURN_CRC_FAILURE -> GuardedBurnRejection.CrcVerificationFailure
                 BURN_REGISTRY_FAILURE -> GuardedBurnRejection.RegistryFailure
                 BURN_INVALID_PROOF_STAGE -> GuardedBurnRejection.InvalidProofStage
+                BURN_ENGINE_STATE_CHANGED -> GuardedBurnRejection.EngineStateChanged
                 BURN_NOT_DIRECT,
                 BURN_INVALID_LENGTH,
                 BURN_INVALID_ARGUMENT,
