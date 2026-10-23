@@ -166,33 +166,60 @@ pub fn compile_runtime_output_channels(
             return Err(RuntimeDefinitionError::DuplicateName(name.to_string()));
         }
         let parts = fields(value);
-        if parts.first().copied() != Some("scalar") {
-            return Err(RuntimeDefinitionError::UnsupportedChannel(name.to_string()));
-        }
-        if parts.len() != 6 {
-            return Err(RuntimeDefinitionError::InvalidScalar(name.to_string()));
-        }
-        let value_type = match parts[1] {
-            "U08" => RuntimeValueType::U8,
-            "S08" => RuntimeValueType::S8,
-            "U16" => RuntimeValueType::U16,
-            "S16" => RuntimeValueType::S16,
-            "U32" => RuntimeValueType::U32,
-            "S32" => RuntimeValueType::S32,
-            "F32" => RuntimeValueType::F32,
-            other => return Err(RuntimeDefinitionError::UnsupportedType(other.to_string())),
+        let (value_type, offset, units, scale, translate) = match parts.first().copied() {
+            Some("scalar") => {
+                if parts.len() != 6 {
+                    return Err(RuntimeDefinitionError::InvalidScalar(name.to_string()));
+                }
+                let value_type = match parts[1] {
+                    "U08" => RuntimeValueType::U8,
+                    "S08" => RuntimeValueType::S8,
+                    "U16" => RuntimeValueType::U16,
+                    "S16" => RuntimeValueType::S16,
+                    "U32" => RuntimeValueType::U32,
+                    "S32" => RuntimeValueType::S32,
+                    "F32" => RuntimeValueType::F32,
+                    other => return Err(RuntimeDefinitionError::UnsupportedType(other.to_string())),
+                };
+                let offset = parts[2]
+                    .parse::<usize>()
+                    .map_err(|_| RuntimeDefinitionError::InvalidScalar(name.to_string()))?;
+                let units = unquote(parts[3])
+                    .ok_or_else(|| RuntimeDefinitionError::InvalidScalar(name.to_string()))?;
+                let scale = parts[4]
+                    .parse::<f64>()
+                    .map_err(|_| RuntimeDefinitionError::InvalidScaling(name.to_string()))?;
+                let translate = parts[5]
+                    .parse::<f64>()
+                    .map_err(|_| RuntimeDefinitionError::InvalidScaling(name.to_string()))?;
+                (value_type, offset, units, scale, translate)
+            }
+            Some("bits") => {
+                // TunerStudio inclusive bit ranges; a single bit [n:n] is a flag.
+                // Labels are not numeric scalars and must not be interpreted as offsets.
+                if parts.len() != 4 {
+                    return Err(RuntimeDefinitionError::InvalidScalar(name.to_string()));
+                }
+                let offset = parts[2]
+                    .parse::<usize>()
+                    .map_err(|_| RuntimeDefinitionError::InvalidScalar(name.to_string()))?;
+                let range = parts[3].strip_prefix('[').and_then(|v| v.strip_suffix(']'))
+                    .and_then(|v| v.split_once(':'))
+                    .ok_or_else(|| RuntimeDefinitionError::InvalidScalar(name.to_string()))?;
+                let first = range.0.trim().parse::<u8>()
+                    .map_err(|_| RuntimeDefinitionError::InvalidScalar(name.to_string()))?;
+                let last = range.1.trim().parse::<u8>()
+                    .map_err(|_| RuntimeDefinitionError::InvalidScalar(name.to_string()))?;
+                let value_type = match parts[1] {
+                    "U08" => RuntimeValueType::BitsU8 { first, last },
+                    "U16" => RuntimeValueType::BitsU16 { first, last },
+                    "U32" => RuntimeValueType::BitsU32 { first, last },
+                    other => return Err(RuntimeDefinitionError::UnsupportedType(other.to_string())),
+                };
+                (value_type, offset, "", 1.0, 0.0)
+            }
+            _ => return Err(RuntimeDefinitionError::UnsupportedChannel(name.to_string())),
         };
-        let offset = parts[2]
-            .parse::<usize>()
-            .map_err(|_| RuntimeDefinitionError::InvalidScalar(name.to_string()))?;
-        let units = unquote(parts[3])
-            .ok_or_else(|| RuntimeDefinitionError::InvalidScalar(name.to_string()))?;
-        let scale = parts[4]
-            .parse::<f64>()
-            .map_err(|_| RuntimeDefinitionError::InvalidScaling(name.to_string()))?;
-        let translate = parts[5]
-            .parse::<f64>()
-            .map_err(|_| RuntimeDefinitionError::InvalidScaling(name.to_string()))?;
         let id = stable_name_id(name);
         if id == 0 || !ids.insert(id) {
             return Err(RuntimeDefinitionError::InvalidName(name.to_string()));
@@ -283,6 +310,57 @@ afr = scalar, F32, 8, "AFR", 1, 0
         assert_eq!(
             compile_runtime_output_channels(&duplicate).unwrap_err(),
             RuntimeDefinitionError::DuplicateName("rpm".to_string())
+        );
+    }
+
+    #[test]
+    fn firmware_fork_mini_ini_bitfields_decode_without_board_hardcoding() {
+        // Exact [OutputChannels] wire fields from
+        // PJawZK/epicefi_fw_jzfork firmware/tools/ts_ini_testdata/mini.ini.
+        // The fixture's calculated miniFormula is excluded here, because its
+        // expression evaluation is not yet supported by this decoder.
+        let excerpt = r#"
+[Constants]
+endianness = little
+[OutputChannels]
+RPMValue = bits, U16, 4, [0:15]
+miniOch = bits, U08, 0, [0:1]
+ochGetCommand = "O%2o%2c"
+ochBlockSize = 8
+"#;
+        let catalog = compile_runtime_output_channels(excerpt).unwrap();
+        assert_eq!(catalog.decoder.frame_length(), 8);
+        assert_eq!(catalog.decoder.channel_count(), 2);
+        let samples = catalog.decoder.decode(&[0b0000_0010, 0, 0, 0, 0x20, 0x03, 0, 0]).unwrap();
+        assert_eq!(samples[0].value, 800.0);
+        assert_eq!(samples[1].value, 2.0);
+    }
+
+    #[test]
+    fn actual_mini_ini_formula_is_explicitly_unsupported_not_silently_ignored() {
+        let source = r#"
+[OutputChannels]
+RPMValue = bits, U16, 4, [0:15]
+miniOch = bits, U08, 0, [0:1]
+miniFormula = { 100 + 1 }
+ochGetCommand = "O%2o%2c"
+ochBlockSize = 8
+"#;
+        assert_eq!(
+            compile_runtime_output_channels(source).unwrap_err(),
+            RuntimeDefinitionError::UnsupportedChannel("miniFormula".to_string())
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_bit_ranges_before_decoding() {
+        let malformed = DEFINITION.replace(
+            "afr = scalar, F32, 8, \"AFR\", 1, 0",
+            "afr = bits, U08, 8, [0:8]",
+        );
+        assert_eq!(
+            compile_runtime_output_channels(&malformed).unwrap_err(),
+            RuntimeDefinitionError::Decode(RuntimeDecodeError::InvalidBitRange(stable_name_id("afr")))
         );
     }
 
