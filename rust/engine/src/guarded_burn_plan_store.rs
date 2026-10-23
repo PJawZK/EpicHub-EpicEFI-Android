@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::sync::{Arc, LazyLock, Mutex};
 
 use crate::engine::{confirm_nonvolatile_page, invalidate_nonvolatile_page};
-use crate::nonvolatile_page_provenance::NonvolatilePageProof;
 use crate::engine_guarded_burn::{
     EngineGuardedPageBurnError, EngineGuardedPageBurnPlan, plan_selected_engine_guarded_page_burn,
 };
@@ -11,6 +10,7 @@ use crate::guarded_burn_transport::{
     stage_selected_engine_guarded_page_burn, verify_selected_engine_guarded_page_burn_ack,
     verify_selected_engine_guarded_page_burn_crc,
 };
+use crate::nonvolatile_page_provenance::NonvolatilePageProof;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct GuardedBurnPlanSummary {
@@ -194,7 +194,9 @@ pub fn stage_guarded_burn_plan(
         &entry.plan,
     )
     .map_err(GuardedBurnPlanStoreError::Transport)?;
-    if stage == GuardedBurnStage::Burn && !invalidate_nonvolatile_page(engine_handle, entry.plan.page) {
+    if stage == GuardedBurnStage::Burn
+        && !invalidate_nonvolatile_page(engine_handle, entry.plan.page)
+    {
         return Err(GuardedBurnPlanStoreError::EngineStateChanged);
     }
     *proof = match stage {
@@ -769,19 +771,20 @@ table = valuesTable, valuesMap, "Values", 1
             GuardedBurnStage::Crc,
         )
         .unwrap();
-        assert!(verify_guarded_burn_crc(
-            handle,
-            engine,
-            registry,
-            SIGNATURE.as_bytes(),
-            256,
-            &response_frame(0, &(staged.expected_page_crc32 ^ 1).to_be_bytes()),
-        )
-        .is_err());
+        assert!(
+            verify_guarded_burn_crc(
+                handle,
+                engine,
+                registry,
+                SIGNATURE.as_bytes(),
+                256,
+                &response_frame(0, &(staged.expected_page_crc32 ^ 1).to_be_bytes()),
+            )
+            .is_err()
+        );
         assert_eq!(nonvolatile_page_proof(engine, 1), Some(None));
         close_guarded_burn_plan(handle);
         close_profile_registry(registry);
         close_engine(engine);
     }
-
 }
