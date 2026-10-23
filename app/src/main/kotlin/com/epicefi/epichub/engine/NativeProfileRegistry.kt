@@ -399,6 +399,19 @@ object NativeProfileRegistryBridge {
         System.loadLibrary("epichub_engine")
     }
 
+    /** Returns a positive registry-owned candidate epoch, not live telemetry. */
+    external fun bindRuntimeCandidate(
+        handle: Long,
+        endpointId: String,
+        signature: ByteBuffer,
+        signatureLength: Int,
+        signatureLimit: Int,
+        expectedGeneration: Long,
+    ): Long
+
+    /** Revokes the candidate even when no USB runtime reads have occurred. */
+    external fun disconnectRuntimeCandidate(handle: Long): Int
+
     external fun create(): Long
 
     external fun close(handle: Long)
