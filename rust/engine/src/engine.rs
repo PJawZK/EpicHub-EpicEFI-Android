@@ -188,7 +188,8 @@ impl EngineRegistry {
         if engine.tune_session.profile_generation() != proof.profile_generation
             || engine.tune_session.revision() != proof.draft_revision
             || source.page(proof.page.saturating_sub(1)) != Some(expected_page_bytes)
-            || crate::ms_envelope_codec::crc32_ieee(expected_page_bytes) != proof.expected_page_crc32
+            || crate::ms_envelope_codec::crc32_ieee(expected_page_bytes)
+                != proof.expected_page_crc32
         {
             return false;
         }
@@ -204,7 +205,7 @@ impl EngineRegistry {
             (proof.profile_generation == engine.tune_session.profile_generation()
                 && proof.draft_revision == engine.tune_session.revision()
                 && proof.expected_page_crc32 == crate::ms_envelope_codec::crc32_ieee(bytes))
-                .then(|| proof.clone())
+            .then(|| proof.clone())
         })
     }
 
