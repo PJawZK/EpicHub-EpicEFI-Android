@@ -179,7 +179,9 @@ pub fn compile_runtime_output_channels(
                     "U32" => RuntimeValueType::U32,
                     "S32" => RuntimeValueType::S32,
                     "F32" => RuntimeValueType::F32,
-                    other => return Err(RuntimeDefinitionError::UnsupportedType(other.to_string())),
+                    other => {
+                        return Err(RuntimeDefinitionError::UnsupportedType(other.to_string()));
+                    }
                 };
                 let offset = parts[2]
                     .parse::<usize>()
@@ -203,18 +205,28 @@ pub fn compile_runtime_output_channels(
                 let offset = parts[2]
                     .parse::<usize>()
                     .map_err(|_| RuntimeDefinitionError::InvalidScalar(name.to_string()))?;
-                let range = parts[3].strip_prefix('[').and_then(|v| v.strip_suffix(']'))
+                let range = parts[3]
+                    .strip_prefix('[')
+                    .and_then(|v| v.strip_suffix(']'))
                     .and_then(|v| v.split_once(':'))
                     .ok_or_else(|| RuntimeDefinitionError::InvalidScalar(name.to_string()))?;
-                let first = range.0.trim().parse::<u8>()
+                let first = range
+                    .0
+                    .trim()
+                    .parse::<u8>()
                     .map_err(|_| RuntimeDefinitionError::InvalidScalar(name.to_string()))?;
-                let last = range.1.trim().parse::<u8>()
+                let last = range
+                    .1
+                    .trim()
+                    .parse::<u8>()
                     .map_err(|_| RuntimeDefinitionError::InvalidScalar(name.to_string()))?;
                 let value_type = match parts[1] {
                     "U08" => RuntimeValueType::BitsU8 { first, last },
                     "U16" => RuntimeValueType::BitsU16 { first, last },
                     "U32" => RuntimeValueType::BitsU32 { first, last },
-                    other => return Err(RuntimeDefinitionError::UnsupportedType(other.to_string())),
+                    other => {
+                        return Err(RuntimeDefinitionError::UnsupportedType(other.to_string()));
+                    }
                 };
                 (value_type, offset, "", 1.0, 0.0)
             }
@@ -331,7 +343,10 @@ ochBlockSize = 8
         let catalog = compile_runtime_output_channels(excerpt).unwrap();
         assert_eq!(catalog.decoder.frame_length(), 8);
         assert_eq!(catalog.decoder.channel_count(), 2);
-        let samples = catalog.decoder.decode(&[0b0000_0010, 0, 0, 0, 0x20, 0x03, 0, 0]).unwrap();
+        let samples = catalog
+            .decoder
+            .decode(&[0b0000_0010, 0, 0, 0, 0x20, 0x03, 0, 0])
+            .unwrap();
         assert_eq!(samples[0].value, 800.0);
         assert_eq!(samples[1].value, 2.0);
     }
@@ -360,7 +375,9 @@ ochBlockSize = 8
         );
         assert_eq!(
             compile_runtime_output_channels(&malformed).unwrap_err(),
-            RuntimeDefinitionError::Decode(RuntimeDecodeError::InvalidBitRange(stable_name_id("afr")))
+            RuntimeDefinitionError::Decode(RuntimeDecodeError::InvalidBitRange(stable_name_id(
+                "afr"
+            )))
         );
     }
 
