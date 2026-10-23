@@ -64,10 +64,7 @@ impl GuardedBurnPlanStore {
 
     pub fn close(&mut self, handle: i64) {
         if handle != 0 {
-            if let Some(entry) = self.plans.remove(&handle) {
-                let mut proof = entry.proof.lock().unwrap_or_else(|p| p.into_inner());
-                *proof = BurnProofState::Closed;
-            }
+            self.plans.remove(&handle);
         }
     }
 
@@ -129,7 +126,13 @@ pub fn create_selected_engine_guarded_burn_plan(
 }
 
 pub fn close_guarded_burn_plan(handle: i64) {
-    with_store(|store| store.close(handle));
+    // Remove the handle under the global lock, then wait for any in-flight
+    // stage on its per-handle proof lock without holding the global store mutex.
+    let entry = with_store(|store| store.plans.remove(&handle));
+    if let Some(entry) = entry {
+        let mut proof = entry.proof.lock().unwrap_or_else(|p| p.into_inner());
+        *proof = BurnProofState::Closed;
+    }
 }
 
 pub fn guarded_burn_plan_is_alive(handle: i64) -> bool {
@@ -424,6 +427,99 @@ table = valuesTable, valuesMap, "Values", 1
         );
 
         close_guarded_burn_plan(handle);
+        close_profile_registry(registry);
+        close_engine(engine);
+    }
+
+    #[test]
+    fn crc_cannot_verify_or_stage_before_burn_ack() {
+        let (engine, registry) = live_engine();
+        let handle = create_selected_engine_guarded_burn_plan(
+            engine, registry, SIGNATURE.as_bytes(), 256, 1,
+        ).unwrap();
+        let crc = response_frame(0, &crc32_ieee(&source_page()).to_be_bytes());
+
+        assert_eq!(
+            verify_guarded_burn_crc(handle, engine, registry, SIGNATURE.as_bytes(), 256, &crc),
+            Err(GuardedBurnPlanStoreError::InvalidProofStage)
+        );
+        assert_eq!(
+            stage_guarded_burn_plan(
+                handle, engine, registry, SIGNATURE.as_bytes(), 256, GuardedBurnStage::Crc,
+            ),
+            Err(GuardedBurnPlanStoreError::InvalidProofStage)
+        );
+        close_guarded_burn_plan(handle);
+        close_profile_registry(registry);
+        close_engine(engine);
+    }
+
+    #[test]
+    fn proof_stage_is_one_shot_and_rejects_duplicates_and_closed_handles() {
+        let (engine, registry) = live_engine();
+        let handle = create_selected_engine_guarded_burn_plan(
+            engine, registry, SIGNATURE.as_bytes(), 256, 1,
+        ).unwrap();
+        let burn = stage_guarded_burn_plan(
+            handle, engine, registry, SIGNATURE.as_bytes(), 256, GuardedBurnStage::Burn,
+        ).unwrap();
+        assert_eq!(
+            stage_guarded_burn_plan(
+                handle, engine, registry, SIGNATURE.as_bytes(), 256, GuardedBurnStage::Burn,
+            ),
+            Err(GuardedBurnPlanStoreError::InvalidProofStage)
+        );
+        assert_eq!(
+            verify_guarded_burn_ack(
+                handle, engine, registry, SIGNATURE.as_bytes(), 256,
+                &response_frame(0, &[]),
+            ),
+            Err(GuardedBurnPlanStoreError::Transport(
+                GuardedPageBurnTransportError::BurnEnvelope(
+                    crate::burn_envelope_plan::BurnEnvelopeError::UnexpectedStatus(0)
+                )
+            ))
+        );
+        verify_guarded_burn_ack(
+            handle, engine, registry, SIGNATURE.as_bytes(), 256,
+            &response_frame(BURN_OK_STATUS, &[]),
+        ).unwrap();
+        assert_eq!(
+            verify_guarded_burn_ack(
+                handle, engine, registry, SIGNATURE.as_bytes(), 256,
+                &response_frame(BURN_OK_STATUS, &[]),
+            ),
+            Err(GuardedBurnPlanStoreError::InvalidProofStage)
+        );
+        let _ = burn;
+        let crc = stage_guarded_burn_plan(
+            handle, engine, registry, SIGNATURE.as_bytes(), 256, GuardedBurnStage::Crc,
+        ).unwrap();
+        verify_guarded_burn_crc(
+            handle, engine, registry, SIGNATURE.as_bytes(), 256,
+            &response_frame(0, &crc.expected_page_crc32.to_be_bytes()),
+        ).unwrap();
+        assert_eq!(
+            verify_guarded_burn_crc(
+                handle, engine, registry, SIGNATURE.as_bytes(), 256,
+                &response_frame(0, &crc.expected_page_crc32.to_be_bytes()),
+            ),
+            Err(GuardedBurnPlanStoreError::InvalidProofStage)
+        );
+        assert_eq!(
+            stage_guarded_burn_plan(
+                handle, engine, registry, SIGNATURE.as_bytes(), 256, GuardedBurnStage::Burn,
+            ),
+            Err(GuardedBurnPlanStoreError::InvalidProofStage)
+        );
+        close_guarded_burn_plan(handle);
+        assert_eq!(
+            verify_guarded_burn_ack(
+                handle, engine, registry, SIGNATURE.as_bytes(), 256,
+                &response_frame(BURN_OK_STATUS, &[]),
+            ),
+            Err(GuardedBurnPlanStoreError::InvalidHandle)
+        );
         close_profile_registry(registry);
         close_engine(engine);
     }
