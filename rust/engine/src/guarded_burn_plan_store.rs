@@ -89,7 +89,7 @@ impl GuardedBurnPlanStore {
         i32::try_from(self.plans.len()).unwrap_or(i32::MAX)
     }
 
-    pub fn get(&self, handle: i64) -> Result<Arc<GuardedBurnEntry>, GuardedBurnPlanStoreError> {
+    fn get(&self, handle: i64) -> Result<Arc<GuardedBurnEntry>, GuardedBurnPlanStoreError> {
         self.plans
             .get(&handle)
             .cloned()
