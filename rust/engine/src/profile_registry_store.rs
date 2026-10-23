@@ -9,6 +9,11 @@ use crate::compiled_profile_bundle::{
 use crate::ecu_profile::ResolvedEcuProfile;
 use crate::ecu_profile_registry::{OwnedProfileRegistry, ProfileRegistryError};
 use crate::profile_import::{OwnedCompiledProfileImport, compile_owned_profile_import};
+use crate::runtime_acquisition_session::RuntimeRequestToken;
+use crate::runtime_bound_live_session::{
+    BoundRuntimeError, BoundRuntimeIdentity, RuntimeBoundLiveSession,
+};
+use crate::live_channel_store::LiveChannelBatch;
 use crate::runtime_profile_authority::{
     RuntimeProfileAuthorityError, select_profile_from_runtime_response,
 };
@@ -21,6 +26,7 @@ pub struct SelectedProfileSummary {
 struct RuntimeProfileRegistryState {
     profiles: OwnedProfileRegistry,
     compiled_bundles: HashMap<String, CompiledEcuProfileBundle>,
+    runtime: RuntimeBoundLiveSession,
 }
 
 impl RuntimeProfileRegistryState {
@@ -28,6 +34,7 @@ impl RuntimeProfileRegistryState {
         Self {
             profiles: OwnedProfileRegistry::new(),
             compiled_bundles: HashMap::new(),
+            runtime: RuntimeBoundLiveSession::new(),
         }
     }
 }
@@ -78,6 +85,7 @@ impl ProfileRegistryStore {
         let Some(state) = self.registries.get_mut(&handle) else {
             return false;
         };
+        state.runtime.disconnect();
         state.profiles.register_recognized_signature(signature);
         true
     }
@@ -90,6 +98,7 @@ impl ProfileRegistryStore {
             .registries
             .get_mut(&handle)
             .ok_or(RegistryStoreError::InvalidHandle)?;
+        state.runtime.disconnect();
         state
             .profiles
             .register_profile(profile)
@@ -125,12 +134,126 @@ impl ProfileRegistryStore {
             .registries
             .get_mut(&handle)
             .ok_or(RegistryStoreError::InvalidHandle)?;
+        state.runtime.disconnect();
         state
             .profiles
             .register_profile(profile)
             .map_err(RegistryStoreError::Registry)?;
         state.compiled_bundles.insert(signature, bundle);
         Ok(())
+    }
+
+    /// Native-only candidate binding, not evidence of Android USB ownership.
+    /// Exactly one registry handle selects both the profile and resolved definition.
+    /// A caller's expected generation must agree with that exact selection.
+    pub fn bind_runtime_candidate(
+        &mut self,
+        handle: i64,
+        endpoint_id: &str,
+        signature_response: &[u8],
+        signature_limit: usize,
+        expected_generation: u64,
+    ) -> Result<BoundRuntimeIdentity, RuntimeRegistryBindingError> {
+        let state = self
+            .registries
+            .get_mut(&handle)
+            .ok_or(RuntimeRegistryBindingError::Registry(
+                RegistryStoreError::InvalidHandle,
+            ))?;
+        // Even a rejected selection revokes the previously selected candidate.
+        state.runtime.disconnect();
+        let profile = select_profile_from_runtime_response(
+            &state.profiles,
+            signature_response,
+            signature_limit,
+        )
+        .map_err(|error| RuntimeRegistryBindingError::Registry(
+            RegistryStoreError::Authority(error),
+        ))?;
+        if expected_generation == 0 || profile.identity().profile_generation != expected_generation {
+            return Err(RuntimeRegistryBindingError::GenerationMismatch);
+        }
+        let signature = profile.identity().signature;
+        let bundle = state
+            .compiled_bundles
+            .get(signature)
+            .ok_or_else(|| RuntimeRegistryBindingError::Registry(
+                RegistryStoreError::MissingCompiledBundle(signature.to_string()),
+            ))?;
+        if bundle.profile.identity() != profile.identity() {
+            return Err(RuntimeRegistryBindingError::ProfileMismatch);
+        }
+        state
+            .runtime
+            .bind(
+                endpoint_id,
+                signature,
+                &bundle.profile,
+                &bundle.resolved_definition.text,
+            )
+            .map_err(RuntimeRegistryBindingError::Bound)
+    }
+
+    /// These host-only methods prove lease scoping and do not perform USB IO.
+    /// Future JNI must keep every invocation under Android's retained USB owner.
+    pub fn begin_runtime_read(
+        &mut self,
+        handle: i64,
+        lease: &BoundRuntimeIdentity,
+        now_ms: u64,
+        timeout_ms: u64,
+    ) -> Result<(RuntimeRequestToken, Vec<u8>), RuntimeRegistryBindingError> {
+        self.runtime_mut(handle)?
+            .begin(lease, now_ms, timeout_ms)
+            .map_err(RuntimeRegistryBindingError::Bound)
+    }
+
+    pub fn complete_runtime_read(
+        &mut self,
+        handle: i64,
+        lease: &BoundRuntimeIdentity,
+        token: RuntimeRequestToken,
+        now_ms: u64,
+        response: &[u8],
+    ) -> Result<LiveChannelBatch, RuntimeRegistryBindingError> {
+        self.runtime_mut(handle)?
+            .complete(lease, token, now_ms, response)
+            .cloned()
+            .map_err(RuntimeRegistryBindingError::Bound)
+    }
+
+    pub fn latest_runtime_batch(
+        &mut self,
+        handle: i64,
+        lease: &BoundRuntimeIdentity,
+        now_ms: u64,
+        max_age_ms: u64,
+    ) -> Result<Option<LiveChannelBatch>, RuntimeRegistryBindingError> {
+        self.runtime_mut(handle)?
+            .latest(lease, now_ms, max_age_ms)
+            .map(|batch| batch.cloned())
+            .map_err(RuntimeRegistryBindingError::Bound)
+    }
+
+    pub fn disconnect_runtime(&mut self, handle: i64) -> Result<(), RegistryStoreError> {
+        let state = self
+            .registries
+            .get_mut(&handle)
+            .ok_or(RegistryStoreError::InvalidHandle)?;
+        state.runtime.disconnect();
+        Ok(())
+    }
+
+    fn runtime_mut(
+        &mut self,
+        handle: i64,
+    ) -> Result<&mut RuntimeBoundLiveSession, RuntimeRegistryBindingError> {
+        self.registries
+            .get_mut(&handle)
+            .map(|state| &mut state.runtime)
+            .ok_or(RuntimeRegistryBindingError::Registry(
+                RegistryStoreError::InvalidHandle,
+            ))
     }
 
     pub fn compiled_bundle_count(&self, handle: i64) -> Result<usize, RegistryStoreError> {
@@ -194,6 +317,14 @@ pub enum RegistryStoreError {
     Registry(ProfileRegistryError),
     Authority(RuntimeProfileAuthorityError),
     MissingCompiledBundle(String),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum RuntimeRegistryBindingError {
+    Registry(RegistryStoreError),
+    GenerationMismatch,
+    ProfileMismatch,
+    Bound(BoundRuntimeError),
 }
 
 static PROFILE_REGISTRY_STORE: LazyLock<Mutex<ProfileRegistryStore>> =
