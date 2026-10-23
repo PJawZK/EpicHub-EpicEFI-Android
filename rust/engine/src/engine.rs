@@ -7,6 +7,7 @@ use crate::diagnostics::{
     DIAGNOSTIC_BATCH_SIZE, DIAGNOSTIC_CODE_RUNTIME_SNAPSHOT_PUBLISHED, DIAGNOSTIC_SEVERITY_TRACE,
     EngineDiagnostics,
 };
+use crate::nonvolatile_page_provenance::NonvolatilePageProof;
 use crate::offline_tune_source::offline_source_snapshot;
 use crate::runtime_snapshot::{RUNTIME_SNAPSHOT_SIZE, RuntimeSnapshot};
 use crate::tune_session::TuneSession;
@@ -19,6 +20,7 @@ struct EngineState {
     diagnostics: EngineDiagnostics,
     tune_session: TuneSession,
     tune_source_image: Option<TuneSourcePageImage>,
+    nonvolatile_proofs: HashMap<usize, NonvolatilePageProof>,
     tune_session_epoch: u64,
 }
 
@@ -37,6 +39,7 @@ impl EngineState {
             diagnostics: EngineDiagnostics::new(u64::try_from(handle).unwrap_or(0)),
             tune_session,
             tune_source_image: None,
+            nonvolatile_proofs: HashMap::new(),
             tune_session_epoch: 1,
         }
     }
@@ -162,12 +165,48 @@ impl EngineRegistry {
             .map(|engine| operation(&engine.tune_session, engine.tune_source_image.as_mut()))
     }
 
+    fn invalidate_nonvolatile_page(&mut self, handle: i64, page: usize) -> bool {
+        let Some(engine) = self.engines.get_mut(&handle) else {
+            return false;
+        };
+        engine.nonvolatile_proofs.remove(&page);
+        true
+    }
+
+    fn confirm_nonvolatile_page(
+        &mut self,
+        handle: i64,
+        proof: NonvolatilePageProof,
+        expected_page_bytes: &[u8],
+    ) -> bool {
+        let Some(engine) = self.engines.get_mut(&handle) else {
+            return false;
+        };
+        let Some(source) = engine.tune_source_image.as_ref() else {
+            return false;
+        };
+        if engine.tune_session.profile_generation() != proof.profile_generation
+            || engine.tune_session.revision() != proof.draft_revision
+            || source.page(proof.page.saturating_sub(1)) != Some(expected_page_bytes)
+            || crate::ms_envelope_codec::crc32_ieee(expected_page_bytes) != proof.expected_page_crc32
+        {
+            return false;
+        }
+        engine.nonvolatile_proofs.insert(proof.page, proof);
+        true
+    }
+
+    fn nonvolatile_proof(&self, handle: i64, page: usize) -> Option<Option<NonvolatilePageProof>> {
+        self.engines.get(&handle).map(|engine| engine.nonvolatile_proofs.get(&page).cloned())
+    }
+
     fn replace_tune_session(&mut self, handle: i64, session: TuneSession) -> bool {
         let Some(engine) = self.engines.get_mut(&handle) else {
             return false;
         };
         engine.tune_session = session;
         engine.tune_source_image = None;
+        engine.nonvolatile_proofs.clear();
         engine.advance_tune_session_epoch();
         true
     }
@@ -183,6 +222,7 @@ impl EngineRegistry {
         };
         engine.tune_session = session;
         engine.tune_source_image = Some(source_image);
+        engine.nonvolatile_proofs.clear();
         engine.advance_tune_session_epoch();
         true
     }
@@ -256,6 +296,22 @@ pub(crate) fn with_tune_source_authority_mut<T>(
     operation: impl FnOnce(&TuneSession, Option<&mut TuneSourcePageImage>) -> T,
 ) -> Option<T> {
     with_registry(|registry| registry.tune_source_authority_mut(handle, operation))
+}
+
+pub(crate) fn invalidate_nonvolatile_page(handle: i64, page: usize) -> bool {
+    with_registry(|registry| registry.invalidate_nonvolatile_page(handle, page))
+}
+
+pub(crate) fn confirm_nonvolatile_page(
+    handle: i64,
+    proof: NonvolatilePageProof,
+    expected_page_bytes: &[u8],
+) -> bool {
+    with_registry(|registry| registry.confirm_nonvolatile_page(handle, proof, expected_page_bytes))
+}
+
+pub fn nonvolatile_page_proof(handle: i64, page: usize) -> Option<Option<NonvolatilePageProof>> {
+    with_registry(|registry| registry.nonvolatile_proof(handle, page))
 }
 
 pub(crate) fn replace_tune_session(handle: i64, session: TuneSession) -> bool {
