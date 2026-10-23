@@ -35,9 +35,7 @@ fn mapped(error: RuntimeRegistryBindingError) -> jlong {
             CANDIDATE_REGISTRY_REJECTED
         }
         RuntimeRegistryBindingError::GenerationMismatch => CANDIDATE_GENERATION_MISMATCH,
-        RuntimeRegistryBindingError::Bound(BoundRuntimeError::EpochExhausted) => {
-            CANDIDATE_OVERFLOW
-        }
+        RuntimeRegistryBindingError::Bound(BoundRuntimeError::EpochExhausted) => CANDIDATE_OVERFLOW,
         RuntimeRegistryBindingError::Bound(_) => CANDIDATE_DEFINITION_UNSUPPORTED,
     }
 }
@@ -105,13 +103,14 @@ pub extern "system" fn Java_com_epicefi_epichub_engine_NativeProfileRegistryBrid
     _object: JObject,
     handle: jlong,
 ) -> jint {
-    ffi_guard(CANDIDATE_PANIC as jint, || {
-        match disconnect_runtime_candidate_from_registry(handle) {
+    ffi_guard(
+        CANDIDATE_PANIC as jint,
+        || match disconnect_runtime_candidate_from_registry(handle) {
             Ok(()) => 0,
             Err(RegistryStoreError::InvalidHandle) => CANDIDATE_INVALID_HANDLE as jint,
             Err(_) => CANDIDATE_REGISTRY_REJECTED as jint,
-        }
-    })
+        },
+    )
 }
 
 #[cfg(test)]
@@ -124,15 +123,21 @@ mod tests {
             CANDIDATE_GENERATION_MISMATCH
         );
         assert_eq!(
-            mapped(RuntimeRegistryBindingError::Registry(RegistryStoreError::InvalidHandle)),
+            mapped(RuntimeRegistryBindingError::Registry(
+                RegistryStoreError::InvalidHandle
+            )),
             CANDIDATE_INVALID_HANDLE
         );
         assert_eq!(
-            mapped(RuntimeRegistryBindingError::Bound(BoundRuntimeError::DefinitionCommand)),
+            mapped(RuntimeRegistryBindingError::Bound(
+                BoundRuntimeError::DefinitionCommand
+            )),
             CANDIDATE_DEFINITION_UNSUPPORTED
         );
         assert_eq!(
-            mapped(RuntimeRegistryBindingError::Bound(BoundRuntimeError::EpochExhausted)),
+            mapped(RuntimeRegistryBindingError::Bound(
+                BoundRuntimeError::EpochExhausted
+            )),
             CANDIDATE_OVERFLOW
         );
     }
