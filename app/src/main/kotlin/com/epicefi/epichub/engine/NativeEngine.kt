@@ -21,6 +21,7 @@ class NativeEngine private constructor(initialHandle: Long) : Closeable {
     private val diagnosticBuffer = NativeDiagnosticBatchBuffer()
     private val tuneCatalogBuffer = TunerTableCatalogBuffer()
     private val ramSynchronizationStateBuffer = NativeRamSynchronizationStateBuffer()
+    private val nonvolatilePageStateBuffer = NativeNonvolatilePageStateBuffer()
 
     val isAlive: Boolean
         get() {
@@ -53,6 +54,10 @@ class NativeEngine private constructor(initialHandle: Long) : Closeable {
     @Synchronized
     fun readRamSynchronizationState(): RamSynchronizationState? =
         ramSynchronizationStateBuffer.read(requireNativeHandle())
+
+    @Synchronized
+    fun readNonvolatilePageState(page: Int, verifiedSignature: ByteArray): NonvolatilePageState =
+        nonvolatilePageStateBuffer.read(requireNativeHandle(), page, verifiedSignature)
 
     @Synchronized
     fun installMega144h7ImportedTunePages(
@@ -134,6 +139,13 @@ object NativeEngineBridge {
     external fun fillRuntimeSnapshot(handle: Long, buffer: ByteBuffer): Int
     external fun fillDiagnosticEvents(handle: Long, buffer: ByteBuffer): Int
     external fun fillRamSourceState(handle: Long, buffer: ByteBuffer): Int
+    external fun fillNonvolatilePageState(
+        handle: Long,
+        page: Int,
+        signature: ByteBuffer,
+        signatureLength: Int,
+        output: ByteBuffer,
+    ): Int
     external fun tuneSessionEpoch(handle: Long): Long
 
     external fun installMega144h7ImportedTunePages(
