@@ -789,4 +789,61 @@ table = valuesTable, valuesMap, "Values", 1
         close_profile_registry(registry);
         close_engine(engine);
     }
+    #[test]
+    fn equal_byte_live_source_reinstall_stales_old_burn_handle() {
+        let (engine, registry) = live_engine();
+        let handle = create_selected_engine_guarded_burn_plan(
+            engine, registry, SIGNATURE.as_bytes(), 256, 1,
+        ).unwrap();
+        // Reinstall precisely identical page bytes and the same signature,
+        // profile generation and draft revision. Content equality is not session identity.
+        let page = source_page();
+        install_selected_live_pages(engine, registry, SIGNATURE.as_bytes(), 256, &[&page]).unwrap();
+        assert!(matches!(
+            stage_guarded_burn_plan(
+                handle, engine, registry, SIGNATURE.as_bytes(), 256, GuardedBurnStage::Burn,
+            ),
+            Err(GuardedBurnPlanStoreError::Transport(
+                GuardedPageBurnTransportError::Authority(
+                    EngineGuardedPageBurnError::StaleSessionEpoch { .. }
+                )
+            ))
+        ));
+        assert_eq!(nonvolatile_page_proof(engine, 1), Some(None));
+        close_guarded_burn_plan(handle);
+        close_profile_registry(registry);
+        close_engine(engine);
+    }
+
+    #[test]
+    fn equal_byte_reinstall_between_ack_and_crc_cannot_create_proof() {
+        let (engine, registry) = live_engine();
+        let handle = create_selected_engine_guarded_burn_plan(
+            engine, registry, SIGNATURE.as_bytes(), 256, 1,
+        ).unwrap();
+        stage_guarded_burn_plan(
+            handle, engine, registry, SIGNATURE.as_bytes(), 256, GuardedBurnStage::Burn,
+        ).unwrap();
+        verify_guarded_burn_ack(
+            handle, engine, registry, SIGNATURE.as_bytes(), 256,
+            &response_frame(BURN_OK_STATUS, &[]),
+        ).unwrap();
+        let page = source_page();
+        install_selected_live_pages(engine, registry, SIGNATURE.as_bytes(), 256, &[&page]).unwrap();
+        assert!(matches!(
+            stage_guarded_burn_plan(
+                handle, engine, registry, SIGNATURE.as_bytes(), 256, GuardedBurnStage::Crc,
+            ),
+            Err(GuardedBurnPlanStoreError::Transport(
+                GuardedPageBurnTransportError::Authority(
+                    EngineGuardedPageBurnError::StaleSessionEpoch { .. }
+                )
+            ))
+        ));
+        assert_eq!(nonvolatile_page_proof(engine, 1), Some(None));
+        close_guarded_burn_plan(handle);
+        close_profile_registry(registry);
+        close_engine(engine);
+    }
+
 }
