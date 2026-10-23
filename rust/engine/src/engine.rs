@@ -197,7 +197,15 @@ impl EngineRegistry {
     }
 
     fn nonvolatile_proof(&self, handle: i64, page: usize) -> Option<Option<NonvolatilePageProof>> {
-        self.engines.get(&handle).map(|engine| engine.nonvolatile_proofs.get(&page).cloned())
+        self.engines.get(&handle).map(|engine| {
+            let proof = engine.nonvolatile_proofs.get(&page)?;
+            let source = engine.tune_source_image.as_ref()?;
+            let bytes = source.page(page.checked_sub(1)?)?;
+            (proof.profile_generation == engine.tune_session.profile_generation()
+                && proof.draft_revision == engine.tune_session.revision()
+                && proof.expected_page_crc32 == crate::ms_envelope_codec::crc32_ieee(bytes))
+                .then(|| proof.clone())
+        })
     }
 
     fn replace_tune_session(&mut self, handle: i64, session: TuneSession) -> bool {
