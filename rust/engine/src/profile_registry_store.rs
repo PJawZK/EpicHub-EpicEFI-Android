@@ -371,6 +371,31 @@ pub fn register_definition_bundle_import(
     with_store(|store| store.register_definition_bundle(handle, import))
 }
 
+/// Registry-owned candidate binding. The caller must additionally hold the
+/// serialized physical connection owner across observed identity and binding.
+pub fn bind_runtime_candidate_from_registry(
+    handle: i64,
+    endpoint_id: &str,
+    response: &[u8],
+    max_response_bytes: usize,
+    expected_generation: u64,
+) -> Result<BoundRuntimeIdentity, RuntimeRegistryBindingError> {
+    with_store(|store| {
+        store.bind_runtime_candidate(
+            handle,
+            endpoint_id,
+            response,
+            max_response_bytes,
+            expected_generation,
+        )
+    })
+}
+
+/// Revokes the registry's candidate lease; never closes a physical USB port.
+pub fn disconnect_runtime_candidate_from_registry(handle: i64) -> Result<(), RegistryStoreError> {
+    with_store(|store| store.disconnect_runtime(handle))
+}
+
 pub fn with_selected_compiled_bundle<T>(
     handle: i64,
     response: &[u8],
