@@ -2,6 +2,8 @@ package com.epicefi.epichub.platform.transport.usb
 
 import android.hardware.usb.UsbManager
 import com.epicefi.epichub.engine.DefinitionDrivenLiveTuneConnectResult
+import com.epicefi.epichub.engine.EngineAuthoritySerialization
+import com.epicefi.epichub.engine.RuntimeCandidateBindingResult
 import com.epicefi.epichub.engine.LiveTuneConnectionOwner
 import com.epicefi.epichub.engine.LiveTuneOwnerBurnResult
 import com.epicefi.epichub.engine.LiveTuneOwnerLoadResult
@@ -124,6 +126,18 @@ class AndroidUsbLiveConnectionSessionOwner internal constructor(
     private var connectedChannel: UsbReadOnlyTransactionChannel? = null
     private var connectedOwner: LiveTuneConnectionOwner? = null
     private var endpointId: String? = null
+    private var runtimeCandidate: RuntimeCandidateBindingResult =
+        RuntimeCandidateBindingResult.Unavailable("No active ECU connection.")
+
+    /** Candidate authority only. This is not a live-channel publication status. */
+    internal val runtimeCandidateStatus: RuntimeCandidateBindingResult
+        get() = synchronized(this) {
+            if (closed || connectedOwner?.isAlive != true) {
+                RuntimeCandidateBindingResult.Unavailable("No active ECU connection.")
+            } else {
+                runtimeCandidate
+            }
+        }
 
     val isConnected: Boolean
         get() = synchronized(this) { !closed && connectedChannel != null && connectedOwner?.isAlive == true }
@@ -136,13 +150,20 @@ class AndroidUsbLiveConnectionSessionOwner internal constructor(
         endpointId: String,
         maxResponseBytes: Int,
         timeoutMs: Int,
+    ): AndroidUsbLiveConnectResult = EngineAuthoritySerialization.exclusive {
+        connectSerialized(endpointId, maxResponseBytes, timeoutMs)
+    }
+
+    private fun connectSerialized(
+        endpointId: String,
+        maxResponseBytes: Int,
+        timeoutMs: Int,
     ): AndroidUsbLiveConnectResult {
         if (closed) return AndroidUsbLiveConnectResult.OwnerClosed
+        disconnectCurrent()
         if (endpointId.isBlank()) {
             return AndroidUsbLiveConnectResult.InvalidSelection("USB endpoint must be selected.")
         }
-
-        disconnectCurrent()
         val authority =
             connectionOwnerProvider()
                 ?: return AndroidUsbLiveConnectResult.ProfileAuthorityUnavailable
@@ -171,9 +192,16 @@ class AndroidUsbLiveConnectionSessionOwner internal constructor(
                 )
         ) {
             is DefinitionDrivenLiveTuneConnectResult.Connected -> {
+                val candidate = authority.bindRuntimeCandidate(
+                    endpointId = endpointId,
+                    identity = connected.identity,
+                    profileGeneration = connected.profileGeneration,
+                    signatureLimit = maxResponseBytes,
+                )
                 connectedChannel = channel
                 connectedOwner = authority
                 this.endpointId = endpointId
+                runtimeCandidate = candidate
                 AndroidUsbLiveConnectResult.Connected(
                     endpointId = endpointId,
                     identity = connected.identity,
@@ -190,6 +218,13 @@ class AndroidUsbLiveConnectionSessionOwner internal constructor(
 
     @Synchronized
     fun loadCurrentController(
+        signatureLimit: Int,
+        timeoutMs: Int,
+    ): AndroidUsbLiveLoadResult = EngineAuthoritySerialization.exclusive {
+        loadCurrentControllerSerialized(signatureLimit, timeoutMs)
+    }
+
+    private fun loadCurrentControllerSerialized(
         signatureLimit: Int,
         timeoutMs: Int,
     ): AndroidUsbLiveLoadResult {
@@ -211,6 +246,13 @@ class AndroidUsbLiveConnectionSessionOwner internal constructor(
 
     @Synchronized
     internal fun writeCurrentDraftToRam(
+        signatureLimit: Int,
+        timeoutMs: Int,
+    ): AndroidUsbLiveRamWriteResult = EngineAuthoritySerialization.exclusive {
+        writeCurrentDraftToRamSerialized(signatureLimit, timeoutMs)
+    }
+
+    private fun writeCurrentDraftToRamSerialized(
         signatureLimit: Int,
         timeoutMs: Int,
     ): AndroidUsbLiveRamWriteResult {
@@ -235,6 +277,14 @@ class AndroidUsbLiveConnectionSessionOwner internal constructor(
         page: Int,
         signatureLimit: Int,
         timeoutMs: Int,
+    ): AndroidUsbLiveBurnResult = EngineAuthoritySerialization.exclusive {
+        burnPageToNonvolatileSerialized(page, signatureLimit, timeoutMs)
+    }
+
+    private fun burnPageToNonvolatileSerialized(
+        page: Int,
+        signatureLimit: Int,
+        timeoutMs: Int,
     ): AndroidUsbLiveBurnResult {
         if (closed) return AndroidUsbLiveBurnResult.OwnerClosed
         val channel = connectedChannel ?: return AndroidUsbLiveBurnResult.NotConnected
@@ -254,16 +304,18 @@ class AndroidUsbLiveConnectionSessionOwner internal constructor(
     }
 
     @Synchronized
-    fun disconnect(): Boolean {
-        if (closed) return false
-        return disconnectCurrent()
+    fun disconnect(): Boolean = EngineAuthoritySerialization.exclusive {
+        if (closed) false else disconnectCurrent()
     }
 
     @Synchronized
     override fun close() {
-        if (closed) return
-        disconnectCurrent()
-        closed = true
+        EngineAuthoritySerialization.exclusive {
+            if (!closed) {
+                disconnectCurrent()
+                closed = true
+            }
+        }
     }
 
     private fun disconnectCurrent(): Boolean {
@@ -273,10 +325,11 @@ class AndroidUsbLiveConnectionSessionOwner internal constructor(
         connectedChannel = null
         connectedOwner = null
         endpointId = null
+        runtimeCandidate = RuntimeCandidateBindingResult.Unavailable("No active ECU connection.")
         try {
-            channel?.close()
-        } finally {
             authority?.disconnect()
+        } finally {
+            channel?.close()
         }
         return hadConnection
     }
