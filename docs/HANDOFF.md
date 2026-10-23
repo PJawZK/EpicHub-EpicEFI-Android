@@ -1,5 +1,17 @@
 # EpicHub Current Handoff
 
+## Qualified firmware-fixture runtime bitfield support — 2026-10-23
+
+Foundation [39924037372](https://github.com/PJawZK/EpicHub-EpicEFI-Android/actions/runs/39924037372) passed at **exact SHA `2b5d9385b4e82eae8985d4b30475d26166e0fa1f`**, promoted to `main`. Native `runtime_channel_decode.rs` now decodes unsigned 8/16/32-bit inclusive `bits` ranges with explicit range bounds and byte order. `runtime_definition_catalog.rs` compiles `bits, U08/U16/U32, offset, [first:last]` entries alongside supported numeric scalars. The fixture-derived tests check `RPMValue` and `miniOch` from `PJawZK/epicefi_fw_jzfork` `firmware/tools/ts_ini_testdata/mini.ini`, plus unsupported `miniFormula = { 100 + 1 }` and invalid bit ranges. Compatibility is verified **for the extracted fixture declaration syntax**, not for complete real generated ECU definitions.
+
+Firmware source audit found: `firmware/console/binary/output_channels.txt` is generator source, not a complete generated TunerStudio INI. `firmware/tunerstudio/tunerstudio.template_zh.ini` has `[OutputChannels]`, `ochGetCommand = "O%2o%2c"`, `ochBlockSize = @@TS_TOTAL_OUTPUT_SIZE@@`, `@@OUTPUTS_SECTION_FROM_FILE@@`, and many calculated `{ ... }` channels. The available `mini.ini` is a synthetic firmware validator fixture, **not** a generated Mega144H7 runtime catalog. Do not claim general EpicEFI output compatibility, expression support, or actual USB runtime acquisition.
+
+Next narrow work: obtain/generate representative fully resolved Mega144H7 and uaEFI INIs with exact firmware/signature provenance; inventory every output-channel form, metadata and command; add explicit unsupported capability reports; bind channel catalog generation to the selected live ECU session; verify runtime command/envelope/range semantics before starting continuous polling; then batched native channel publication and Dashboard/Tuner consumers. Preserve read-only runtime behavior and keep Burn UI disabled.
+
+This handoff documentation commit requires its own exact-head Foundation qualification before promotion.
+
+---
+
 ## Qualified generic runtime scalar definition compiler — 2026-10-23
 
 Foundation [39921602400](https://github.com/PJawZK/EpicHub-EpicEFI-Android/actions/runs/39921602400) passed at exact commit `2dc7abe7a106b1a6df6e86acd489f3a94775c9e5`, promoted to `main`. The native `runtime_definition_catalog.rs` now compiles strictly supported fixed-offset numeric `scalar` declarations from *resolved* `[OutputChannels]` definitions into the previously qualified `CompiledRuntimeChannelCatalog`. Channel name, units and deterministic name-derived ID are retained. Parsing bounds, duplicate names, unsupported expression/type rejection, byte ordering and sample decode tests qualified.
