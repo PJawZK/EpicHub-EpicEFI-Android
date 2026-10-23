@@ -56,7 +56,10 @@ pub enum EngineGuardedPageBurnError {
         actual: usize,
     },
     SourceImageChanged,
-    StaleSessionEpoch { expected: u64, actual: u64 },
+    StaleSessionEpoch {
+        expected: u64,
+        actual: u64,
+    },
     BurnPlan(PageBurnPlanError),
     CrcPlan(PageCrc32CheckPlanError),
     CrcEnvelope(Crc32CheckEnvelopeError),
@@ -74,30 +77,33 @@ pub fn plan_selected_engine_guarded_page_burn(
         runtime_signature_response,
         max_signature_response_bytes,
         |bundle| {
-            with_tune_source_authority_with_epoch(engine_handle, |session_epoch, session, source| {
-                validate_live_ram_authority(bundle, session, source)?;
-                let source = source.ok_or(EngineGuardedPageBurnError::MissingSourceImage)?;
-                let expected_page_bytes = exact_source_page(bundle, source, page)?.to_vec();
-                let burn =
-                    plan_page_burn(bundle, page).map_err(EngineGuardedPageBurnError::BurnPlan)?;
-                let crc_check = plan_full_page_crc32_check(bundle, page)
-                    .map_err(EngineGuardedPageBurnError::CrcPlan)?;
-                let framed_crc_check = frame_page_crc32_check(bundle, &crc_check)
-                    .map_err(EngineGuardedPageBurnError::CrcEnvelope)?;
+            with_tune_source_authority_with_epoch(
+                engine_handle,
+                |session_epoch, session, source| {
+                    validate_live_ram_authority(bundle, session, source)?;
+                    let source = source.ok_or(EngineGuardedPageBurnError::MissingSourceImage)?;
+                    let expected_page_bytes = exact_source_page(bundle, source, page)?.to_vec();
+                    let burn = plan_page_burn(bundle, page)
+                        .map_err(EngineGuardedPageBurnError::BurnPlan)?;
+                    let crc_check = plan_full_page_crc32_check(bundle, page)
+                        .map_err(EngineGuardedPageBurnError::CrcPlan)?;
+                    let framed_crc_check = frame_page_crc32_check(bundle, &crc_check)
+                        .map_err(EngineGuardedPageBurnError::CrcEnvelope)?;
 
-                Ok(EngineGuardedPageBurnPlan {
-                    profile_generation: session.profile_generation(),
-                    session_epoch,
-                    draft_revision: session.revision(),
-                    page,
-                    expected_page_crc32: crc32_ieee(&expected_page_bytes),
-                    expected_page_bytes,
-                    burn,
-                    crc_check,
-                    framed_crc_check,
-                    source_image: source.clone(),
-                })
-            })
+                    Ok(EngineGuardedPageBurnPlan {
+                        profile_generation: session.profile_generation(),
+                        session_epoch,
+                        draft_revision: session.revision(),
+                        page,
+                        expected_page_crc32: crc32_ieee(&expected_page_bytes),
+                        expected_page_bytes,
+                        burn,
+                        crc_check,
+                        framed_crc_check,
+                        source_image: source.clone(),
+                    })
+                },
+            )
             .ok_or(EngineGuardedPageBurnError::InvalidEngineHandle)?
         },
     )
@@ -124,32 +130,35 @@ pub fn require_selected_engine_guarded_page_burn_current(
                 });
             }
 
-            with_tune_source_authority_with_epoch(engine_handle, |session_epoch, session, source| {
-                if session_epoch != plan.session_epoch {
-                    return Err(EngineGuardedPageBurnError::StaleSessionEpoch {
-                        expected: plan.session_epoch,
-                        actual: session_epoch,
-                    });
-                }
-                validate_live_ram_authority(bundle, session, source)?;
-                if session.revision() != plan.draft_revision {
-                    return Err(EngineGuardedPageBurnError::RamNotConfirmedForCurrentDraft {
-                        draft_revision: session.revision(),
-                        confirmed_revision: source.and_then(|source| {
-                            effective_provenance(session, source).confirmed_draft_revision
-                        }),
-                    });
-                }
-                let source = source.ok_or(EngineGuardedPageBurnError::MissingSourceImage)?;
-                if source != &plan.source_image {
-                    return Err(EngineGuardedPageBurnError::SourceImageChanged);
-                }
-                let current_page = exact_source_page(bundle, source, plan.page)?;
-                if current_page != plan.expected_page_bytes.as_slice() {
-                    return Err(EngineGuardedPageBurnError::SourceImageChanged);
-                }
-                Ok(())
-            })
+            with_tune_source_authority_with_epoch(
+                engine_handle,
+                |session_epoch, session, source| {
+                    if session_epoch != plan.session_epoch {
+                        return Err(EngineGuardedPageBurnError::StaleSessionEpoch {
+                            expected: plan.session_epoch,
+                            actual: session_epoch,
+                        });
+                    }
+                    validate_live_ram_authority(bundle, session, source)?;
+                    if session.revision() != plan.draft_revision {
+                        return Err(EngineGuardedPageBurnError::RamNotConfirmedForCurrentDraft {
+                            draft_revision: session.revision(),
+                            confirmed_revision: source.and_then(|source| {
+                                effective_provenance(session, source).confirmed_draft_revision
+                            }),
+                        });
+                    }
+                    let source = source.ok_or(EngineGuardedPageBurnError::MissingSourceImage)?;
+                    if source != &plan.source_image {
+                        return Err(EngineGuardedPageBurnError::SourceImageChanged);
+                    }
+                    let current_page = exact_source_page(bundle, source, plan.page)?;
+                    if current_page != plan.expected_page_bytes.as_slice() {
+                        return Err(EngineGuardedPageBurnError::SourceImageChanged);
+                    }
+                    Ok(())
+                },
+            )
             .ok_or(EngineGuardedPageBurnError::InvalidEngineHandle)?
         },
     )
