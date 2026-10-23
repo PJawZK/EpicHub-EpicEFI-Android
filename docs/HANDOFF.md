@@ -1,5 +1,26 @@
 # EpicHub Current Handoff
 
+## Qualified registry-owned runtime candidate — 2026-10-23
+
+**Exact production implementation SHA:** `2c3467d510e8ea396eface7974a9f51af5b94dd9` on `main`, qualified by complete [Foundation 39941582220](https://github.com/PJawZK/EpicHub-EpicEFI-Android/actions/runs/39941582220) **success**. Both Android and Rust build/test/lint/signature/packaging gates passed. The fast-forward from prior `main` succeeded (3 commits ahead, 0 behind). The documentation update carrying this paragraph is a **separate CI checkpoint** and is not qualified until its own exact SHA succeeds.
+
+### What changed
+
+`rust/engine/src/profile_registry_store.rs` now retains one `RuntimeBoundLiveSession` under each native registry handle. `bind_runtime_candidate` selects the controller through the existing exact signature authority using the actual registry-owned compiled profile and its resolved bundle (including expanded includes), checks the caller's expected profile generation, and builds the runtime catalog/read command/store from that **same selected source**. Unsupported runtime channel expressions and profile-only imports without a compiled bundle fail closed. A rejected rebind removes prior Fresh authority; registry mutations revoke runtime authority; a closed registry handle cannot access old samples. Host-only begin/complete/latest/disconnect operations enforce the registry handle and bound lease, and return bounded copied batches; they perform **no transport IO**. Added offline tests for correct command/frame decoding, generation mismatch, bad signature, absent bundle, unsupported expression, cross-registry lease rejection, registry mutation, close/handle reuse, age-based stale state and late-token invalidation.
+
+**Precise qualification level:** This closes a **native registry ownership subgate**, not the complete runtime authority gate. `bind_runtime_candidate` is still an internal, transport-free API; the observed signature response and endpoint identifier are its inputs, NOT independently verified current Android USB identity. No JNI-facing live publication, no connection-owned stream, no Android fake-port runtime acquisition, no Dashboard live source, no hardware proof and no Burn UI were added. A stored profile fingerprint is imported definition metadata, not verified firmware authenticity; the existing source revision is a non-cryptographic in-process coherence marker, not a secure content digest.
+
+### Immediate continuation boundary — do not skip
+
+1. Under the **retained** `AndroidUsbLiveConnectionSessionOwner` and `EngineAuthoritySerialization`, create a guarded, versioned native JNI bridge that selects this registry-owned runtime candidate only after exact ECU identity/profile match. Resolve the native registry handle from the currently selected `LiveTuneConnectionOwner`; do not pass arbitrary profile bytes, raw definitions, or independently chosen session numbers from the UI. Ensure a failed bind cannot leave a transport or stale native lease active.
+2. Revoke native bound sessions synchronously on disconnect, reconnect, owner close, permission/device loss, transport IO failure, profile registry replacement and owner selection changes; hold a single USB channel owner across runtime read, tune load, RAM Write and disabled Burn. No concurrent unguarded poller.
+3. Add bounded single-frame offline USB acquisition and coarse batched JNI/Kotlin projections, with explicit source marker, generation, validity and sample age. Test incomplete/invalid CRC/status frames, timeouts, late callbacks, reconnects, interleaved operations and stale Dashboard prevention. Preserve the older synthetic ABI and source isolation until live integration is independently qualified.
+4. Finish reproducible generated Mega144H7/uaEFI INI provenance and unsupported-feature classification before general live channel claims. Physical ECU profiling remains last. EpicScope, not EpicHub, owns the Analyzer.
+
+Continue with small `current-work` commits, exact-head complete Foundation qualification, and fast-forward `main` only when green. Avoid reopening the already qualified registry implementation or promoting partial CI evidence.
+
+---
+
 ## Qualified native bound runtime candidate — 2026-10-23
 
 **Latest qualified production SHA:** `146418ddb9506c3b551ee53efbd34d4a4df21b9c`; exact-head [Foundation 39939012838](https://github.com/PJawZK/EpicHub-EpicEFI-Android/actions/runs/39939012838) **success**. Verified `main` was an ancestor (8 commits, 0 behind) of `current-work`; fast-forward of `main` succeeded to the qualified SHA.
