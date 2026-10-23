@@ -3,7 +3,7 @@ use crate::crc32_check_envelope_plan::{
     Crc32CheckEnvelopeError, FramedPageCrc32CheckPlan, frame_page_crc32_check,
 };
 use crate::ecu_profile::ResolvedEcuProfile;
-use crate::engine::with_tune_source_authority;
+use crate::engine::with_tune_source_authority_with_epoch;
 use crate::ms_envelope_codec::crc32_ieee;
 use crate::page_burn_planner::{PageBurnPlan, PageBurnPlanError, plan_page_burn};
 use crate::page_crc32_check_planner::{
@@ -17,6 +17,7 @@ use crate::tuning::TuneSnapshotOrigin;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EngineGuardedPageBurnPlan {
     pub profile_generation: u64,
+    pub session_epoch: u64,
     pub draft_revision: u64,
     /// TunerStudio definition page number. Definition pages are 1-based.
     pub page: usize,
@@ -55,6 +56,7 @@ pub enum EngineGuardedPageBurnError {
         actual: usize,
     },
     SourceImageChanged,
+    StaleSessionEpoch { expected: u64, actual: u64 },
     BurnPlan(PageBurnPlanError),
     CrcPlan(PageCrc32CheckPlanError),
     CrcEnvelope(Crc32CheckEnvelopeError),
@@ -72,7 +74,7 @@ pub fn plan_selected_engine_guarded_page_burn(
         runtime_signature_response,
         max_signature_response_bytes,
         |bundle| {
-            with_tune_source_authority(engine_handle, |session, source| {
+            with_tune_source_authority_with_epoch(engine_handle, |session_epoch, session, source| {
                 validate_live_ram_authority(bundle, session, source)?;
                 let source = source.ok_or(EngineGuardedPageBurnError::MissingSourceImage)?;
                 let expected_page_bytes = exact_source_page(bundle, source, page)?.to_vec();
@@ -85,6 +87,7 @@ pub fn plan_selected_engine_guarded_page_burn(
 
                 Ok(EngineGuardedPageBurnPlan {
                     profile_generation: session.profile_generation(),
+                    session_epoch,
                     draft_revision: session.revision(),
                     page,
                     expected_page_crc32: crc32_ieee(&expected_page_bytes),
@@ -121,7 +124,13 @@ pub fn require_selected_engine_guarded_page_burn_current(
                 });
             }
 
-            with_tune_source_authority(engine_handle, |session, source| {
+            with_tune_source_authority_with_epoch(engine_handle, |session_epoch, session, source| {
+                if session_epoch != plan.session_epoch {
+                    return Err(EngineGuardedPageBurnError::StaleSessionEpoch {
+                        expected: plan.session_epoch,
+                        actual: session_epoch,
+                    });
+                }
                 validate_live_ram_authority(bundle, session, source)?;
                 if session.revision() != plan.draft_revision {
                     return Err(EngineGuardedPageBurnError::RamNotConfirmedForCurrentDraft {
