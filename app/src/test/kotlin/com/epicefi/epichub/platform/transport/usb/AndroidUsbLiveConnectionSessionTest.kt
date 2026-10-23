@@ -7,6 +7,8 @@ import com.epicefi.epichub.engine.DefinitionProbeQueryCompileResult
 import com.epicefi.epichub.engine.LiveTuneConnectionOwner
 import com.epicefi.epichub.engine.LiveTuneLifecycleControl
 import com.epicefi.epichub.engine.LiveTuneSourceLifecycleState
+import com.epicefi.epichub.engine.RuntimeCandidateBindingOperation
+import com.epicefi.epichub.engine.RuntimeCandidateBindingResult
 import com.epicefi.epichub.engine.RuntimeIdentityProbeOperation
 import com.epicefi.epichub.engine.RuntimeIdentityProbePlan
 import com.epicefi.epichub.engine.RuntimeProfileSelectionOperation
@@ -130,7 +132,117 @@ class AndroidUsbLiveConnectionSessionTest {
         )
     }
 
-    private fun authorizedOwner(signature: String, generation: Long): OwnerFixture {
+    @Test
+    fun candidateIsBoundOnlyAfterSelectedUsbIdentityAndRevokedBeforePortClose() {
+        val candidate = FakeRuntimeCandidate()
+        val authority = authorizedOwner("exact.signature", 42L, candidate)
+        val port = FakeBulkPort()
+        val session = AndroidUsbLiveConnectionSessionOwner(
+            { authority.owner },
+            FakeOpener(AndroidUsbEndpointOpenResult.Opened(UsbReadOnlyTransactionChannel(port))),
+        )
+        assertEquals(0, candidate.bindCalls)
+        assertTrue(session.connect("usb:one", 256, 500) is AndroidUsbLiveConnectResult.Connected)
+        assertEquals(1, candidate.bindCalls)
+        assertEquals("usb:one", candidate.endpoint)
+        assertEquals("exact.signature", candidate.signature)
+        assertEquals(42L, candidate.generation)
+        assertEquals(RuntimeCandidateBindingResult.Bound(17L), session.runtimeCandidateStatus)
+        assertTrue(session.disconnect())
+        assertTrue(port.closed)
+        assertTrue(candidate.revocations >= 1)
+        assertTrue(session.runtimeCandidateStatus is RuntimeCandidateBindingResult.Unavailable)
+    }
+
+    @Test
+    fun unsupportedCandidateDoesNotRejectExactProfileTuneConnection() {
+        val candidate = FakeRuntimeCandidate(unsupported = true)
+        val authority = authorizedOwner("exact.signature", 42L, candidate)
+        val port = FakeBulkPort()
+        val session = AndroidUsbLiveConnectionSessionOwner(
+            { authority.owner },
+            FakeOpener(AndroidUsbEndpointOpenResult.Opened(UsbReadOnlyTransactionChannel(port))),
+        )
+        assertTrue(session.connect("usb:one", 256, 500) is AndroidUsbLiveConnectResult.Connected)
+        assertTrue(session.isConnected)
+        assertFalse(port.closed)
+        assertTrue(session.runtimeCandidateStatus is RuntimeCandidateBindingResult.Unavailable)
+        session.close()
+        assertTrue(port.closed)
+    }
+
+    @Test
+    fun malformedReconnectRevokesCandidateAndClosesExistingChannel() {
+        val candidate = FakeRuntimeCandidate()
+        val authority = authorizedOwner("exact.signature", 42L, candidate)
+        val port = FakeBulkPort()
+        val session = AndroidUsbLiveConnectionSessionOwner(
+            { authority.owner },
+            FakeOpener(AndroidUsbEndpointOpenResult.Opened(UsbReadOnlyTransactionChannel(port))),
+        )
+        session.connect("usb:one", 256, 500)
+        val before = candidate.revocations
+        assertTrue(session.connect(" ", 256, 500) is AndroidUsbLiveConnectResult.InvalidSelection)
+        assertTrue(candidate.revocations > before)
+        assertFalse(session.isConnected)
+        assertTrue(port.closed)
+    }
+
+    @Test
+    fun profileOwnerCloseRevokesCandidateWithoutMakingRetainedSessionLive() {
+        val candidate = FakeRuntimeCandidate()
+        val authority = authorizedOwner("exact.signature", 42L, candidate)
+        val port = FakeBulkPort()
+        val session = AndroidUsbLiveConnectionSessionOwner(
+            { authority.owner },
+            FakeOpener(AndroidUsbEndpointOpenResult.Opened(UsbReadOnlyTransactionChannel(port))),
+        )
+        session.connect("usb:one", 256, 500)
+        val previousRevocations = candidate.revocations
+        authority.owner.close()
+        assertTrue(candidate.revocations > previousRevocations)
+        assertFalse(session.isConnected)
+        assertTrue(session.runtimeCandidateStatus is RuntimeCandidateBindingResult.Unavailable)
+        assertEquals(AndroidUsbLiveLoadResult.NotConnected, session.loadCurrentController(256, 500))
+        assertTrue(port.closed)
+    }
+
+    private class FakeRuntimeCandidate(
+        private val unsupported: Boolean = false,
+    ) : RuntimeCandidateBindingOperation {
+        var bindCalls = 0
+        var revocations = 0
+        var endpoint: String? = null
+        var signature: String? = null
+        var generation: Long = 0
+
+        override fun bind(
+            endpointId: String,
+            signature: String,
+            profileGeneration: Long,
+            signatureLimit: Int,
+        ): RuntimeCandidateBindingResult {
+            bindCalls++
+            endpoint = endpointId
+            this.signature = signature
+            generation = profileGeneration
+            return if (unsupported) {
+                RuntimeCandidateBindingResult.Unavailable("Unsupported output definition")
+            } else {
+                RuntimeCandidateBindingResult.Bound(17L)
+            }
+        }
+
+        override fun disconnect() {
+            revocations++
+        }
+    }
+
+    private fun authorizedOwner(
+        signature: String,
+        generation: Long,
+        candidate: RuntimeCandidateBindingOperation? = null,
+    ): OwnerFixture {
         val lifecycle = FakeLifecycle()
         val owner =
             LiveTuneConnectionOwner(
@@ -150,6 +262,7 @@ class AndroidUsbLiveConnectionSessionTest {
                     DefinitionProbeQueryCompileOperation {
                         DefinitionProbeQueryCompileResult.Compiled(byteArrayOf('S'.code.toByte()))
                     },
+                runtimeCandidateBinding = candidate,
             )
         return OwnerFixture(owner, lifecycle)
     }
