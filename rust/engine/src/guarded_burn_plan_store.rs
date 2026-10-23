@@ -264,7 +264,9 @@ pub fn verify_guarded_burn_crc(
         entry.plan.expected_page_crc32,
         runtime_signature_response,
     );
-    if !confirm_nonvolatile_page(engine_handle, record, &entry.plan.expected_page_bytes) {
+    if !confirm_nonvolatile_page(
+        engine_handle, record, &entry.plan.expected_page_bytes, entry.plan.session_epoch,
+    ) {
         return Err(GuardedBurnPlanStoreError::EngineStateChanged);
     }
     *proof = BurnProofState::PostBurnCrcVerified;
