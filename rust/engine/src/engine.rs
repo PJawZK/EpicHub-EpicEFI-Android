@@ -213,7 +213,6 @@ impl EngineRegistry {
         true
     }
 
-    #[cfg(test)]
     fn nonvolatile_proof(&self, handle: i64, page: usize) -> Option<Option<NonvolatilePageProof>> {
         self.engines.get(&handle).map(|engine| {
             let proof = engine.nonvolatile_proofs.get(&page)?;
@@ -351,7 +350,6 @@ pub(crate) fn confirm_nonvolatile_page(
     })
 }
 
-#[cfg(test)]
 pub fn nonvolatile_page_proof(handle: i64, page: usize) -> Option<Option<NonvolatilePageProof>> {
     with_registry(|registry| registry.nonvolatile_proof(handle, page))
 }
