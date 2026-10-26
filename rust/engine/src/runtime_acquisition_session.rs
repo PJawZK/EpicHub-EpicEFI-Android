@@ -92,6 +92,10 @@ impl RuntimeAcquisitionSession {
         })
     }
 
+    pub fn frame_length(&self) -> usize {
+        self.plan.frame_length()
+    }
+
     pub fn snapshot(&self) -> &RuntimePublishedSnapshot {
         &self.published
     }
