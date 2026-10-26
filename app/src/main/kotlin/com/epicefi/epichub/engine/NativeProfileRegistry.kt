@@ -399,6 +399,30 @@ object NativeProfileRegistryBridge {
         System.loadLibrary("epichub_engine")
     }
 
+    /**
+     * Prepares one full-block request in a direct buffer:
+     * [u32 expected response bytes, u32 request bytes, request payload].
+     * Returns the positive native request sequence or a negative failure.
+     */
+    external fun prepareRuntimeRead(
+        handle: Long,
+        epoch: Long,
+        nowMs: Long,
+        timeoutMs: Long,
+        output: ByteBuffer,
+    ): Long
+
+    /** Completes the matching request with a complete CRC-framed ECU response. */
+    external fun finishRuntimeRead(
+        handle: Long,
+        epoch: Long,
+        sequence: Long,
+        nowMs: Long,
+        response: ByteBuffer,
+        responseLength: Int,
+        output: ByteBuffer,
+    ): Int
+
     /** Returns a positive registry-owned candidate epoch, not live telemetry. */
     external fun bindRuntimeCandidate(
         handle: Long,
