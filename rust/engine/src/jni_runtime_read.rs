@@ -53,10 +53,7 @@ fn freshness_code(state: RuntimeSampleState) -> u32 {
 /// mistaking this for the existing synthetic four-channel RuntimeSnapshot.
 /// Header: magic EPIC, version, epoch, sequence, timestamp, generation,
 /// definition revision, count, validity. Samples: id, f32, validity (12 B).
-fn encode_batch(
-    binding: &BoundRuntimeIdentity,
-    batch: &LiveChannelBatch,
-) -> Option<Vec<u8>> {
+fn encode_batch(binding: &BoundRuntimeIdentity, batch: &LiveChannelBatch) -> Option<Vec<u8>> {
     if batch.session != binding.session_epoch()
         || batch.validity != RuntimeSampleState::Fresh
         || batch.samples.is_empty()
@@ -111,7 +108,10 @@ pub extern "system" fn Java_com_epicefi_epichub_engine_NativeProfileRegistryBrid
             Err(_) => return ERR_BUFFER,
         };
         let result = prepare_runtime_read_from_registry(
-            handle, epoch as u64, now_ms as u64, timeout_ms as u64,
+            handle,
+            epoch as u64,
+            now_ms as u64,
+            timeout_ms as u64,
         );
         let (token, request, expected_response) = match result {
             Ok(value) => value,
@@ -174,7 +174,11 @@ pub extern "system" fn Java_com_epicefi_epichub_engine_NativeProfileRegistryBrid
         let _ = (response_capacity, output_capacity);
         let response_bytes = unsafe { std::slice::from_raw_parts(input_ptr, len) };
         let (binding, batch) = match finish_runtime_read_from_registry(
-            handle, epoch as u64, sequence as u64, now_ms as u64, response_bytes,
+            handle,
+            epoch as u64,
+            sequence as u64,
+            now_ms as u64,
+            response_bytes,
         ) {
             Ok(result) => result,
             Err(error) => return map_failure(error) as jint,
@@ -183,7 +187,9 @@ pub extern "system" fn Java_com_epicefi_epichub_engine_NativeProfileRegistryBrid
             Some(encoded) => encoded,
             None => return ERR_NATIVE as jint,
         };
-        unsafe { std::slice::from_raw_parts_mut(output_ptr, encoded.len()).copy_from_slice(&encoded) };
+        unsafe {
+            std::slice::from_raw_parts_mut(output_ptr, encoded.len()).copy_from_slice(&encoded)
+        };
         jint::try_from(encoded.len()).unwrap_or(ERR_NATIVE as jint)
     })
 }
