@@ -1,5 +1,6 @@
 package com.epicefi.epichub.engine
 
+import com.epicefi.epichub.platform.transport.usb.UsbReadOnlyTransactionChannel
 import java.nio.ByteBuffer
 
 /**
@@ -21,6 +22,14 @@ internal interface RuntimeCandidateBindingOperation {
     ): RuntimeCandidateBindingResult
 
     fun disconnect()
+
+    /** Unsupported by default for offline fake candidates; never invent a frame. */
+    fun read(
+        epoch: Long,
+        channel: UsbReadOnlyTransactionChannel,
+        timeoutMs: Int,
+    ): RuntimeReadCycleResult =
+        RuntimeReadCycleResult.Unavailable("Runtime read capability is not installed.")
 }
 
 /**
@@ -30,6 +39,16 @@ internal interface RuntimeCandidateBindingOperation {
 internal class NativeRegistryRuntimeCandidateBinding(
     private val registry: NativeProfileRegistry,
 ) : RuntimeCandidateBindingOperation {
+    private val reader = NativeRuntimeReadCycle(registry::readOnlyRegistryHandle, registry::isAlive)
+
+    override fun read(
+        epoch: Long,
+        channel: UsbReadOnlyTransactionChannel,
+        timeoutMs: Int,
+    ): RuntimeReadCycleResult = EngineAuthoritySerialization.exclusive {
+        reader.read(epoch, channel, timeoutMs)
+    }
+
     override fun bind(
         endpointId: String,
         signature: String,
