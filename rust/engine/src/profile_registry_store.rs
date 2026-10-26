@@ -235,6 +235,43 @@ impl ProfileRegistryStore {
             .map_err(RuntimeRegistryBindingError::Bound)
     }
 
+    /// The epoch is resolved against a private native lease under the registry
+    /// mutex; callers never supply the profile, definition, or lease fields.
+    pub fn prepare_runtime_read_for_epoch(
+        &mut self,
+        handle: i64,
+        epoch: u64,
+        now_ms: u64,
+        timeout_ms: u64,
+    ) -> Result<(RuntimeRequestToken, Vec<u8>, usize), RuntimeRegistryBindingError> {
+        let runtime = self.runtime_mut(handle)?;
+        let lease = runtime.binding_for_epoch(epoch).map_err(RuntimeRegistryBindingError::Bound)?;
+        let response_bytes = runtime
+            .expected_response_bytes(&lease)
+            .map_err(RuntimeRegistryBindingError::Bound)?;
+        let (token, request) = runtime
+            .begin(&lease, now_ms, timeout_ms)
+            .map_err(RuntimeRegistryBindingError::Bound)?;
+        Ok((token, request, response_bytes))
+    }
+
+    pub fn finish_runtime_read_for_epoch(
+        &mut self,
+        handle: i64,
+        epoch: u64,
+        sequence: u64,
+        now_ms: u64,
+        response: &[u8],
+    ) -> Result<(BoundRuntimeIdentity, LiveChannelBatch), RuntimeRegistryBindingError> {
+        let runtime = self.runtime_mut(handle)?;
+        let lease = runtime.binding_for_epoch(epoch).map_err(RuntimeRegistryBindingError::Bound)?;
+        let batch = runtime
+            .complete(&lease, RuntimeRequestToken { session: epoch, sequence }, now_ms, response)
+            .cloned()
+            .map_err(RuntimeRegistryBindingError::Bound)?;
+        Ok((lease, batch))
+    }
+
     pub fn disconnect_runtime(&mut self, handle: i64) -> Result<(), RegistryStoreError> {
         let state = self
             .registries
@@ -394,6 +431,25 @@ pub fn bind_runtime_candidate_from_registry(
 /// Revokes the registry's candidate lease; never closes a physical USB port.
 pub fn disconnect_runtime_candidate_from_registry(handle: i64) -> Result<(), RegistryStoreError> {
     with_store(|store| store.disconnect_runtime(handle))
+}
+
+pub fn prepare_runtime_read_from_registry(
+    handle: i64,
+    epoch: u64,
+    now_ms: u64,
+    timeout_ms: u64,
+) -> Result<(RuntimeRequestToken, Vec<u8>, usize), RuntimeRegistryBindingError> {
+    with_store(|store| store.prepare_runtime_read_for_epoch(handle, epoch, now_ms, timeout_ms))
+}
+
+pub fn finish_runtime_read_from_registry(
+    handle: i64,
+    epoch: u64,
+    sequence: u64,
+    now_ms: u64,
+    response: &[u8],
+) -> Result<(BoundRuntimeIdentity, LiveChannelBatch), RuntimeRegistryBindingError> {
+    with_store(|store| store.finish_runtime_read_for_epoch(handle, epoch, sequence, now_ms, response))
 }
 
 pub fn with_selected_compiled_bundle<T>(
