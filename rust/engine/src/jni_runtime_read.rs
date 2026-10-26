@@ -202,7 +202,7 @@ mod tests {
     fn bridge_sizes_bound_one_full_frame_and_channel_batch() {
         assert_eq!(REQUEST_HEADER, 8);
         assert_eq!(BATCH_HEADER, 56);
-        assert!(MAX_BATCH_BYTES < MAX_RESPONSE_BYTES);
+        assert!(vec![0_u8; MAX_BATCH_BYTES].len() < MAX_RESPONSE_BYTES);
         assert_eq!(freshness_code(RuntimeSampleState::Fresh), 1);
         assert_eq!(freshness_code(RuntimeSampleState::Invalid), 3);
     }
