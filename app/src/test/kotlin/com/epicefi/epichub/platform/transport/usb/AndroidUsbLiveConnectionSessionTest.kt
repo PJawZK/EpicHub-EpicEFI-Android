@@ -9,6 +9,9 @@ import com.epicefi.epichub.engine.LiveTuneLifecycleControl
 import com.epicefi.epichub.engine.LiveTuneSourceLifecycleState
 import com.epicefi.epichub.engine.RuntimeCandidateBindingOperation
 import com.epicefi.epichub.engine.RuntimeCandidateBindingResult
+import com.epicefi.epichub.engine.RuntimeReadCycleResult
+import com.epicefi.epichub.engine.LiveRuntimeFrame
+import com.epicefi.epichub.engine.LiveRuntimeReading
 import com.epicefi.epichub.engine.RuntimeIdentityProbeOperation
 import com.epicefi.epichub.engine.RuntimeIdentityProbePlan
 import com.epicefi.epichub.engine.RuntimeProfileSelectionOperation
@@ -207,9 +210,55 @@ class AndroidUsbLiveConnectionSessionTest {
         assertTrue(port.closed)
     }
 
+    @Test
+    fun onlyBoundCandidateMayReadAndFailureRevokesRetainedUsbOwner() {
+        val candidate = FakeRuntimeCandidate()
+        val authority = authorizedOwner("exact.signature", 42L, candidate)
+        val port = FakeBulkPort()
+        val session = AndroidUsbLiveConnectionSessionOwner(
+            { authority.owner },
+            FakeOpener(AndroidUsbEndpointOpenResult.Opened(UsbReadOnlyTransactionChannel(port))),
+        )
+        assertTrue(session.readRuntimeOnce(500) is RuntimeReadCycleResult.Unavailable)
+        session.connect("usb:one", 256, 500)
+        assertTrue(session.readRuntimeOnce(500) is RuntimeReadCycleResult.Fresh)
+        assertEquals(1, candidate.readCalls)
+        assertTrue(session.isConnected)
+        candidate.failRead = true
+        assertTrue(session.readRuntimeOnce(500) is RuntimeReadCycleResult.Unavailable)
+        assertTrue(port.closed)
+        assertFalse(session.isConnected)
+        assertTrue(session.runtimeCandidateStatus is RuntimeCandidateBindingResult.Unavailable)
+        assertTrue(session.readRuntimeOnce(500) is RuntimeReadCycleResult.Unavailable)
+        assertEquals(2, candidate.readCalls)
+    }
+
+    @Test
+    fun unsupportedRuntimeNeverStartsReadAndProfileReplacementRevokesOldLease() {
+        val candidate = FakeRuntimeCandidate(unsupported = true)
+        val first = authorizedOwner("exact.signature", 42L, candidate)
+        val replacement = authorizedOwner("replacement", 43L)
+        var selected = first.owner
+        val port = FakeBulkPort()
+        val session = AndroidUsbLiveConnectionSessionOwner(
+            { selected },
+            FakeOpener(AndroidUsbEndpointOpenResult.Opened(UsbReadOnlyTransactionChannel(port))),
+        )
+        session.connect("usb:one", 256, 500)
+        assertTrue(session.readRuntimeOnce(500) is RuntimeReadCycleResult.Unavailable)
+        assertEquals(0, candidate.readCalls)
+        assertFalse(port.closed)
+        selected = replacement.owner
+        assertTrue(session.readRuntimeOnce(500) is RuntimeReadCycleResult.Unavailable)
+        assertTrue(port.closed)
+        assertFalse(session.isConnected)
+    }
+
     private class FakeRuntimeCandidate(
         private val unsupported: Boolean = false,
     ) : RuntimeCandidateBindingOperation {
+        var readCalls = 0
+        var failRead = false
         var bindCalls = 0
         var revocations = 0
         var endpoint: String? = null
@@ -230,6 +279,28 @@ class AndroidUsbLiveConnectionSessionTest {
                 RuntimeCandidateBindingResult.Unavailable("Unsupported output definition")
             } else {
                 RuntimeCandidateBindingResult.Bound(17L)
+            }
+        }
+
+        override fun read(
+            epoch: Long,
+            channel: UsbReadOnlyTransactionChannel,
+            timeoutMs: Int,
+        ): RuntimeReadCycleResult {
+            readCalls++
+            return if (failRead) {
+                RuntimeReadCycleResult.Unavailable("Simulated native transport fault.")
+            } else {
+                RuntimeReadCycleResult.Fresh(
+                    LiveRuntimeFrame(
+                        epoch = epoch,
+                        sequence = readCalls.toLong(),
+                        receivedAtMs = 10L + readCalls,
+                        profileGeneration = generation,
+                        definitionRevision = 1L,
+                        readings = listOf(LiveRuntimeReading(101L, 910f)),
+                    ),
+                )
             }
         }
 
