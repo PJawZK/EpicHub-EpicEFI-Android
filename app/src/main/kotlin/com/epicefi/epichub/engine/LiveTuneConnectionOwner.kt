@@ -195,6 +195,21 @@ class LiveTuneConnectionOwner internal constructor(
         return binder.bind(endpointId, identity.signature, profileGeneration, signatureLimit)
     }
 
+    /** No polling. Invoked only by the retained serialized Android USB owner. */
+    internal fun readRuntimeOnce(
+        epoch: Long,
+        channel: UsbReadOnlyTransactionChannel,
+        timeoutMs: Int,
+    ): RuntimeReadCycleResult {
+        if (!isAlive) return RuntimeReadCycleResult.Unavailable("Selected profile owner is closed.")
+        if (lifecycle.state is LiveTuneSourceLifecycleState.Disconnected) {
+            return RuntimeReadCycleResult.Unavailable("Controller is disconnected.")
+        }
+        val operation = runtimeCandidateBinding
+            ?: return RuntimeReadCycleResult.Unavailable("Runtime capability unavailable.")
+        return operation.read(epoch, channel, timeoutMs)
+    }
+
     fun probeAndConnect(
         channel: UsbReadOnlyTransactionChannel,
         plan: RuntimeIdentityProbePlan,
