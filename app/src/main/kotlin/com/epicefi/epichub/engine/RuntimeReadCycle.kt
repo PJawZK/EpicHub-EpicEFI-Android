@@ -1,5 +1,6 @@
 package com.epicefi.epichub.engine
 
+import android.os.SystemClock
 import com.epicefi.epichub.platform.transport.usb.UsbReadOnlyTransactionChannel
 import com.epicefi.epichub.platform.transport.usb.UsbReadOnlyTransactionResult
 import java.nio.ByteBuffer
@@ -53,7 +54,7 @@ internal class NativeRuntimeReadCycle(
     private val handle: () -> Long,
     private val alive: () -> Boolean,
     private val ops: NativeRuntimeReadOps = JniNativeRuntimeReadOps,
-    private val monotonicMs: () -> Long = { System.nanoTime() / 1_000_000 },
+    private val monotonicMs: () -> Long = { SystemClock.elapsedRealtime() },
 ) {
     fun read(
         epoch: Long,
