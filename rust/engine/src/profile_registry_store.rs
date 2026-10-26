@@ -245,7 +245,9 @@ impl ProfileRegistryStore {
         timeout_ms: u64,
     ) -> Result<(RuntimeRequestToken, Vec<u8>, usize), RuntimeRegistryBindingError> {
         let runtime = self.runtime_mut(handle)?;
-        let lease = runtime.binding_for_epoch(epoch).map_err(RuntimeRegistryBindingError::Bound)?;
+        let lease = runtime
+            .binding_for_epoch(epoch)
+            .map_err(RuntimeRegistryBindingError::Bound)?;
         let response_bytes = runtime
             .expected_response_bytes(&lease)
             .map_err(RuntimeRegistryBindingError::Bound)?;
@@ -264,9 +266,19 @@ impl ProfileRegistryStore {
         response: &[u8],
     ) -> Result<(BoundRuntimeIdentity, LiveChannelBatch), RuntimeRegistryBindingError> {
         let runtime = self.runtime_mut(handle)?;
-        let lease = runtime.binding_for_epoch(epoch).map_err(RuntimeRegistryBindingError::Bound)?;
+        let lease = runtime
+            .binding_for_epoch(epoch)
+            .map_err(RuntimeRegistryBindingError::Bound)?;
         let batch = runtime
-            .complete(&lease, RuntimeRequestToken { session: epoch, sequence }, now_ms, response)
+            .complete(
+                &lease,
+                RuntimeRequestToken {
+                    session: epoch,
+                    sequence,
+                },
+                now_ms,
+                response,
+            )
             .cloned()
             .map_err(RuntimeRegistryBindingError::Bound)?;
         Ok((lease, batch))
@@ -449,7 +461,9 @@ pub fn finish_runtime_read_from_registry(
     now_ms: u64,
     response: &[u8],
 ) -> Result<(BoundRuntimeIdentity, LiveChannelBatch), RuntimeRegistryBindingError> {
-    with_store(|store| store.finish_runtime_read_for_epoch(handle, epoch, sequence, now_ms, response))
+    with_store(|store| {
+        store.finish_runtime_read_for_epoch(handle, epoch, sequence, now_ms, response)
+    })
 }
 
 pub fn with_selected_compiled_bundle<T>(
@@ -926,7 +940,9 @@ table = registryBundleTable, registryBundleMap, "Registry Bundle Table", 1
     fn epoch_only_read_cycle_fences_reconnect_bad_crc_and_late_frames() {
         let mut store = ProfileRegistryStore::new();
         let handle = store.create();
-        store.register_definition_bundle(handle, &runtime_bundle_import()).unwrap();
+        store
+            .register_definition_bundle(handle, &runtime_bundle_import())
+            .unwrap();
         let first = store
             .bind_runtime_candidate(handle, "usb:first", RUNTIME_SIGNATURE, 256, 800)
             .unwrap();
@@ -944,7 +960,13 @@ table = registryBundleTable, registryBundleMap, "Registry Bundle Table", 1
             ))
         ));
         let (_, accepted) = store
-            .finish_runtime_read_for_epoch(handle, first.session_epoch(), token.sequence, 21, &runtime_response(810.0))
+            .finish_runtime_read_for_epoch(
+                handle,
+                first.session_epoch(),
+                token.sequence,
+                21,
+                &runtime_response(810.0),
+            )
             .unwrap();
         assert_eq!(accepted.samples[0].value, 810.0);
 
@@ -954,22 +976,42 @@ table = registryBundleTable, registryBundleMap, "Registry Bundle Table", 1
         let mut corrupt = runtime_response(1000.0);
         *corrupt.last_mut().unwrap() ^= 1;
         assert!(matches!(
-            store.finish_runtime_read_for_epoch(handle, first.session_epoch(), bad.sequence, 31, &corrupt),
-            Err(RuntimeRegistryBindingError::Bound(BoundRuntimeError::Acquisition(_)))
+            store.finish_runtime_read_for_epoch(
+                handle,
+                first.session_epoch(),
+                bad.sequence,
+                31,
+                &corrupt
+            ),
+            Err(RuntimeRegistryBindingError::Bound(
+                BoundRuntimeError::Acquisition(_)
+            ))
         ));
-        let prior = store.latest_runtime_batch(handle, &first, 32, 500).unwrap().unwrap();
-        assert_ne!(prior.validity, crate::runtime_acquisition_session::RuntimeSampleState::Fresh);
+        let prior = store
+            .latest_runtime_batch(handle, &first, 32, 500)
+            .unwrap()
+            .unwrap();
+        assert_ne!(
+            prior.validity,
+            crate::runtime_acquisition_session::RuntimeSampleState::Fresh
+        );
 
         let (late, _, _) = store
             .prepare_runtime_read_for_epoch(handle, first.session_epoch(), 40, 50)
             .unwrap();
         assert!(matches!(
             store.finish_runtime_read_for_epoch(
-                handle, first.session_epoch(), late.sequence, 90, &runtime_response(1400.0)
+                handle,
+                first.session_epoch(),
+                late.sequence,
+                90,
+                &runtime_response(1400.0)
             ),
-            Err(RuntimeRegistryBindingError::Bound(BoundRuntimeError::Acquisition(
-                crate::runtime_acquisition_session::RuntimeAcquisitionError::RequestTimedOut
-            )))
+            Err(RuntimeRegistryBindingError::Bound(
+                BoundRuntimeError::Acquisition(
+                    crate::runtime_acquisition_session::RuntimeAcquisitionError::RequestTimedOut
+                )
+            ))
         ));
         let newer = store
             .bind_runtime_candidate(handle, "usb:second", RUNTIME_SIGNATURE, 256, 800)
@@ -977,17 +1019,37 @@ table = registryBundleTable, registryBundleMap, "Registry Bundle Table", 1
         assert_ne!(first.session_epoch(), newer.session_epoch());
         assert_eq!(
             store.prepare_runtime_read_for_epoch(handle, first.session_epoch(), 100, 50),
-            Err(RuntimeRegistryBindingError::Bound(BoundRuntimeError::StaleAuthority))
+            Err(RuntimeRegistryBindingError::Bound(
+                BoundRuntimeError::StaleAuthority
+            ))
         );
         assert_eq!(
-            store.finish_runtime_read_for_epoch(handle, first.session_epoch(), late.sequence, 100, &runtime_response(999.0)),
-            Err(RuntimeRegistryBindingError::Bound(BoundRuntimeError::StaleAuthority))
+            store.finish_runtime_read_for_epoch(
+                handle,
+                first.session_epoch(),
+                late.sequence,
+                100,
+                &runtime_response(999.0)
+            ),
+            Err(RuntimeRegistryBindingError::Bound(
+                BoundRuntimeError::StaleAuthority
+            ))
         );
-        let (current, _, _) = store.prepare_runtime_read_for_epoch(handle, newer.session_epoch(), 101, 50).unwrap();
+        let (current, _, _) = store
+            .prepare_runtime_read_for_epoch(handle, newer.session_epoch(), 101, 50)
+            .unwrap();
         store.disconnect_runtime(handle).unwrap();
         assert_eq!(
-            store.finish_runtime_read_for_epoch(handle, newer.session_epoch(), current.sequence, 102, &runtime_response(1.0)),
-            Err(RuntimeRegistryBindingError::Bound(BoundRuntimeError::SessionClosed))
+            store.finish_runtime_read_for_epoch(
+                handle,
+                newer.session_epoch(),
+                current.sequence,
+                102,
+                &runtime_response(1.0)
+            ),
+            Err(RuntimeRegistryBindingError::Bound(
+                BoundRuntimeError::SessionClosed
+            ))
         );
     }
 
