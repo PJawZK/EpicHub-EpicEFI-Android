@@ -160,7 +160,10 @@ impl RuntimeBoundLiveSession {
         &self,
         epoch: u64,
     ) -> Result<BoundRuntimeIdentity, BoundRuntimeError> {
-        let active = self.active.as_ref().ok_or(BoundRuntimeError::SessionClosed)?;
+        let active = self
+            .active
+            .as_ref()
+            .ok_or(BoundRuntimeError::SessionClosed)?;
         if epoch == 0 || active.binding.session_epoch != epoch {
             return Err(BoundRuntimeError::StaleAuthority);
         }
@@ -177,7 +180,9 @@ impl RuntimeBoundLiveSession {
         let active = self.authorized(binding)?;
         let length = active.acquisition.frame_length() + 7;
         if length > 65_536 {
-            return Err(BoundRuntimeError::ReadPlan(RuntimeOutputReadError::InvalidFrameLength));
+            return Err(BoundRuntimeError::ReadPlan(
+                RuntimeOutputReadError::InvalidFrameLength,
+            ));
         }
         Ok(length)
     }
