@@ -154,6 +154,34 @@ impl RuntimeBoundLiveSession {
         Ok(binding)
     }
 
+    /// Only the registry owner may resolve a candidate epoch to its private lease.
+    /// The caller-provided epoch by itself does not authorize a different binding.
+    pub(crate) fn binding_for_epoch(
+        &self,
+        epoch: u64,
+    ) -> Result<BoundRuntimeIdentity, BoundRuntimeError> {
+        let active = self.active.as_ref().ok_or(BoundRuntimeError::SessionClosed)?;
+        if epoch == 0 || active.binding.session_epoch != epoch {
+            return Err(BoundRuntimeError::StaleAuthority);
+        }
+        Ok(active.binding.clone())
+    }
+
+    /// The examined msEnvelope_1.0 response adds two length bytes, a status
+    /// byte, and four CRC bytes to the definition-declared full runtime block.
+    /// The Android channel has an absolute 64 KiB response cap.
+    pub(crate) fn expected_response_bytes(
+        &self,
+        binding: &BoundRuntimeIdentity,
+    ) -> Result<usize, BoundRuntimeError> {
+        let active = self.authorized(binding)?;
+        let length = active.acquisition.frame_length() + 7;
+        if length > 65_536 {
+            return Err(BoundRuntimeError::ReadPlan(RuntimeOutputReadError::InvalidFrameLength));
+        }
+        Ok(length)
+    }
+
     pub fn channel_info(
         &self,
         binding: &BoundRuntimeIdentity,
