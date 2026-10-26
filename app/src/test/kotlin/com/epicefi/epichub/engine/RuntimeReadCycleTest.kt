@@ -86,7 +86,7 @@ class RuntimeReadCycleTest {
 
     private fun frame(value: Float): ByteArray {
         val body = ByteBuffer.allocate(5).order(ByteOrder.LITTLE_ENDIAN)
-            .put(0).putFloat(value).array()
+            .put(0.toByte()).putFloat(value).array()
         val crc = CRC32().apply { update(body) }.value
         return ByteBuffer.allocate(body.size + 6).order(ByteOrder.BIG_ENDIAN)
             .putShort(body.size.toShort()).put(body).putInt(crc.toInt()).array()
