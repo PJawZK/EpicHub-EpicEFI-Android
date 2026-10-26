@@ -4,6 +4,7 @@ import android.hardware.usb.UsbManager
 import com.epicefi.epichub.engine.DefinitionDrivenLiveTuneConnectResult
 import com.epicefi.epichub.engine.EngineAuthoritySerialization
 import com.epicefi.epichub.engine.RuntimeCandidateBindingResult
+import com.epicefi.epichub.engine.RuntimeReadCycleResult
 import com.epicefi.epichub.engine.LiveTuneConnectionOwner
 import com.epicefi.epichub.engine.LiveTuneOwnerBurnResult
 import com.epicefi.epichub.engine.LiveTuneOwnerLoadResult
@@ -302,6 +303,38 @@ class AndroidUsbLiveConnectionSessionOwner internal constructor(
             ),
         )
     }
+
+    /**
+     * Explicit one-shot acquisition, not a background poller or Dashboard source.
+     * One retained USB channel and one engine lock span native prepare/USB/complete.
+     * Any failure closes the physical channel and revokes the candidate.
+     */
+    @Synchronized
+    internal fun readRuntimeOnce(timeoutMs: Int): RuntimeReadCycleResult =
+        EngineAuthoritySerialization.exclusive {
+            if (closed) return@exclusive RuntimeReadCycleResult.Unavailable("USB owner is closed.")
+            val channel = connectedChannel
+                ?: return@exclusive RuntimeReadCycleResult.Unavailable("No USB connection.")
+            val authority = connectedOwner
+                ?: return@exclusive RuntimeReadCycleResult.Unavailable("No profile owner.")
+            if (!authority.isAlive || connectionOwnerProvider() !== authority) {
+                disconnectCurrent()
+                return@exclusive RuntimeReadCycleResult.Unavailable("Selected profile owner changed.")
+            }
+            val candidate = runtimeCandidate as? RuntimeCandidateBindingResult.Bound
+                ?: return@exclusive RuntimeReadCycleResult.Unavailable("No verified runtime candidate.")
+            val result = try {
+                authority.readRuntimeOnce(candidate.sessionEpoch, channel, timeoutMs)
+            } catch (failure: RuntimeException) {
+                RuntimeReadCycleResult.Unavailable("Runtime transaction failed: ${failure.javaClass.simpleName}")
+            } catch (failure: LinkageError) {
+                RuntimeReadCycleResult.Unavailable("Native runtime bridge unavailable: ${failure.javaClass.simpleName}")
+            }
+            if (result !is RuntimeReadCycleResult.Fresh) {
+                disconnectCurrent()
+            }
+            result
+        }
 
     @Synchronized
     fun disconnect(): Boolean = EngineAuthoritySerialization.exclusive {
