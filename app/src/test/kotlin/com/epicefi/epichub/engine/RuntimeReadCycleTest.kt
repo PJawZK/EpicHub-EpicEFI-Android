@@ -24,7 +24,7 @@ class RuntimeReadCycleTest {
         assertEquals(1L, frame.sequence)
         assertEquals(800L, frame.profileGeneration)
         assertEquals(101L, frame.readings.single().id)
-        assertEquals(915.5f, frame.readings.single().value)
+        assertEquals(915.5f, frame.readings.single().value, 0.001f)
         assertEquals(1, port.sends)
         assertEquals(1, ops.completions)
         assertEquals(request.toList(), port.lastRequest?.toList())
