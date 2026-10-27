@@ -77,16 +77,23 @@ fn encode_catalog_data(
     for channel in channels {
         let name = channel.name.as_bytes();
         let units = channel.units.as_bytes();
-        if channel.id == 0 || !ids.insert(channel.id)
-            || name.is_empty() || name.len() > MAX_NAME_BYTES || units.len() > MAX_UNITS_BYTES
+        if channel.id == 0
+            || !ids.insert(channel.id)
+            || name.is_empty()
+            || name.len() > MAX_NAME_BYTES
+            || units.len() > MAX_UNITS_BYTES
             || !names.insert(channel.name.as_str())
-            || !name.iter().all(|byte| byte.is_ascii_alphanumeric() || *byte == b'_')
+            || !name
+                .iter()
+                .all(|byte| byte.is_ascii_alphanumeric() || *byte == b'_')
             || channel.units.chars().any(char::is_control)
         {
             return None;
         }
         let (kind, first, last) = type_metadata(channel.value_type);
-        let total = result.len().checked_add(ENTRY_BYTES + name.len() + units.len())?;
+        let total = result
+            .len()
+            .checked_add(ENTRY_BYTES + name.len() + units.len())?;
         if total > CATALOG_CAPACITY {
             return None;
         }
