@@ -480,6 +480,31 @@ class AndroidUsbLiveConnectionSessionTest {
     }
 
     @Test
+    fun usbAccessQuerySecurityExceptionFailsClosedAndRevokesRuntimeFreshness() {
+        val candidate = FakeRuntimeCandidate()
+        val owner = authorizedOwner("exact.signature", 42L, candidate)
+        val port = FakeBulkPort()
+        var throwsSecurity = false
+        val session = AndroidUsbLiveConnectionSessionOwner(
+            { owner.owner },
+            FakeOpener(AndroidUsbEndpointOpenResult.Opened(UsbReadOnlyTransactionChannel(port))),
+            monotonicMs = { 11L },
+            endpointAccess = AndroidUsbEndpointAccess {
+                if (throwsSecurity) throw SecurityException("USB permission disappeared")
+                true
+            },
+        )
+        assertTrue(session.connect("usb:one", 256, 500) is AndroidUsbLiveConnectResult.Connected)
+        candidate.sampleAtMs = 11L
+        assertTrue(session.sampleRuntimeIfDue().canUseAsLive)
+        throwsSecurity = true
+        assertFalse(session.isConnected)
+        assertEquals(LiveRuntimeValidity.Stale, session.sampledRuntimeSnapshot().validity)
+        assertTrue(port.closed)
+        assertFalse(session.sampledRuntimeSnapshot().canUseAsLive)
+    }
+
+    @Test
     fun permissionRevokedDuringCandidateBindingRejectsConnectAndReleasesPort() {
         val candidate = FakeRuntimeCandidate()
         var allowed = true
