@@ -119,6 +119,10 @@ internal class LiveRuntimeSamplingGate(
 
     fun snapshot(nowMs: Long): LiveRuntimeSampleView {
         val frame = previous
+        if (nowMs < 0L || (frame != null && nowMs < frame.receivedAtMs)) {
+            // A regressed clock must not spontaneously restore Fresh when time recovers.
+            fail("Monotonic clock regressed while reading runtime state.")
+        }
         val age = frame?.let {
             if (nowMs >= it.receivedAtMs) nowMs - it.receivedAtMs else null
         }
