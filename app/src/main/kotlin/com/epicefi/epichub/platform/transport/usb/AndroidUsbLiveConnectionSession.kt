@@ -172,6 +172,7 @@ class AndroidUsbLiveConnectionSessionOwner internal constructor(
     internal val runtimeCandidateStatus: RuntimeCandidateBindingResult
         get() = synchronized(this) {
             if (closed || connectedOwner?.isAlive != true ||
+                connectedOwner !== connectionOwnerProvider() ||
                 endpointId?.let(endpointAccess::isUsable) != true) {
                 RuntimeCandidateBindingResult.Unavailable("No active ECU connection.")
             } else {
@@ -182,12 +183,16 @@ class AndroidUsbLiveConnectionSessionOwner internal constructor(
     val isConnected: Boolean
         get() = synchronized(this) {
             !closed && connectedChannel != null && connectedOwner?.isAlive == true &&
+                connectedOwner === connectionOwnerProvider() &&
                 endpointId?.let(endpointAccess::isUsable) == true
         }
 
     val connectedEndpointId: String?
         get() = synchronized(this) {
-            endpointId?.takeIf(endpointAccess::isUsable)
+            endpointId?.takeIf {
+                connectedOwner?.isAlive == true &&
+                    connectedOwner === connectionOwnerProvider() && endpointAccess.isUsable(it)
+            }
         }
 
     /** Called by an owning Android USB detach/permission-loss observer, never by the UI. */
@@ -312,17 +317,23 @@ class AndroidUsbLiveConnectionSessionOwner internal constructor(
         if (!hasUsableRetainedEndpoint()) return AndroidUsbLiveLoadResult.NotConnected
         val channel = connectedChannel ?: return AndroidUsbLiveLoadResult.NotConnected
         val authority = connectedOwner ?: return AndroidUsbLiveLoadResult.NotConnected
-        if (!authority.isAlive) {
+        if (!authority.isAlive || connectionOwnerProvider() !== authority) {
             disconnectCurrent()
             return AndroidUsbLiveLoadResult.NotConnected
         }
-        return AndroidUsbLiveLoadResult.Completed(
-            authority.loadCurrentController(
-                signatureLimit = signatureLimit,
-                channel = channel,
-                timeoutMs = timeoutMs,
-            ),
+        val result = authority.loadCurrentController(
+            signatureLimit = signatureLimit,
+            channel = channel,
+            timeoutMs = timeoutMs,
         )
+        if (connectedOwner !== authority || connectedChannel !== channel ||
+            !authority.isAlive || connectionOwnerProvider() !== authority ||
+            !hasUsableRetainedEndpoint()
+        ) {
+            disconnectCurrent()
+            return AndroidUsbLiveLoadResult.NotConnected
+        }
+        return AndroidUsbLiveLoadResult.Completed(result)
     }
 
     @Synchronized
@@ -341,17 +352,23 @@ class AndroidUsbLiveConnectionSessionOwner internal constructor(
         if (!hasUsableRetainedEndpoint()) return AndroidUsbLiveRamWriteResult.NotConnected
         val channel = connectedChannel ?: return AndroidUsbLiveRamWriteResult.NotConnected
         val authority = connectedOwner ?: return AndroidUsbLiveRamWriteResult.NotConnected
-        if (!authority.isAlive) {
+        if (!authority.isAlive || connectionOwnerProvider() !== authority) {
             disconnectCurrent()
             return AndroidUsbLiveRamWriteResult.NotConnected
         }
-        return AndroidUsbLiveRamWriteResult.Completed(
-            authority.writeCurrentDraftToRam(
-                signatureLimit = signatureLimit,
-                channel = channel,
-                timeoutMs = timeoutMs,
-            ),
+        val result = authority.writeCurrentDraftToRam(
+            signatureLimit = signatureLimit,
+            channel = channel,
+            timeoutMs = timeoutMs,
         )
+        if (connectedOwner !== authority || connectedChannel !== channel ||
+            !authority.isAlive || connectionOwnerProvider() !== authority ||
+            !hasUsableRetainedEndpoint()
+        ) {
+            disconnectCurrent()
+            return AndroidUsbLiveRamWriteResult.NotConnected
+        }
+        return AndroidUsbLiveRamWriteResult.Completed(result)
     }
 
     @Synchronized
@@ -372,18 +389,24 @@ class AndroidUsbLiveConnectionSessionOwner internal constructor(
         if (!hasUsableRetainedEndpoint()) return AndroidUsbLiveBurnResult.NotConnected
         val channel = connectedChannel ?: return AndroidUsbLiveBurnResult.NotConnected
         val authority = connectedOwner ?: return AndroidUsbLiveBurnResult.NotConnected
-        if (!authority.isAlive) {
+        if (!authority.isAlive || connectionOwnerProvider() !== authority) {
             disconnectCurrent()
             return AndroidUsbLiveBurnResult.NotConnected
         }
-        return AndroidUsbLiveBurnResult.Completed(
-            authority.burnPageToNonvolatile(
-                page = page,
-                signatureLimit = signatureLimit,
-                channel = channel,
-                timeoutMs = timeoutMs,
-            ),
+        val result = authority.burnPageToNonvolatile(
+            page = page,
+            signatureLimit = signatureLimit,
+            channel = channel,
+            timeoutMs = timeoutMs,
         )
+        if (connectedOwner !== authority || connectedChannel !== channel ||
+            !authority.isAlive || connectionOwnerProvider() !== authority ||
+            !hasUsableRetainedEndpoint()
+        ) {
+            disconnectCurrent()
+            return AndroidUsbLiveBurnResult.NotConnected
+        }
+        return AndroidUsbLiveBurnResult.Completed(result)
     }
 
     /**
