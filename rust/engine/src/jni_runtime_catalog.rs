@@ -55,10 +55,7 @@ fn encode_catalog_data(
     revision: u64,
     channels: &[NamedRuntimeChannel],
 ) -> Option<Vec<u8>> {
-    if epoch == 0
-        || generation == 0
-        || channels.is_empty()
-        || channels.len() > MAX_RUNTIME_CHANNELS
+    if epoch == 0 || generation == 0 || channels.is_empty() || channels.len() > MAX_RUNTIME_CHANNELS
     {
         return None;
     }
@@ -156,12 +153,24 @@ mod tests {
     #[test]
     fn encode_exact_definition_metadata_in_bounded_epct_v1() {
         let entries = vec![
-            NamedRuntimeChannel { id: 7, name: "rpm".into(), units: "RPM".into(),
-                value_type: RuntimeValueType::U16 },
-            NamedRuntimeChannel { id: 8, name: "clt".into(), units: "°C".into(),
-                value_type: RuntimeValueType::S16 },
-            NamedRuntimeChannel { id: 9, name: "limp".into(), units: String::new(),
-                value_type: RuntimeValueType::BitsU8 { first: 2, last: 4 } },
+            NamedRuntimeChannel {
+                id: 7,
+                name: "rpm".into(),
+                units: "RPM".into(),
+                value_type: RuntimeValueType::U16,
+            },
+            NamedRuntimeChannel {
+                id: 8,
+                name: "clt".into(),
+                units: "°C".into(),
+                value_type: RuntimeValueType::S16,
+            },
+            NamedRuntimeChannel {
+                id: 9,
+                name: "limp".into(),
+                units: String::new(),
+                value_type: RuntimeValueType::BitsU8 { first: 2, last: 4 },
+            },
         ];
         let encoded = encode_catalog_data(44, 800, 27, &entries).unwrap();
         assert_eq!(&encoded[..4], b"EPCT");
@@ -170,7 +179,10 @@ mod tests {
         assert_eq!(u64::from_le_bytes(encoded[16..24].try_into().unwrap()), 800);
         assert_eq!(u64::from_le_bytes(encoded[24..32].try_into().unwrap()), 27);
         assert_eq!(u32::from_le_bytes(encoded[32..36].try_into().unwrap()), 3);
-        assert_eq!(u32::from_le_bytes(encoded[36..40].try_into().unwrap()) as usize, encoded.len());
+        assert_eq!(
+            u32::from_le_bytes(encoded[36..40].try_into().unwrap()) as usize,
+            encoded.len()
+        );
         assert_eq!(&encoded[40..44], &7_u32.to_le_bytes());
         assert_eq!(encoded[44], 3); // U16
         assert_eq!(encoded[52..55], *b"rpm");
@@ -181,25 +193,67 @@ mod tests {
     #[test]
     fn invalid_metadata_never_yields_a_partial_catalog() {
         let good = NamedRuntimeChannel {
-            id: 7, name: "rpm".into(), units: "RPM".into(),
+            id: 7,
+            name: "rpm".into(),
+            units: "RPM".into(),
             value_type: RuntimeValueType::U16,
         };
         assert!(encode_catalog_data(0, 800, 42, &[good.clone()]).is_none());
         assert!(encode_catalog_data(1, 0, 42, &[good.clone()]).is_none());
         assert!(encode_catalog_data(1, 800, 42, &[]).is_none());
         assert!(encode_catalog_data(1, 800, 42, &[good.clone(), good.clone()]).is_none());
-        assert!(encode_catalog_data(1, 800, 42, &[NamedRuntimeChannel {
-            name: "rpm".into(), id: 8, ..good.clone()
-        }, good.clone()]).is_none());
-        assert!(encode_catalog_data(1, 800, 42, &[NamedRuntimeChannel {
-            name: "x".repeat(97), ..good.clone()
-        }]).is_none());
-        assert!(encode_catalog_data(1, 800, 42, &[NamedRuntimeChannel {
-            units: "b\u{0000}ad".into(), ..good.clone()
-        }]).is_none());
-        assert!(encode_catalog_data(1, 800, 42, &[NamedRuntimeChannel {
-            units: "u".repeat(65), ..good.clone()
-        }]).is_none());
+        assert!(
+            encode_catalog_data(
+                1,
+                800,
+                42,
+                &[
+                    NamedRuntimeChannel {
+                        name: "rpm".into(),
+                        id: 8,
+                        ..good.clone()
+                    },
+                    good.clone()
+                ]
+            )
+            .is_none()
+        );
+        assert!(
+            encode_catalog_data(
+                1,
+                800,
+                42,
+                &[NamedRuntimeChannel {
+                    name: "x".repeat(97),
+                    ..good.clone()
+                }]
+            )
+            .is_none()
+        );
+        assert!(
+            encode_catalog_data(
+                1,
+                800,
+                42,
+                &[NamedRuntimeChannel {
+                    units: "b\u{0000}ad".into(),
+                    ..good.clone()
+                }]
+            )
+            .is_none()
+        );
+        assert!(
+            encode_catalog_data(
+                1,
+                800,
+                42,
+                &[NamedRuntimeChannel {
+                    units: "u".repeat(65),
+                    ..good.clone()
+                }]
+            )
+            .is_none()
+        );
     }
 
     #[test]
