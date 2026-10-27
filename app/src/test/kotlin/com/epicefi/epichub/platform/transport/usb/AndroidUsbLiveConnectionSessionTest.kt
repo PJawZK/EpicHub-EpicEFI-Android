@@ -368,6 +368,96 @@ class AndroidUsbLiveConnectionSessionTest {
         assertFalse(session.sampledRuntimeSnapshot().canUseAsLive)
     }
 
+    @Test
+    fun removedUsbPermissionRevokesFreshSnapshotBeforeAnyAdditionalIo() {
+        val candidate = FakeRuntimeCandidate()
+        val owner = authorizedOwner("exact.signature", 42L, candidate)
+        val port = FakeBulkPort()
+        var allowed = true
+        var now = 11L
+        val session = AndroidUsbLiveConnectionSessionOwner(
+            { owner.owner },
+            FakeOpener(AndroidUsbEndpointOpenResult.Opened(UsbReadOnlyTransactionChannel(port))),
+            monotonicMs = { now },
+            endpointAccess = AndroidUsbEndpointAccess { allowed },
+        )
+        assertTrue(session.connect("usb:one", 256, 500) is AndroidUsbLiveConnectResult.Connected)
+        candidate.sampleAtMs = now
+        assertTrue(session.sampleRuntimeIfDue().canUseAsLive)
+        assertEquals(1, candidate.readCalls)
+
+        allowed = false
+        assertFalse(session.isConnected)
+        assertNull(session.connectedEndpointId)
+        assertTrue(session.runtimeCandidateStatus is RuntimeCandidateBindingResult.Unavailable)
+        assertEquals(LiveRuntimeValidity.Stale, session.sampledRuntimeSnapshot().validity)
+        assertFalse(session.sampledRuntimeSnapshot().canUseAsLive)
+        assertTrue(port.closed)
+        assertTrue(candidate.revocations > 0)
+        now += 100L
+        assertFalse(session.sampleRuntimeIfDue().canUseAsLive)
+        assertEquals(1, candidate.readCalls)
+    }
+
+    @Test
+    fun unrelatedUsbDetachDoesNotRevokeSelectedCandidateButExactDetachDoes() {
+        val candidate = FakeRuntimeCandidate()
+        val owner = authorizedOwner("exact.signature", 42L, candidate)
+        val port = FakeBulkPort()
+        val session = AndroidUsbLiveConnectionSessionOwner(
+            { owner.owner },
+            FakeOpener(AndroidUsbEndpointOpenResult.Opened(UsbReadOnlyTransactionChannel(port))),
+        )
+        assertTrue(session.connect("usb:one", 256, 500) is AndroidUsbLiveConnectResult.Connected)
+        val prior = candidate.revocations
+        assertFalse(session.onEndpointUnavailable("usb:another"))
+        assertFalse(session.onEndpointUnavailable(""))
+        assertEquals(prior, candidate.revocations)
+        assertTrue(session.isConnected)
+        assertFalse(port.closed)
+        assertTrue(session.onEndpointUnavailable("usb:one"))
+        assertFalse(session.onEndpointUnavailable("usb:one"))
+        assertFalse(session.isConnected)
+        assertTrue(port.closed)
+        assertTrue(candidate.revocations > prior)
+    }
+
+    @Test
+    fun permissionLostDuringNativeRuntimeReadCannotPublishLateFreshResult() {
+        val candidate = FakeRuntimeCandidate()
+        val owner = authorizedOwner("exact.signature", 42L, candidate)
+        val port = FakeBulkPort()
+        var allowed = true
+        val session = AndroidUsbLiveConnectionSessionOwner(
+            { owner.owner },
+            FakeOpener(AndroidUsbEndpointOpenResult.Opened(UsbReadOnlyTransactionChannel(port))),
+            monotonicMs = { 11L },
+            endpointAccess = AndroidUsbEndpointAccess { allowed },
+        )
+        assertTrue(session.connect("usb:one", 256, 500) is AndroidUsbLiveConnectResult.Connected)
+        candidate.sampleAtMs = 11L
+        candidate.beforeReturn = { allowed = false }
+        assertEquals(LiveRuntimeValidity.Invalid, session.sampleRuntimeIfDue().validity)
+        assertTrue(port.closed)
+        assertFalse(session.isConnected)
+        assertFalse(session.sampledRuntimeSnapshot().canUseAsLive)
+        assertEquals(1, candidate.readCalls)
+    }
+
+    @Test
+    fun noDevicePermissionPreventsPortOpenAndAnyRuntimeProfileSelection() {
+        val owner = authorizedOwner("exact.signature", 42L, FakeRuntimeCandidate())
+        val opener = FakeOpener(AndroidUsbEndpointOpenResult.Opened(UsbReadOnlyTransactionChannel(FakeBulkPort())))
+        val session = AndroidUsbLiveConnectionSessionOwner(
+            { owner.owner },
+            opener,
+            endpointAccess = AndroidUsbEndpointAccess { false },
+        )
+        assertEquals(AndroidUsbLiveConnectResult.DeviceUnavailable, session.connect("usb:gone", 256, 500))
+        assertEquals(0, opener.calls)
+        assertFalse(session.isConnected)
+    }
+
     private class FakeRuntimeCandidate(
         private val unsupported: Boolean = false,
     ) : RuntimeCandidateBindingOperation {
