@@ -445,17 +445,38 @@ class AndroidUsbLiveConnectionSessionTest {
     }
 
     @Test
-    fun noDevicePermissionPreventsPortOpenAndAnyRuntimeProfileSelection() {
-        val owner = authorizedOwner("exact.signature", 42L, FakeRuntimeCandidate())
-        val opener = FakeOpener(AndroidUsbEndpointOpenResult.Opened(UsbReadOnlyTransactionChannel(FakeBulkPort())))
+    fun revokedUsbAccessClosesOfferedChannelBeforeIdentityProbe() {
+        val candidate = FakeRuntimeCandidate()
+        val owner = authorizedOwner("exact.signature", 42L, candidate)
+        val port = FakeBulkPort()
+        val opener = FakeOpener(AndroidUsbEndpointOpenResult.Opened(UsbReadOnlyTransactionChannel(port)))
         val session = AndroidUsbLiveConnectionSessionOwner(
             { owner.owner },
             opener,
             endpointAccess = AndroidUsbEndpointAccess { false },
         )
         assertEquals(AndroidUsbLiveConnectResult.DeviceUnavailable, session.connect("usb:gone", 256, 500))
-        assertEquals(0, opener.calls)
+        assertEquals(1, opener.calls)
+        assertTrue(port.closed)
+        assertEquals(0, candidate.bindCalls)
         assertFalse(session.isConnected)
+    }
+
+    @Test
+    fun missingPermissionRemainsDistinctFromDetachedUsbDevice() {
+        val authority = authorizedOwner("exact.signature", 42L)
+        val denied = AndroidUsbLiveConnectionSessionOwner(
+            { authority.owner },
+            FakeOpener(AndroidUsbEndpointOpenResult.PermissionRequired),
+            endpointAccess = AndroidUsbEndpointAccess { false },
+        )
+        assertEquals(AndroidUsbLiveConnectResult.PermissionRequired, denied.connect("usb:one", 256, 500))
+        val detached = AndroidUsbLiveConnectionSessionOwner(
+            { authority.owner },
+            FakeOpener(AndroidUsbEndpointOpenResult.DeviceUnavailable),
+            endpointAccess = AndroidUsbEndpointAccess { false },
+        )
+        assertEquals(AndroidUsbLiveConnectResult.DeviceUnavailable, detached.connect("usb:two", 256, 500))
     }
 
     @Test
