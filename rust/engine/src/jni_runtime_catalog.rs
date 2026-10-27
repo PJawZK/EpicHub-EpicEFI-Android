@@ -131,8 +131,6 @@ pub extern "system" fn Java_com_epicefi_epichub_engine_NativeProfileRegistryBrid
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::runtime_bound_live_session::RuntimeBoundLiveSession;
-    use crate::compiled_ecu_profile::CompiledProfileBuildError;
 
     #[test]
     fn type_codes_preserve_signed_unsigned_float_and_bit_spans() {
