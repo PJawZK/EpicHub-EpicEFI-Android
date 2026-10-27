@@ -106,7 +106,7 @@ internal object RuntimeCatalogWireV1 {
             val name = decodeUtf8(data, nameLength) ?: return null
             val units = decodeUtf8(data, unitsLength) ?: return null
             if (!name.all { it in 'A'..'Z' || it in 'a'..'z' || it in '0'..'9' || it == '_' } ||
-                !names.add(name) || units.any(Char::isISOControl)
+                !names.add(name) || units.any { Character.isISOControl(it) }
             ) return null
             channels += LiveRuntimeChannelDefinition(id, name, units, type, first, last)
         }
