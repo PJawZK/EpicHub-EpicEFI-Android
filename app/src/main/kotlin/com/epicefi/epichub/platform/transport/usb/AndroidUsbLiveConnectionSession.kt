@@ -1,10 +1,14 @@
 package com.epicefi.epichub.platform.transport.usb
 
 import android.hardware.usb.UsbManager
+import android.os.SystemClock
 import com.epicefi.epichub.engine.DefinitionDrivenLiveTuneConnectResult
 import com.epicefi.epichub.engine.EngineAuthoritySerialization
 import com.epicefi.epichub.engine.RuntimeCandidateBindingResult
 import com.epicefi.epichub.engine.RuntimeReadCycleResult
+import com.epicefi.epichub.engine.LiveRuntimeSamplingGate
+import com.epicefi.epichub.engine.LiveRuntimeSamplingPolicy
+import com.epicefi.epichub.engine.LiveRuntimeSampleView
 import com.epicefi.epichub.engine.LiveTuneConnectionOwner
 import com.epicefi.epichub.engine.LiveTuneOwnerBurnResult
 import com.epicefi.epichub.engine.LiveTuneOwnerLoadResult
@@ -95,6 +99,8 @@ internal fun interface AndroidUsbEndpointChannelOpener {
 class AndroidUsbLiveConnectionSessionOwner internal constructor(
     private val connectionOwnerProvider: () -> LiveTuneConnectionOwner?,
     private val opener: AndroidUsbEndpointChannelOpener,
+    private val monotonicMs: () -> Long = { SystemClock.elapsedRealtime() },
+    samplingPolicy: LiveRuntimeSamplingPolicy = LiveRuntimeSamplingPolicy(),
 ) : AutoCloseable {
     constructor(
         usbManager: UsbManager,
@@ -124,6 +130,7 @@ class AndroidUsbLiveConnectionSessionOwner internal constructor(
     @Volatile
     private var closed = false
 
+    private val runtimeSampling = LiveRuntimeSamplingGate(samplingPolicy)
     private var connectedChannel: UsbReadOnlyTransactionChannel? = null
     private var connectedOwner: LiveTuneConnectionOwner? = null
     private var endpointId: String? = null
@@ -203,6 +210,9 @@ class AndroidUsbLiveConnectionSessionOwner internal constructor(
                 connectedOwner = authority
                 this.endpointId = endpointId
                 runtimeCandidate = candidate
+                if (candidate is RuntimeCandidateBindingResult.Bound) {
+                    runtimeSampling.bind(candidate.sessionEpoch)
+                }
                 AndroidUsbLiveConnectResult.Connected(
                     endpointId = endpointId,
                     identity = connected.identity,
@@ -336,6 +346,54 @@ class AndroidUsbLiveConnectionSessionOwner internal constructor(
             result
         }
 
+    /**
+     * One admission-controlled read per explicit caller tick. No timer, poller,
+     * coroutine or additional USB owner is created by this API.
+     */
+    @Synchronized
+    internal fun sampleRuntimeIfDue(): LiveRuntimeSampleView =
+        EngineAuthoritySerialization.exclusive {
+            val now = monotonicMs()
+            if (closed) return@exclusive runtimeSampling.snapshot(now)
+            val authority = connectedOwner
+            if (authority == null || !authority.isAlive || connectionOwnerProvider() !== authority) {
+                if (connectedChannel != null) disconnectCurrent()
+                return@exclusive runtimeSampling.snapshot(now)
+            }
+            val candidate = runtimeCandidate as? RuntimeCandidateBindingResult.Bound
+                ?: return@exclusive runtimeSampling.snapshot(now)
+            if (!runtimeSampling.tryBegin(now)) return@exclusive runtimeSampling.snapshot(now)
+
+            val result = readRuntimeOnce(runtimeSampling.timeoutMs)
+            when (result) {
+                is RuntimeReadCycleResult.Fresh -> {
+                    if (!runtimeSampling.accept(candidate.sessionEpoch, result.frame, monotonicMs())) {
+                        disconnectCurrent()
+                        runtimeSampling.fail("Validated runtime batch lost sampling authority.")
+                    }
+                }
+                is RuntimeReadCycleResult.Unavailable -> {
+                    // readRuntimeOnce already revoked the retained connection on errors.
+                    disconnectCurrent()
+                    runtimeSampling.fail(result.reason)
+                }
+            }
+            runtimeSampling.snapshot(monotonicMs())
+        }
+
+    /** Read-side freshness assessment performs no ECU transaction. */
+    @Synchronized
+    internal fun sampledRuntimeSnapshot(): LiveRuntimeSampleView =
+        EngineAuthoritySerialization.exclusive {
+            val authority = connectedOwner
+            if (authority != null &&
+                (!authority.isAlive || connectionOwnerProvider() !== authority)
+            ) {
+                disconnectCurrent()
+            }
+            runtimeSampling.snapshot(monotonicMs())
+        }
+
     @Synchronized
     fun disconnect(): Boolean = EngineAuthoritySerialization.exclusive {
         if (closed) false else disconnectCurrent()
@@ -359,6 +417,7 @@ class AndroidUsbLiveConnectionSessionOwner internal constructor(
         connectedOwner = null
         endpointId = null
         runtimeCandidate = RuntimeCandidateBindingResult.Unavailable("No active ECU connection.")
+        runtimeSampling.disconnect()
         try {
             authority?.disconnect()
         } finally {
