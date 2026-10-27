@@ -118,7 +118,7 @@ class AndroidUsbLiveConnectionSessionOwner internal constructor(
         connectionOwnerProvider = connectionOwnerProvider,
         endpointAccess = AndroidUsbEndpointAccess { endpointId ->
             val device = AndroidUsbCandidateDiscovery(usbManager).findDevice(endpointId)
-            device != null && usbManager.hasPermission(device)
+            device != null && runCatching { usbManager.hasPermission(device) }.getOrDefault(false)
         },
         opener =
             AndroidUsbEndpointChannelOpener { endpointId ->
@@ -153,7 +153,8 @@ class AndroidUsbLiveConnectionSessionOwner internal constructor(
     /** Candidate authority only. This is not a live-channel publication status. */
     internal val runtimeCandidateStatus: RuntimeCandidateBindingResult
         get() = synchronized(this) {
-            if (closed || connectedOwner?.isAlive != true) {
+            if (closed || connectedOwner?.isAlive != true ||
+                endpointId?.let(endpointAccess::isUsable) != true) {
                 RuntimeCandidateBindingResult.Unavailable("No active ECU connection.")
             } else {
                 runtimeCandidate
@@ -251,6 +252,11 @@ class AndroidUsbLiveConnectionSessionOwner internal constructor(
                     profileGeneration = connected.profileGeneration,
                     signatureLimit = maxResponseBytes,
                 )
+                if (!endpointAccess.isUsable(endpointId)) {
+                    authority.disconnect()
+                    channel.close()
+                    return AndroidUsbLiveConnectResult.DeviceUnavailable
+                }
                 connectedChannel = channel
                 connectedOwner = authority
                 this.endpointId = endpointId
@@ -394,7 +400,8 @@ class AndroidUsbLiveConnectionSessionOwner internal constructor(
             if (result is RuntimeReadCycleResult.Fresh &&
                 (result.frame.epoch != candidate.sessionEpoch ||
                     connectedChannel !== channel || connectedOwner !== authority ||
-                    !authority.isAlive || connectionOwnerProvider() !== authority)
+                    !authority.isAlive || connectionOwnerProvider() !== authority ||
+                    !hasUsableRetainedEndpoint())
             ) {
                 disconnectCurrent()
                 return@exclusive RuntimeReadCycleResult.Unavailable(
