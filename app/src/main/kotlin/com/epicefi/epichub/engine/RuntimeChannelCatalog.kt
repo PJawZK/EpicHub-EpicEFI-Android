@@ -19,7 +19,22 @@ internal data class LiveRuntimeChannelCatalog(
     val profileGeneration: Long,
     val definitionRevision: Long,
     val channels: List<LiveRuntimeChannelDefinition>,
-)
+) {
+    /**
+     * Metadata may annotate a real sample only for the exact same definition
+     * and session; this never promotes Stale/Invalid values into live data.
+     */
+    fun canAnnotate(view: LiveRuntimeSampleView): Boolean {
+        if (!view.canUseAsLive || view.source != source) return false
+        val frame = view.frame ?: return false
+        if (epoch != frame.epoch || profileGeneration != frame.profileGeneration ||
+            definitionRevision != frame.definitionRevision ||
+            channels.isEmpty() || channels.size != frame.readings.size
+        ) return false
+        val channelIds = channels.map { it.id }.toSet()
+        return channelIds.size == channels.size && frame.readings.all { it.id in channelIds }
+    }
+}
 
 internal sealed interface RuntimeCatalogResult {
     data class Available(val catalog: LiveRuntimeChannelCatalog) : RuntimeCatalogResult
