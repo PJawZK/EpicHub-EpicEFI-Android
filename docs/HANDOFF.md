@@ -1,5 +1,25 @@
 # EpicHub Current Handoff
 
+## Qualified USB device / permission / profile lifecycle fencing — 2026-10-27
+
+**Exact implementation SHA:** `38bb44559ad944ab4deb4f1276c2a14d4251cc22`. Full [Foundation 40512006983](https://github.com/PJawZK/EpicHub-EpicEFI-Android/actions/runs/40512006983) **success** (Rust format/lint/tests, Android JVM tests, debug/performance/macrobenchmark builds and packaging). Verified `current-work` 12 commits ahead and zero behind `main`, and fast-forwarded `main` without force. This **documentation-only** checkpoint needs its own complete exact-head CI success before promotion.
+
+### New authority boundary
+
+- `AndroidUsbLiveConnectionSessionOwner` now supports a read-only `AndroidUsbEndpointAccess` validity gate. Its existing `UsbManager` constructor verifies the exact selected endpoint is still present **and permitted**, without opening another connection; unavailable devices/grants revoke the candidate and retained channel before tune load, runtime sampling, and RAM Write/Burn entrypoints. Access-query exceptions (including `SecurityException`) fail closed. Read-side freshness and connection/candidate status cannot claim a lost endpoint is live.
+- All retained tune-load and guarded RAM Write/Burn paths now check the **currently selected profile-owner object**, not merely the previous owner's `isAlive`, before and after the operation. A profile switch, endpoint removal or permission loss during an operation revokes the retained channel and causes `NotConnected`, not a falsely trusted completion. This does **not** enable Burn UI.
+- Initial connection preserves the existing opener's semantic difference between `PermissionRequired` and `DeviceUnavailable`; it rejects any offered-but-no-longer-permitted channel before sending an identity query, and rechecks device access after the native runtime candidate bind. Runtime completion rechecks the same retained channel/owner/epoch and endpoint access after the transport callback.
+- Added `AndroidUsbDetachObserver`: a lifecycle-owned runtime Android `ACTION_USB_DEVICE_DETACHED` receiver that passes the exact `usb:deviceName:deviceId` to the **same** owner; only that endpoint is revoked. A new context-aware session constructor opts into this receiver and `close()` unregisters it. The existing `UsbManager` constructor continues using dynamic access checks. **No new USB owner or permission-request path**.
+- Added offline JVM cases for unrelated vs exact detach, grant loss before connection and during profile candidate bind, permission disappearance during native runtime callback, Android permission-query exceptions, profile-owner replacement before guarded RAM Write, grant disappearance inside write callback, and distinct PermissionRequired vs DeviceUnavailable outcomes. Existing retained USB/fake-port and native foundation tests continue passing.
+
+### Remaining Task 1 gates (do not mark complete)
+
+This is a **lifecycle subgate**, not fully enabled Monitor/Tuner telemetry. The context-aware detach constructor has been compiled and its core callback logic tested offline but is **not yet proven in an Android instrumentation/system broadcast test**, nor verified that all production creation paths instantiate it. There is not yet a real loaded JNI + fake USB end-to-end instrumentation test, concurrent multi-threaded load/write/runtime stress test, or a manifest-backed autonomous sampling driver. Android grant changes without a detach broadcast are reconciled synchronously on the next owned operation or read-side snapshot; no background grant-monitoring worker was introduced.
+
+**Next:** Expose `RuntimeBoundLiveSession::channel_info` through a native registry-handle + opaque-epoch read-only, bounded, versioned metadata projection. The compiler already owns `NamedRuntimeChannel { name, units, id }` from the **same resolved ECU definition** as the decoder, but these names/units are currently **not carried across JNI to Android Monitor/Tuner**. Preserve exact epoch/generation/source revision and fail closed on stale registry, malformed names/units, duplicate IDs or oversized catalogs; add type metadata only from the definition-authorized native decoder, never heuristic UI mappings. Then complete combined JNI/device instrumentation and carefully gated, opt-in Monitor/Tuner source publication, with live/synthetic isolation. Generate and qualify real Mega144H7/uaEFI INI support/unsupported corpus before physical hardware tests (hardware last). EpicScope owns Analyzer; EpicHub remains Connect · Monitor · Tune.
+
+---
+
 ## Qualified connection-owned, freshness-aware sampling gate — 2026-10-27
 
 **Implementation SHA:** `2a0c140579c8f25e81d14f2c9809183b6143d9d9`. Exact-head complete [Foundation CI 40466270449](https://github.com/PJawZK/EpicHub-EpicEFI-Android/actions/runs/40466270449) **success** (Rust format/lint/tests; Android JVM tests; debug, performance and macrobenchmark builds; APK/package checks). Verified `current-work` 7 ahead, 0 behind `main` and fast-forwarded `main` without force. This documentation-only commit must itself pass complete exact-head Foundation before promotion.
