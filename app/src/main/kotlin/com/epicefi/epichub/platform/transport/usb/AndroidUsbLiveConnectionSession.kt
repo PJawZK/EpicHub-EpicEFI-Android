@@ -233,9 +233,6 @@ class AndroidUsbLiveConnectionSessionOwner internal constructor(
         if (endpointId.isBlank()) {
             return AndroidUsbLiveConnectResult.InvalidSelection("USB endpoint must be selected.")
         }
-        if (!endpointAccess.isUsable(endpointId)) {
-            return AndroidUsbLiveConnectResult.DeviceUnavailable
-        }
         val authority =
             connectionOwnerProvider()
                 ?: return AndroidUsbLiveConnectResult.ProfileAuthorityUnavailable
@@ -254,6 +251,14 @@ class AndroidUsbLiveConnectionSessionOwner internal constructor(
                 is AndroidUsbEndpointOpenResult.ClaimFailed ->
                     return AndroidUsbLiveConnectResult.ClaimFailed(opened.reason)
             }
+
+        // Preserve opener-specific PermissionRequired versus DeviceUnavailable.
+        // If a test/opener offers a channel after access was revoked, close it
+        // before issuing even the first identity-query transfer.
+        if (!endpointAccess.isUsable(endpointId)) {
+            channel.close()
+            return AndroidUsbLiveConnectResult.DeviceUnavailable
+        }
 
         return when (
             val connected =
