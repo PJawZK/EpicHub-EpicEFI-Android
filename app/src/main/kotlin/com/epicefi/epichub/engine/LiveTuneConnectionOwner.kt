@@ -195,6 +195,16 @@ class LiveTuneConnectionOwner internal constructor(
         return binder.bind(endpointId, identity.signature, profileGeneration, signatureLimit)
     }
 
+    /** Channel catalog can be resolved only while the same selected ECU owner is connected. */
+    internal fun runtimeChannelCatalog(epoch: Long): RuntimeCatalogResult {
+        if (!isAlive || epoch <= 0L || lifecycle.state is LiveTuneSourceLifecycleState.Disconnected) {
+            return RuntimeCatalogResult.Unavailable("Selected runtime profile is disconnected or closed.")
+        }
+        val operation = runtimeCandidateBinding
+            ?: return RuntimeCatalogResult.Unavailable("Runtime metadata authority unavailable.")
+        return operation.catalog(epoch)
+    }
+
     /** No polling. Invoked only by the retained serialized Android USB owner. */
     internal fun readRuntimeOnce(
         epoch: Long,
