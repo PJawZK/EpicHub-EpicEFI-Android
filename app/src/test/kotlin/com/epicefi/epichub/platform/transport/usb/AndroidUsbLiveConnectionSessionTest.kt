@@ -458,6 +458,28 @@ class AndroidUsbLiveConnectionSessionTest {
         assertFalse(session.isConnected)
     }
 
+    @Test
+    fun permissionRevokedDuringCandidateBindingRejectsConnectAndReleasesPort() {
+        val candidate = FakeRuntimeCandidate()
+        var allowed = true
+        candidate.beforeBind = { allowed = false }
+        val owner = authorizedOwner("exact.signature", 42L, candidate)
+        val port = FakeBulkPort()
+        val session = AndroidUsbLiveConnectionSessionOwner(
+            { owner.owner },
+            FakeOpener(AndroidUsbEndpointOpenResult.Opened(UsbReadOnlyTransactionChannel(port))),
+            endpointAccess = AndroidUsbEndpointAccess { allowed },
+        )
+        assertEquals(
+            AndroidUsbLiveConnectResult.DeviceUnavailable,
+            session.connect("usb:one", 256, 500),
+        )
+        assertTrue(port.closed)
+        assertFalse(session.isConnected)
+        assertTrue(candidate.revocations > 0)
+        assertEquals(0, candidate.readCalls)
+    }
+
     private class FakeRuntimeCandidate(
         private val unsupported: Boolean = false,
     ) : RuntimeCandidateBindingOperation {
@@ -466,6 +488,7 @@ class AndroidUsbLiveConnectionSessionTest {
         var sampleAtMs: Long? = null
         var lastReadTimeoutMs = 0
         var beforeReturn: (() -> Unit)? = null
+        var beforeBind: (() -> Unit)? = null
         var bindCalls = 0
         var revocations = 0
         var endpoint: String? = null
@@ -479,6 +502,7 @@ class AndroidUsbLiveConnectionSessionTest {
             signatureLimit: Int,
         ): RuntimeCandidateBindingResult {
             bindCalls++
+            beforeBind?.invoke()
             endpoint = endpointId
             this.signature = signature
             generation = profileGeneration
