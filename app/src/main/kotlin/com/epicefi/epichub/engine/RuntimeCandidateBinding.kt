@@ -23,6 +23,10 @@ internal interface RuntimeCandidateBindingOperation {
 
     fun disconnect()
 
+    /** Read-only metadata, not a live data sample. */
+    fun catalog(epoch: Long): RuntimeCatalogResult =
+        RuntimeCatalogResult.Unavailable("Runtime catalog capability is not installed.")
+
     /** Unsupported by default for offline fake candidates; never invent a frame. */
     fun read(
         epoch: Long,
@@ -40,6 +44,11 @@ internal class NativeRegistryRuntimeCandidateBinding(
     private val registry: NativeProfileRegistry,
 ) : RuntimeCandidateBindingOperation {
     private val reader = NativeRuntimeReadCycle(registry::readOnlyRegistryHandle, registry::isAlive)
+
+    private val catalogReader = NativeRuntimeCatalogReader(registry::readOnlyRegistryHandle, registry::isAlive)
+
+    override fun catalog(epoch: Long): RuntimeCatalogResult =
+        EngineAuthoritySerialization.exclusive { catalogReader.read(epoch) }
 
     override fun read(
         epoch: Long,
