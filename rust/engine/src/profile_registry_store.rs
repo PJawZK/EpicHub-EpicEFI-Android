@@ -11,10 +11,10 @@ use crate::ecu_profile_registry::{OwnedProfileRegistry, ProfileRegistryError};
 use crate::live_channel_store::LiveChannelBatch;
 use crate::profile_import::{OwnedCompiledProfileImport, compile_owned_profile_import};
 use crate::runtime_acquisition_session::RuntimeRequestToken;
-use crate::runtime_definition_catalog::NamedRuntimeChannel;
 use crate::runtime_bound_live_session::{
     BoundRuntimeError, BoundRuntimeIdentity, RuntimeBoundLiveSession,
 };
+use crate::runtime_definition_catalog::NamedRuntimeChannel;
 use crate::runtime_profile_authority::{
     RuntimeProfileAuthorityError, select_profile_from_runtime_response,
 };
@@ -243,11 +243,20 @@ impl ProfileRegistryStore {
         handle: i64,
         epoch: u64,
     ) -> Result<(BoundRuntimeIdentity, Vec<NamedRuntimeChannel>), RuntimeRegistryBindingError> {
-        let state = self.registries.get(&handle).ok_or(
-            RuntimeRegistryBindingError::Registry(RegistryStoreError::InvalidHandle),
-        )?;
-        let binding = state.runtime.binding_for_epoch(epoch).map_err(RuntimeRegistryBindingError::Bound)?;
-        let catalog = state.runtime.channel_info(&binding).map_err(RuntimeRegistryBindingError::Bound)?;
+        let state = self
+            .registries
+            .get(&handle)
+            .ok_or(RuntimeRegistryBindingError::Registry(
+                RegistryStoreError::InvalidHandle,
+            ))?;
+        let binding = state
+            .runtime
+            .binding_for_epoch(epoch)
+            .map_err(RuntimeRegistryBindingError::Bound)?;
+        let catalog = state
+            .runtime
+            .channel_info(&binding)
+            .map_err(RuntimeRegistryBindingError::Bound)?;
         Ok((binding, catalog.to_vec()))
     }
 
@@ -965,14 +974,18 @@ table = registryBundleTable, registryBundleMap, "Registry Bundle Table", 1
         let mut store = ProfileRegistryStore::new();
         let first_handle = store.create();
         let second_handle = store.create();
-        store.register_definition_bundle(first_handle, &runtime_bundle_import()).unwrap();
-        store.register_definition_bundle(second_handle, &runtime_bundle_import()).unwrap();
-        let first = store.bind_runtime_candidate(
-            first_handle, "usb:first", RUNTIME_SIGNATURE, 256, 800
-        ).unwrap();
-        let (binding, catalog) = store.runtime_catalog_for_epoch(
-            first_handle, first.session_epoch()
-        ).unwrap();
+        store
+            .register_definition_bundle(first_handle, &runtime_bundle_import())
+            .unwrap();
+        store
+            .register_definition_bundle(second_handle, &runtime_bundle_import())
+            .unwrap();
+        let first = store
+            .bind_runtime_candidate(first_handle, "usb:first", RUNTIME_SIGNATURE, 256, 800)
+            .unwrap();
+        let (binding, catalog) = store
+            .runtime_catalog_for_epoch(first_handle, first.session_epoch())
+            .unwrap();
         assert_eq!(binding, first);
         assert_eq!(catalog.len(), 1);
         assert_eq!(catalog[0].name, "rpm");
@@ -982,25 +995,33 @@ table = registryBundleTable, registryBundleMap, "Registry Bundle Table", 1
 
         assert_eq!(
             store.runtime_catalog_for_epoch(second_handle, first.session_epoch()),
-            Err(RuntimeRegistryBindingError::Bound(BoundRuntimeError::SessionClosed))
+            Err(RuntimeRegistryBindingError::Bound(
+                BoundRuntimeError::SessionClosed
+            ))
         );
-        let newer = store.bind_runtime_candidate(
-            first_handle, "usb:second", RUNTIME_SIGNATURE, 256, 800
-        ).unwrap();
+        let newer = store
+            .bind_runtime_candidate(first_handle, "usb:second", RUNTIME_SIGNATURE, 256, 800)
+            .unwrap();
         assert_ne!(first.session_epoch(), newer.session_epoch());
         assert_eq!(
             store.runtime_catalog_for_epoch(first_handle, first.session_epoch()),
-            Err(RuntimeRegistryBindingError::Bound(BoundRuntimeError::StaleAuthority))
+            Err(RuntimeRegistryBindingError::Bound(
+                BoundRuntimeError::StaleAuthority
+            ))
         );
         store.disconnect_runtime(first_handle).unwrap();
         assert_eq!(
             store.runtime_catalog_for_epoch(first_handle, newer.session_epoch()),
-            Err(RuntimeRegistryBindingError::Bound(BoundRuntimeError::SessionClosed))
+            Err(RuntimeRegistryBindingError::Bound(
+                BoundRuntimeError::SessionClosed
+            ))
         );
         store.close(first_handle);
         assert_eq!(
             store.runtime_catalog_for_epoch(first_handle, newer.session_epoch()),
-            Err(RuntimeRegistryBindingError::Registry(RegistryStoreError::InvalidHandle))
+            Err(RuntimeRegistryBindingError::Registry(
+                RegistryStoreError::InvalidHandle
+            ))
         );
     }
 
