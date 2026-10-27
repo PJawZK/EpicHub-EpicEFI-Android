@@ -173,7 +173,7 @@ class AndroidUsbLiveConnectionSessionOwner internal constructor(
         get() = synchronized(this) {
             if (closed || connectedOwner?.isAlive != true ||
                 connectedOwner !== connectionOwnerProvider() ||
-                endpointId?.let(endpointAccess::isUsable) != true) {
+                endpointId?.let(::accessGranted) != true) {
                 RuntimeCandidateBindingResult.Unavailable("No active ECU connection.")
             } else {
                 runtimeCandidate
@@ -184,14 +184,14 @@ class AndroidUsbLiveConnectionSessionOwner internal constructor(
         get() = synchronized(this) {
             !closed && connectedChannel != null && connectedOwner?.isAlive == true &&
                 connectedOwner === connectionOwnerProvider() &&
-                endpointId?.let(endpointAccess::isUsable) == true
+                endpointId?.let(::accessGranted) == true
         }
 
     val connectedEndpointId: String?
         get() = synchronized(this) {
             endpointId?.takeIf {
                 connectedOwner?.isAlive == true &&
-                    connectedOwner === connectionOwnerProvider() && endpointAccess.isUsable(it)
+                    connectedOwner === connectionOwnerProvider() && accessGranted(it)
             }
         }
 
@@ -206,10 +206,13 @@ class AndroidUsbLiveConnectionSessionOwner internal constructor(
             }
         }
 
+    private fun accessGranted(selected: String): Boolean =
+        runCatching { endpointAccess.isUsable(selected) }.getOrDefault(false)
+
     /** Reconcile physical device presence and grant before any retained transport use. */
     private fun hasUsableRetainedEndpoint(): Boolean {
         val selected = endpointId ?: return false
-        if (endpointAccess.isUsable(selected)) return true
+        if (accessGranted(selected)) return true
         disconnectCurrent()
         return false
     }
@@ -255,7 +258,7 @@ class AndroidUsbLiveConnectionSessionOwner internal constructor(
         // Preserve opener-specific PermissionRequired versus DeviceUnavailable.
         // If a test/opener offers a channel after access was revoked, close it
         // before issuing even the first identity-query transfer.
-        if (!endpointAccess.isUsable(endpointId)) {
+        if (!accessGranted(endpointId)) {
             channel.close()
             return AndroidUsbLiveConnectResult.DeviceUnavailable
         }
@@ -269,7 +272,7 @@ class AndroidUsbLiveConnectionSessionOwner internal constructor(
                 )
         ) {
             is DefinitionDrivenLiveTuneConnectResult.Connected -> {
-                if (!endpointAccess.isUsable(endpointId)) {
+                if (!accessGranted(endpointId)) {
                     authority.disconnect()
                     channel.close()
                     return AndroidUsbLiveConnectResult.DeviceUnavailable
@@ -280,7 +283,7 @@ class AndroidUsbLiveConnectionSessionOwner internal constructor(
                     profileGeneration = connected.profileGeneration,
                     signatureLimit = maxResponseBytes,
                 )
-                if (!endpointAccess.isUsable(endpointId)) {
+                if (!accessGranted(endpointId)) {
                     authority.disconnect()
                     channel.close()
                     return AndroidUsbLiveConnectResult.DeviceUnavailable
