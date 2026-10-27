@@ -10,6 +10,9 @@ import com.epicefi.epichub.engine.LiveTuneSourceLifecycleState
 import com.epicefi.epichub.engine.RuntimeCandidateBindingOperation
 import com.epicefi.epichub.engine.RuntimeCandidateBindingResult
 import com.epicefi.epichub.engine.RuntimeReadCycleResult
+import com.epicefi.epichub.engine.RuntimeCatalogResult
+import com.epicefi.epichub.engine.LiveRuntimeChannelCatalog
+import com.epicefi.epichub.engine.LiveRuntimeChannelDefinition
 import com.epicefi.epichub.engine.LiveRuntimeSamplingPolicy
 import com.epicefi.epichub.engine.LiveRuntimeValidity
 import com.epicefi.epichub.engine.LiveRuntimeFrame
@@ -526,9 +529,87 @@ class AndroidUsbLiveConnectionSessionTest {
         assertEquals(0, candidate.readCalls)
     }
 
+    @Test
+    fun boundRuntimeCatalogIsAvailableWithoutNewUsbIoAndMatchesSession() {
+        val candidate = FakeRuntimeCandidate()
+        val owner = authorizedOwner("exact.signature", 42L, candidate)
+        val port = FakeBulkPort()
+        val session = AndroidUsbLiveConnectionSessionOwner(
+            { owner.owner },
+            FakeOpener(AndroidUsbEndpointOpenResult.Opened(UsbReadOnlyTransactionChannel(port))),
+        )
+        assertTrue(session.runtimeChannelCatalog() is RuntimeCatalogResult.Unavailable)
+        assertTrue(session.connect("usb:one", 256, 500) is AndroidUsbLiveConnectResult.Connected)
+        val available = session.runtimeChannelCatalog() as RuntimeCatalogResult.Available
+        assertEquals(17L, available.catalog.epoch)
+        assertEquals(42L, available.catalog.profileGeneration)
+        assertEquals("RPM", available.catalog.channels.single().units)
+        assertEquals("rpm", available.catalog.channels.single().name)
+        assertEquals("real-ecu-v1", available.catalog.source)
+        assertEquals(1, candidate.catalogCalls)
+        assertEquals(0, candidate.readCalls)
+        assertTrue(session.isConnected)
+        session.disconnect()
+        assertTrue(port.closed)
+        assertTrue(session.runtimeChannelCatalog() is RuntimeCatalogResult.Unavailable)
+    }
+
+    @Test
+    fun lateCatalogCannotSurviveReentrantProfileReplacement() {
+        val candidate = FakeRuntimeCandidate()
+        val first = authorizedOwner("exact.signature", 42L, candidate)
+        val next = authorizedOwner("replacement", 43L)
+        var selected = first.owner
+        val port = FakeBulkPort()
+        val session = AndroidUsbLiveConnectionSessionOwner(
+            { selected },
+            FakeOpener(AndroidUsbEndpointOpenResult.Opened(UsbReadOnlyTransactionChannel(port))),
+        )
+        session.connect("usb:one", 256, 500)
+        candidate.beforeCatalog = { selected = next.owner }
+        assertTrue(session.runtimeChannelCatalog() is RuntimeCatalogResult.Unavailable)
+        assertFalse(session.isConnected)
+        assertTrue(port.closed)
+    }
+
+    @Test
+    fun catalogThatSpoofsAnotherEpochIsRejectedAndRevoked() {
+        val candidate = FakeRuntimeCandidate()
+        candidate.catalogEpochOverride = 999L
+        val first = authorizedOwner("exact.signature", 42L, candidate)
+        val port = FakeBulkPort()
+        val session = AndroidUsbLiveConnectionSessionOwner(
+            { first.owner },
+            FakeOpener(AndroidUsbEndpointOpenResult.Opened(UsbReadOnlyTransactionChannel(port))),
+        )
+        session.connect("usb:one", 256, 500)
+        assertTrue(session.runtimeChannelCatalog() is RuntimeCatalogResult.Unavailable)
+        assertTrue(port.closed)
+        assertFalse(session.isConnected)
+    }
+
+    @Test
+    fun unsupportedRuntimeDefinitionDoesNotExposeCatalogOrBreakTuneConnection() {
+        val candidate = FakeRuntimeCandidate(unsupported = true)
+        val first = authorizedOwner("exact.signature", 42L, candidate)
+        val port = FakeBulkPort()
+        val session = AndroidUsbLiveConnectionSessionOwner(
+            { first.owner },
+            FakeOpener(AndroidUsbEndpointOpenResult.Opened(UsbReadOnlyTransactionChannel(port))),
+        )
+        assertTrue(session.connect("usb:one", 256, 500) is AndroidUsbLiveConnectResult.Connected)
+        assertTrue(session.runtimeChannelCatalog() is RuntimeCatalogResult.Unavailable)
+        assertEquals(0, candidate.catalogCalls)
+        assertTrue(session.isConnected)
+        assertFalse(port.closed)
+    }
+
     private class FakeRuntimeCandidate(
         private val unsupported: Boolean = false,
     ) : RuntimeCandidateBindingOperation {
+        var catalogCalls = 0
+        var beforeCatalog: (() -> Unit)? = null
+        var catalogEpochOverride: Long? = null
         var readCalls = 0
         var failRead = false
         var sampleAtMs: Long? = null
@@ -557,6 +638,19 @@ class AndroidUsbLiveConnectionSessionTest {
             } else {
                 RuntimeCandidateBindingResult.Bound(17L)
             }
+        }
+
+        override fun catalog(epoch: Long): RuntimeCatalogResult {
+            catalogCalls++
+            beforeCatalog?.invoke()
+            return RuntimeCatalogResult.Available(
+                LiveRuntimeChannelCatalog(
+                    epoch = catalogEpochOverride ?: epoch,
+                    profileGeneration = generation,
+                    definitionRevision = 11L,
+                    channels = listOf(LiveRuntimeChannelDefinition(1001L, "rpm", "RPM", 3, 0, 0)),
+                ),
+            )
         }
 
         override fun read(
