@@ -11,6 +11,7 @@ use crate::ecu_profile_registry::{OwnedProfileRegistry, ProfileRegistryError};
 use crate::live_channel_store::LiveChannelBatch;
 use crate::profile_import::{OwnedCompiledProfileImport, compile_owned_profile_import};
 use crate::runtime_acquisition_session::RuntimeRequestToken;
+use crate::runtime_definition_catalog::NamedRuntimeChannel;
 use crate::runtime_bound_live_session::{
     BoundRuntimeError, BoundRuntimeIdentity, RuntimeBoundLiveSession,
 };
@@ -235,6 +236,21 @@ impl ProfileRegistryStore {
             .map_err(RuntimeRegistryBindingError::Bound)
     }
 
+    /// Snapshot metadata from the *same* native binding as runtime decoding.
+    /// No caller-chosen labels, IDs or type definitions are accepted.
+    pub fn runtime_catalog_for_epoch(
+        &self,
+        handle: i64,
+        epoch: u64,
+    ) -> Result<(BoundRuntimeIdentity, Vec<NamedRuntimeChannel>), RuntimeRegistryBindingError> {
+        let state = self.registries.get(&handle).ok_or(
+            RuntimeRegistryBindingError::Registry(RegistryStoreError::InvalidHandle),
+        )?;
+        let binding = state.runtime.binding_for_epoch(epoch).map_err(RuntimeRegistryBindingError::Bound)?;
+        let catalog = state.runtime.channel_info(&binding).map_err(RuntimeRegistryBindingError::Bound)?;
+        Ok((binding, catalog.to_vec()))
+    }
+
     /// The epoch is resolved against a private native lease under the registry
     /// mutex; callers never supply the profile, definition, or lease fields.
     pub fn prepare_runtime_read_for_epoch(
@@ -443,6 +459,13 @@ pub fn bind_runtime_candidate_from_registry(
 /// Revokes the registry's candidate lease; never closes a physical USB port.
 pub fn disconnect_runtime_candidate_from_registry(handle: i64) -> Result<(), RegistryStoreError> {
     with_store(|store| store.disconnect_runtime(handle))
+}
+
+pub fn runtime_catalog_from_registry(
+    handle: i64,
+    epoch: u64,
+) -> Result<(BoundRuntimeIdentity, Vec<NamedRuntimeChannel>), RuntimeRegistryBindingError> {
+    with_store(|store| store.runtime_catalog_for_epoch(handle, epoch))
 }
 
 pub fn prepare_runtime_read_from_registry(
