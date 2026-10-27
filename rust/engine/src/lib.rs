@@ -35,6 +35,7 @@ mod jni_ram_source_state;
 mod jni_readonly_page_acquisition;
 mod jni_readonly_tune_metadata;
 mod jni_runtime_candidate;
+mod jni_runtime_catalog;
 mod jni_runtime_identity;
 mod jni_runtime_read;
 mod jni_tune_session;
