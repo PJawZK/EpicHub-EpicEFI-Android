@@ -13,6 +13,8 @@ pub struct NamedRuntimeChannel {
     pub name: String,
     pub units: String,
     pub id: u32,
+    /// Exact resolved INI scalar or bit-field type, shared with the decoder.
+    pub value_type: RuntimeValueType,
 }
 
 #[derive(Clone, Debug)]
@@ -240,6 +242,7 @@ pub fn compile_runtime_output_channels(
             name: name.to_string(),
             units: units.to_string(),
             id,
+            value_type,
         });
         descriptors.push(RuntimeChannelDescriptor {
             id,
