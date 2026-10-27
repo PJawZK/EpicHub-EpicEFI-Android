@@ -90,6 +90,14 @@ internal fun interface AndroidUsbEndpointChannelOpener {
 }
 
 /**
+ * Read-only access check; never requests permissions or opens another USB channel.
+ * Android's concrete owner checks the selected endpoint is still attached and permitted.
+ */
+internal fun interface AndroidUsbEndpointAccess {
+    fun isUsable(endpointId: String): Boolean
+}
+
+/**
  * Owns the physical Android USB channel for one explicitly connected live-tune controller.
  *
  * Transport ownership is deliberately downstream of profile authority. A channel is retained only
@@ -101,12 +109,17 @@ class AndroidUsbLiveConnectionSessionOwner internal constructor(
     private val opener: AndroidUsbEndpointChannelOpener,
     private val monotonicMs: () -> Long = { SystemClock.elapsedRealtime() },
     samplingPolicy: LiveRuntimeSamplingPolicy = LiveRuntimeSamplingPolicy(),
+    private val endpointAccess: AndroidUsbEndpointAccess = AndroidUsbEndpointAccess { true },
 ) : AutoCloseable {
     constructor(
         usbManager: UsbManager,
         connectionOwnerProvider: () -> LiveTuneConnectionOwner?,
     ) : this(
         connectionOwnerProvider = connectionOwnerProvider,
+        endpointAccess = AndroidUsbEndpointAccess { endpointId ->
+            val device = AndroidUsbCandidateDiscovery(usbManager).findDevice(endpointId)
+            device != null && usbManager.hasPermission(device)
+        },
         opener =
             AndroidUsbEndpointChannelOpener { endpointId ->
                 val discovery = AndroidUsbCandidateDiscovery(usbManager)
@@ -148,10 +161,34 @@ class AndroidUsbLiveConnectionSessionOwner internal constructor(
         }
 
     val isConnected: Boolean
-        get() = synchronized(this) { !closed && connectedChannel != null && connectedOwner?.isAlive == true }
+        get() = synchronized(this) {
+            !closed && connectedChannel != null && connectedOwner?.isAlive == true &&
+                endpointId?.let(endpointAccess::isUsable) == true
+        }
 
     val connectedEndpointId: String?
-        get() = synchronized(this) { endpointId }
+        get() = synchronized(this) {
+            endpointId?.takeIf(endpointAccess::isUsable)
+        }
+
+    /** Called by an owning Android USB detach/permission-loss observer, never by the UI. */
+    @Synchronized
+    internal fun onEndpointUnavailable(changedEndpointId: String): Boolean =
+        EngineAuthoritySerialization.exclusive {
+            if (closed || changedEndpointId.isBlank() || endpointId != changedEndpointId) {
+                false
+            } else {
+                disconnectCurrent()
+            }
+        }
+
+    /** Reconcile physical device presence and grant before any retained transport use. */
+    private fun hasUsableRetainedEndpoint(): Boolean {
+        val selected = endpointId ?: return false
+        if (endpointAccess.isUsable(selected)) return true
+        disconnectCurrent()
+        return false
+    }
 
     @Synchronized
     fun connect(
@@ -171,6 +208,9 @@ class AndroidUsbLiveConnectionSessionOwner internal constructor(
         disconnectCurrent()
         if (endpointId.isBlank()) {
             return AndroidUsbLiveConnectResult.InvalidSelection("USB endpoint must be selected.")
+        }
+        if (!endpointAccess.isUsable(endpointId)) {
+            return AndroidUsbLiveConnectResult.DeviceUnavailable
         }
         val authority =
             connectionOwnerProvider()
@@ -200,6 +240,11 @@ class AndroidUsbLiveConnectionSessionOwner internal constructor(
                 )
         ) {
             is DefinitionDrivenLiveTuneConnectResult.Connected -> {
+                if (!endpointAccess.isUsable(endpointId)) {
+                    authority.disconnect()
+                    channel.close()
+                    return AndroidUsbLiveConnectResult.DeviceUnavailable
+                }
                 val candidate = authority.bindRuntimeCandidate(
                     endpointId = endpointId,
                     identity = connected.identity,
@@ -240,6 +285,7 @@ class AndroidUsbLiveConnectionSessionOwner internal constructor(
         timeoutMs: Int,
     ): AndroidUsbLiveLoadResult {
         if (closed) return AndroidUsbLiveLoadResult.OwnerClosed
+        if (!hasUsableRetainedEndpoint()) return AndroidUsbLiveLoadResult.NotConnected
         val channel = connectedChannel ?: return AndroidUsbLiveLoadResult.NotConnected
         val authority = connectedOwner ?: return AndroidUsbLiveLoadResult.NotConnected
         if (!authority.isAlive) {
@@ -268,6 +314,7 @@ class AndroidUsbLiveConnectionSessionOwner internal constructor(
         timeoutMs: Int,
     ): AndroidUsbLiveRamWriteResult {
         if (closed) return AndroidUsbLiveRamWriteResult.OwnerClosed
+        if (!hasUsableRetainedEndpoint()) return AndroidUsbLiveRamWriteResult.NotConnected
         val channel = connectedChannel ?: return AndroidUsbLiveRamWriteResult.NotConnected
         val authority = connectedOwner ?: return AndroidUsbLiveRamWriteResult.NotConnected
         if (!authority.isAlive) {
@@ -298,6 +345,7 @@ class AndroidUsbLiveConnectionSessionOwner internal constructor(
         timeoutMs: Int,
     ): AndroidUsbLiveBurnResult {
         if (closed) return AndroidUsbLiveBurnResult.OwnerClosed
+        if (!hasUsableRetainedEndpoint()) return AndroidUsbLiveBurnResult.NotConnected
         val channel = connectedChannel ?: return AndroidUsbLiveBurnResult.NotConnected
         val authority = connectedOwner ?: return AndroidUsbLiveBurnResult.NotConnected
         if (!authority.isAlive) {
@@ -323,6 +371,9 @@ class AndroidUsbLiveConnectionSessionOwner internal constructor(
     internal fun readRuntimeOnce(timeoutMs: Int): RuntimeReadCycleResult =
         EngineAuthoritySerialization.exclusive {
             if (closed) return@exclusive RuntimeReadCycleResult.Unavailable("USB owner is closed.")
+            if (!hasUsableRetainedEndpoint()) {
+                return@exclusive RuntimeReadCycleResult.Unavailable("USB endpoint unavailable or permission revoked.")
+            }
             val channel = connectedChannel
                 ?: return@exclusive RuntimeReadCycleResult.Unavailable("No USB connection.")
             val authority = connectedOwner
@@ -365,6 +416,7 @@ class AndroidUsbLiveConnectionSessionOwner internal constructor(
         EngineAuthoritySerialization.exclusive {
             val now = monotonicMs()
             if (closed) return@exclusive runtimeSampling.snapshot(now)
+            if (!hasUsableRetainedEndpoint()) return@exclusive runtimeSampling.snapshot(now)
             val authority = connectedOwner
             if (authority == null || !authority.isAlive || connectionOwnerProvider() !== authority) {
                 if (connectedChannel != null) disconnectCurrent()
@@ -395,6 +447,7 @@ class AndroidUsbLiveConnectionSessionOwner internal constructor(
     @Synchronized
     internal fun sampledRuntimeSnapshot(): LiveRuntimeSampleView =
         EngineAuthoritySerialization.exclusive {
+            hasUsableRetainedEndpoint()
             val authority = connectedOwner
             if (authority != null &&
                 (!authority.isAlive || connectionOwnerProvider() !== authority)
