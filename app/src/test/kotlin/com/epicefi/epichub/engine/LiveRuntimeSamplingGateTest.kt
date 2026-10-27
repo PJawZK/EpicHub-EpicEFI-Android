@@ -38,7 +38,7 @@ class LiveRuntimeSamplingGateTest {
         val stale = gate.snapshot(300)
         assertEquals(LiveRuntimeValidity.Stale, stale.validity)
         assertFalse(stale.canUseAsLive)
-        assertEquals(801f, stale.frame!!.readings[0].value)
+        assertEquals(801f, stale.frame!!.readings[0].value, 0.001f)
         assertEquals(75, gate.timeoutMs)
     }
 
