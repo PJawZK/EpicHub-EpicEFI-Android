@@ -1,8 +1,50 @@
 # EpicHub Current Handoff
 
+## ACTIVE CONTINUATION — 2026-10-27 | Task 1 runtime metadata gate
+
+**Use this section first.** Historical qualified checkpoints below document how the foundation was built; their former "next step" or "CI pending" statements must not supersede this section. **Current implementation code and exact-head CI have priority over historical documentation.** Do not assume a green earlier run qualifies later commits.
+
+### Branch and qualification authority at this handoff
+
+- **Last verified, fully promoted foundation:** `main` at `ac9a02a412db49be1628b06f85f43600a3a4c147` (2026-10-27). The USB/permission/profile lifecycle implementation passed [Foundation 40512006983](https://github.com/PJawZK/EpicHub-EpicEFI-Android/actions/runs/40512006983); its documentation checkpoint passed [Foundation 40513443318](https://github.com/PJawZK/EpicHub-EpicEFI-Android/actions/runs/40513443318). `main` and `current-work` were equal after that promotion.
+- **Later work on `current-work` is NOT YET QUALIFIED:** the active workstream adds a native definition-derived runtime channel catalog, Android `EPCT` v1 parser, and connection-owner-scoped metadata lookup. During this handoff, branch commits were advancing (observed `99f49503` → `9840fa98` → `b1cd4523` → `31ece1be`) and were ahead of `main`, not behind. [Foundation 40517751785](https://github.com/PJawZK/EpicHub-EpicEFI-Android/actions/runs/40517751785) failed on Rust formatting at the older `99f49503` commit; later runs were queued/in progress, **not accepted as complete**. Re-read the actual heads and latest exact-head Foundation result before claiming success or updating `main`.
+- **Repository rule:** work on `current-work`, no force push and no premature merge; promote a fast-forward to `main` only when full Foundation passes at **the exact `current-work` SHA**, `main` is an ancestor (ahead ≥ 1, behind = 0), and tests/review show the intended gates are closed. Re-verify both branch refs after promotion. This handoff update alone does not qualify or promote the active catalog implementation.
+
+### Completed in the preceding development conversation — qualified foundations
+
+1. Native registry-owned **runtime candidate leases** bound to selected ECU identity/profile generation and opaque session epoch; JNI candidate bind/revoke integrated through the single retained Android USB connection owner. A bound candidate is not permission to publish live telemetry.
+2. **Bounded single-shot runtime acquisition** through the retained `UsbReadOnlyTransactionChannel`, with native prepare/complete token, full-frame length/status/CRC/epoch validation and a versioned `real-ecu-v1` batch. Rust/fake-USB/JVM regression coverage for framing, fragmentation, stale tokens, CRC, timeout and reconnect; Android `SystemClock.elapsedRealtime()` supplies boot-relative monotonic timing.
+3. **Controlled, explicit-call sampling gate**, default minimum interval 50 ms, live sample maximum age 250 ms, read timeout 100 ms. States `Unknown/Fresh/Stale/Invalid`, read-side age projection without IO, epoch-isolated history, denial of old samples as live, and rejection of order/clock/generation/definition changes. Still **no background sampling loop** and no live Dashboard/Tuner publication.
+4. **Connection/permission/profile lifecycle safeguards**: selected USB endpoint grant/presence checks, fail-closed access-query exceptions, exact detach invalidation, stale callback rejection, and selected profile ownership checks before/after read/load/RAM Write/Burn-related operations. PermissionRequired and DeviceUnavailable remain distinct. Optional context-aware `AndroidUsbDetachObserver` shares the one connection owner. Burn UI remains disabled.
+5. Foundation suites for the above completed milestones were green and promoted. **Task 1 as a whole is NOT complete.**
+
+### Current unqualified catalog implementation (inspect code before extending)
+
+The `current-work` workstream now contains `rust/engine/src/jni_runtime_catalog.rs`, `rust/engine/src/profile_registry_store.rs` epoch-validated catalog lookup, compiler-proven `NamedRuntimeChannel.value_type`, and `app/src/main/kotlin/com/epicefi/epichub/engine/RuntimeChannelCatalog.kt`. The proposed `EPCT` v1 bounded format carries native channel IDs, exact INI names and units, scalar/bit-field type, epoch, profile generation and definition revision; Kotlin strictly validates lengths, UTF-8, IDs and type/bit spans. Candidate binding, selected `LiveTuneConnectionOwner` and retained `AndroidUsbLiveConnectionSessionOwner` have begun exposing read-only catalog lookup. **Treat all of this as WIP until tests and CI pass; it is neither a confirmed on-device JNI integration nor a live Monitor source.**
+
+### Next gates, in strict dependency order
+
+**A. Qualify the definition-derived native metadata catalog (immediate work).** First inspect the latest code/branch/CI after concurrent commits. Resolve Rust format/compiler/Clippy/JVM findings. Add deterministic Rust + Kotlin tests for real definition-derived names/units/type/bit ranges and for malformed UTF-8, duplicate IDs/names, oversized or truncated catalogs, invalid scalar spans, stale handle/epoch/generation/revision, profile switch, detach and permission loss before/during lookup. Verify the catalog's identity/generation/revision matches the same session as the decoded `LiveRuntimeFrame`. No arbitrary Java/UI-supplied descriptions and no synthetic aliases masquerading as ECU metadata. Finish the full exact-head Foundation gate before promotion.
+
+**B. Complete actual connection/JNI lifecycle proof.** Exercise the loaded native JNI library via an Android instrumentation or equivalent real JNI harness driving the *same* fake USB port; test real prepare/complete/catalog read after reconnect, close, permission revoke, profile replacement and in-flight callbacks. Add multi-threaded interleavings of sampling with tune load/RAM Write/Burn gates. Confirm the production creation path uses the context-aware detach observer, and closing its owner unregisters it. JVM-only fake-native tests are not proof of the JNI crossing.
+
+**C. Introduce a separate, read-only Monitor/Tuner source projection.** Join catalog and samples only when source, epoch, profile generation, definition revision and channel IDs all agree; project explicit `Unknown/Fresh/Stale/Invalid`, age, names, units, type, and unsupported-channel status. Never blend real samples with synthetic four-channel Dashboard data. Ensure disconnect/reconnect/definition reload clears live authority before any UI update. Test smartphone/tablet lifecycle and display *without* enabling Burn.
+
+**D. Only after A–C: opt-in lifecycle-owned sampling driver.** Drive the already-qualified one-shot sampling gate with a bounded schedule/backpressure, one USB transaction at a time, stop/cancel on detach/background/profile changes, no concurrent read/write, and measurable freshness/recovery. No second USB owner.
+
+**E. ECU coverage and hardware.** Build a generated Mega144H7/uaEFI definition fixture corpus, document accepted/unsupported INI expressions, signed/float/bitfield channels, response variants, units and limits. Test on physical ECU only **after** offline and instrumentation gates. Keep hardware profiling last.
+
+**Project scope:** EpicHub = **Connect · Monitor · Tune**; EpicScope owns Analyzer, do not duplicate it. Preserve the mature table interaction work without copying proprietary TunerStudio internals; use definition-driven ECU compatibility, not ECU-specific hardcoding.
+
+### How to resume
+
+Start with `docs/HANDOFF.md` here, then verify `main`, `current-work`, latest GitHub Actions and compare status **again**, because `current-work` was being actively edited during the handoff. Audit all modified runtime-catalog/connection-owner paths and compare with the current tests. Continue gate A at its real code boundary; qualify each gate before advancing. Update this first section with exact SHAs/CI and remaining risks after each successful checkpoint. Preserve historical sections below as chronology, not instructions to redo already qualified work.
+
+---
+
 ## Qualified USB device / permission / profile lifecycle fencing — 2026-10-27
 
-**Exact implementation SHA:** `38bb44559ad944ab4deb4f1276c2a14d4251cc22`. Full [Foundation 40512006983](https://github.com/PJawZK/EpicHub-EpicEFI-Android/actions/runs/40512006983) **success** (Rust format/lint/tests, Android JVM tests, debug/performance/macrobenchmark builds and packaging). Verified `current-work` 12 commits ahead and zero behind `main`, and fast-forwarded `main` without force. This **documentation-only** checkpoint needs its own complete exact-head CI success before promotion.
+**Exact implementation SHA:** `38bb44559ad944ab4deb4f1276c2a14d4251cc22`. Full [Foundation 40512006983](https://github.com/PJawZK/EpicHub-EpicEFI-Android/actions/runs/40512006983) **success** (Rust format/lint/tests, Android JVM tests, debug/performance/macrobenchmark builds and packaging). Verified `current-work` 12 commits ahead and zero behind `main`, and fast-forwarded `main` without force. The documentation-only checkpoint subsequently passed **Foundation 40513443318** and was promoted to `main` at `ac9a02a4`; the active catalog branch above is separate and unqualified.
 
 ### New authority boundary
 
