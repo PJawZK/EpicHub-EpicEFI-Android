@@ -340,6 +340,16 @@ class AndroidUsbLiveConnectionSessionOwner internal constructor(
             } catch (failure: LinkageError) {
                 RuntimeReadCycleResult.Unavailable("Native runtime bridge unavailable: ${failure.javaClass.simpleName}")
             }
+            if (result is RuntimeReadCycleResult.Fresh &&
+                (result.frame.epoch != candidate.sessionEpoch ||
+                    connectedChannel !== channel || connectedOwner !== authority ||
+                    !authority.isAlive || connectionOwnerProvider() !== authority)
+            ) {
+                disconnectCurrent()
+                return@exclusive RuntimeReadCycleResult.Unavailable(
+                    "Runtime response returned after its USB/profile authority changed.",
+                )
+            }
             if (result !is RuntimeReadCycleResult.Fresh) {
                 disconnectCurrent()
             }
