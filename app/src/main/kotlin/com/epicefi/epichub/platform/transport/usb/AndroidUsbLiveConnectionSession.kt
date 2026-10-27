@@ -6,6 +6,7 @@ import android.os.SystemClock
 import com.epicefi.epichub.engine.DefinitionDrivenLiveTuneConnectResult
 import com.epicefi.epichub.engine.EngineAuthoritySerialization
 import com.epicefi.epichub.engine.RuntimeCandidateBindingResult
+import com.epicefi.epichub.engine.RuntimeCatalogResult
 import com.epicefi.epichub.engine.RuntimeReadCycleResult
 import com.epicefi.epichub.engine.LiveRuntimeSamplingGate
 import com.epicefi.epichub.engine.LiveRuntimeSamplingPolicy
@@ -416,6 +417,52 @@ class AndroidUsbLiveConnectionSessionOwner internal constructor(
         }
         return AndroidUsbLiveBurnResult.Completed(result)
     }
+
+    /**
+     * Read-only definition metadata from the exact same native epoch as runtime values.
+     * Never opens a port, issues ECU IO, or publishes values into the Dashboard.
+     */
+    @Synchronized
+    internal fun runtimeChannelCatalog(): RuntimeCatalogResult =
+        EngineAuthoritySerialization.exclusive {
+            if (closed) return@exclusive RuntimeCatalogResult.Unavailable("USB owner is closed.")
+            if (!hasUsableRetainedEndpoint()) {
+                return@exclusive RuntimeCatalogResult.Unavailable("USB endpoint no longer authorized.")
+            }
+            val authority = connectedOwner
+                ?: return@exclusive RuntimeCatalogResult.Unavailable("No selected ECU profile.")
+            if (!authority.isAlive || connectionOwnerProvider() !== authority) {
+                disconnectCurrent()
+                return@exclusive RuntimeCatalogResult.Unavailable("Selected ECU profile changed.")
+            }
+            val channel = connectedChannel
+                ?: return@exclusive RuntimeCatalogResult.Unavailable("No retained USB connection.")
+            val candidate = runtimeCandidate as? RuntimeCandidateBindingResult.Bound
+                ?: return@exclusive RuntimeCatalogResult.Unavailable("No bound runtime channel definition.")
+            val result = try {
+                authority.runtimeChannelCatalog(candidate.sessionEpoch)
+            } catch (failure: RuntimeException) {
+                RuntimeCatalogResult.Unavailable("Native runtime catalog failed: ${failure.javaClass.simpleName}")
+            } catch (failure: LinkageError) {
+                RuntimeCatalogResult.Unavailable("Native runtime catalog bridge unavailable: ${failure.javaClass.simpleName}")
+            }
+            if (connectedOwner !== authority || connectedChannel !== channel ||
+                !authority.isAlive || connectionOwnerProvider() !== authority ||
+                runtimeCandidate != candidate || !hasUsableRetainedEndpoint()
+            ) {
+                disconnectCurrent()
+                return@exclusive RuntimeCatalogResult.Unavailable("Runtime catalog became stale during lookup.")
+            }
+            if (result is RuntimeCatalogResult.Available &&
+                (result.catalog.source != "real-ecu-v1" ||
+                    result.catalog.epoch != candidate.sessionEpoch ||
+                    result.catalog.profileGeneration <= 0L)
+            ) {
+                disconnectCurrent()
+                return@exclusive RuntimeCatalogResult.Unavailable("Metadata did not match native runtime authority.")
+            }
+            result
+        }
 
     /**
      * Explicit one-shot acquisition, not a background poller or Dashboard source.
