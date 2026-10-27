@@ -10,6 +10,8 @@ import com.epicefi.epichub.engine.LiveTuneSourceLifecycleState
 import com.epicefi.epichub.engine.RuntimeCandidateBindingOperation
 import com.epicefi.epichub.engine.RuntimeCandidateBindingResult
 import com.epicefi.epichub.engine.RuntimeReadCycleResult
+import com.epicefi.epichub.engine.LiveRuntimeSamplingPolicy
+import com.epicefi.epichub.engine.LiveRuntimeValidity
 import com.epicefi.epichub.engine.LiveRuntimeFrame
 import com.epicefi.epichub.engine.LiveRuntimeReading
 import com.epicefi.epichub.engine.RuntimeIdentityProbeOperation
@@ -254,11 +256,126 @@ class AndroidUsbLiveConnectionSessionTest {
         assertFalse(session.isConnected)
     }
 
+    @Test
+    fun admissionControlledSamplingAgesWithoutPollingOrMixingSyntheticSnapshots() {
+        val candidate = FakeRuntimeCandidate()
+        val authority = authorizedOwner("exact.signature", 42L, candidate)
+        val port = FakeBulkPort()
+        var now = 11L
+        val session = AndroidUsbLiveConnectionSessionOwner(
+            { authority.owner },
+            FakeOpener(AndroidUsbEndpointOpenResult.Opened(UsbReadOnlyTransactionChannel(port))),
+            monotonicMs = { now },
+            samplingPolicy = LiveRuntimeSamplingPolicy(50, 250, 100),
+        )
+        assertEquals(LiveRuntimeValidity.Unknown, session.sampledRuntimeSnapshot().validity)
+        session.connect("usb:one", 256, 500)
+        assertEquals(LiveRuntimeValidity.Unknown, session.sampledRuntimeSnapshot().validity)
+        candidate.sampleAtMs = now
+        val first = session.sampleRuntimeIfDue()
+        assertEquals(LiveRuntimeValidity.Fresh, first.validity)
+        assertTrue(first.canUseAsLive)
+        assertEquals("real-ecu-v1", first.source)
+        assertEquals(1, candidate.readCalls)
+        assertEquals(100, candidate.lastReadTimeoutMs)
+
+        now = 60L
+        assertTrue(session.sampleRuntimeIfDue().canUseAsLive)
+        assertEquals(1, candidate.readCalls)
+        now = 61L
+        candidate.sampleAtMs = now
+        assertTrue(session.sampleRuntimeIfDue().canUseAsLive)
+        assertEquals(2, candidate.readCalls)
+
+        now = 311L
+        val stale = session.sampledRuntimeSnapshot()
+        assertEquals(LiveRuntimeValidity.Stale, stale.validity)
+        assertFalse(stale.canUseAsLive)
+        assertEquals(2, candidate.readCalls)
+        assertFalse(port.closed)
+        candidate.sampleAtMs = now
+        val resumed = session.sampleRuntimeIfDue()
+        assertEquals(LiveRuntimeValidity.Fresh, resumed.validity)
+        assertEquals(3, candidate.readCalls)
+    }
+
+    @Test
+    fun samplingFailureRevokesFreshStatusAndClosesOnlyTheRetainedPort() {
+        val candidate = FakeRuntimeCandidate()
+        val authority = authorizedOwner("exact.signature", 42L, candidate)
+        val port = FakeBulkPort()
+        var now = 11L
+        val session = AndroidUsbLiveConnectionSessionOwner(
+            { authority.owner },
+            FakeOpener(AndroidUsbEndpointOpenResult.Opened(UsbReadOnlyTransactionChannel(port))),
+            monotonicMs = { now },
+        )
+        session.connect("usb:one", 256, 500)
+        candidate.sampleAtMs = now
+        assertTrue(session.sampleRuntimeIfDue().canUseAsLive)
+        candidate.failRead = true
+        now = 61L
+        assertEquals(LiveRuntimeValidity.Invalid, session.sampleRuntimeIfDue().validity)
+        assertFalse(session.sampledRuntimeSnapshot().canUseAsLive)
+        assertTrue(port.closed)
+        assertFalse(session.isConnected)
+        assertEquals(2, candidate.readCalls)
+        now = 111L
+        assertFalse(session.sampleRuntimeIfDue().canUseAsLive)
+        assertEquals(2, candidate.readCalls)
+    }
+
+    @Test
+    fun callbackCannotPublishAfterReentrantDisconnectDuringTransport() {
+        val candidate = FakeRuntimeCandidate()
+        val authority = authorizedOwner("exact.signature", 42L, candidate)
+        val port = FakeBulkPort()
+        var now = 11L
+        val session = AndroidUsbLiveConnectionSessionOwner(
+            { authority.owner },
+            FakeOpener(AndroidUsbEndpointOpenResult.Opened(UsbReadOnlyTransactionChannel(port))),
+            monotonicMs = { now },
+        )
+        session.connect("usb:one", 256, 500)
+        candidate.sampleAtMs = now
+        candidate.beforeReturn = { session.disconnect() }
+        assertEquals(LiveRuntimeValidity.Invalid, session.sampleRuntimeIfDue().validity)
+        assertFalse(session.sampledRuntimeSnapshot().canUseAsLive)
+        assertTrue(port.closed)
+    }
+
+    @Test
+    fun changedProfileOwnerInvalidatesReadSideFreshWithoutAnExplicitTick() {
+        val candidate = FakeRuntimeCandidate()
+        val first = authorizedOwner("exact.signature", 42L, candidate)
+        val next = authorizedOwner("replacement", 43L)
+        var selected = first.owner
+        val port = FakeBulkPort()
+        var now = 11L
+        val session = AndroidUsbLiveConnectionSessionOwner(
+            { selected },
+            FakeOpener(AndroidUsbEndpointOpenResult.Opened(UsbReadOnlyTransactionChannel(port))),
+            monotonicMs = { now },
+        )
+        session.connect("usb:one", 256, 500)
+        candidate.sampleAtMs = now
+        assertTrue(session.sampleRuntimeIfDue().canUseAsLive)
+        selected = next.owner
+        now = 12L
+        assertEquals(LiveRuntimeValidity.Stale, session.sampledRuntimeSnapshot().validity)
+        assertTrue(port.closed)
+        assertFalse(session.isConnected)
+        assertFalse(session.sampledRuntimeSnapshot().canUseAsLive)
+    }
+
     private class FakeRuntimeCandidate(
         private val unsupported: Boolean = false,
     ) : RuntimeCandidateBindingOperation {
         var readCalls = 0
         var failRead = false
+        var sampleAtMs: Long? = null
+        var lastReadTimeoutMs = 0
+        var beforeReturn: (() -> Unit)? = null
         var bindCalls = 0
         var revocations = 0
         var endpoint: String? = null
@@ -288,6 +405,8 @@ class AndroidUsbLiveConnectionSessionTest {
             timeoutMs: Int,
         ): RuntimeReadCycleResult {
             readCalls++
+            lastReadTimeoutMs = timeoutMs
+            beforeReturn?.invoke()
             return if (failRead) {
                 RuntimeReadCycleResult.Unavailable("Simulated native transport fault.")
             } else {
@@ -295,7 +414,7 @@ class AndroidUsbLiveConnectionSessionTest {
                     LiveRuntimeFrame(
                         epoch = epoch,
                         sequence = readCalls.toLong(),
-                        receivedAtMs = 10L + readCalls,
+                        receivedAtMs = sampleAtMs ?: (10L + readCalls),
                         profileGeneration = generation,
                         definitionRevision = 1L,
                         readings = listOf(LiveRuntimeReading(101L, 910f)),
