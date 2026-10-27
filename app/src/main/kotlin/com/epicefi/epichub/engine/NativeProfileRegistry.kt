@@ -423,6 +423,9 @@ object NativeProfileRegistryBridge {
         output: ByteBuffer,
     ): Int
 
+    /** Internal v1, read-only definition catalog. No USB operation or sample publication. */
+    external fun runtimeChannelCatalog(handle: Long, epoch: Long, output: ByteBuffer): Int
+
     /** Returns a positive registry-owned candidate epoch, not live telemetry. */
     external fun bindRuntimeCandidate(
         handle: Long,
