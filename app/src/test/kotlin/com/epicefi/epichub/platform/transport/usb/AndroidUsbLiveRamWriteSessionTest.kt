@@ -78,6 +78,53 @@ class AndroidUsbLiveRamWriteSessionTest {
         assertEquals(0, writeOperation.calls)
     }
 
+    @Test
+    fun replacingSelectedProfileBeforeWriteRevokesOldOwnerWithoutIssuingWrite() {
+        val identity = ValidatedRuntimeIdentity("exact.signature")
+        val lifecycle = FakeLifecycle()
+        val operation = FakeRamWriteOperation()
+        val first = owner(identity, lifecycle, operation)
+        val replacement = owner(identity, FakeLifecycle(), FakeRamWriteOperation())
+        var selected = first
+        val port = FakeBulkPort()
+        val session = AndroidUsbLiveConnectionSessionOwner(
+            { selected },
+            AndroidUsbEndpointChannelOpener {
+                AndroidUsbEndpointOpenResult.Opened(UsbReadOnlyTransactionChannel(port))
+            },
+        )
+        assertTrue(session.connect("usb:test", 256, 500) is AndroidUsbLiveConnectResult.Connected)
+        lifecycle.markLive(identity)
+        selected = replacement
+        assertEquals(AndroidUsbLiveRamWriteResult.NotConnected, session.writeCurrentDraftToRam(256, 500))
+        assertEquals(0, operation.calls)
+        assertTrue(port.closed)
+    }
+
+    @Test
+    fun losingUsbGrantWithinWriteCallbackCannotReportCompletedRamWrite() {
+        val identity = ValidatedRuntimeIdentity("exact.signature")
+        val lifecycle = FakeLifecycle()
+        val operation = FakeRamWriteOperation()
+        val first = owner(identity, lifecycle, operation)
+        var permitted = true
+        val port = FakeBulkPort()
+        val session = AndroidUsbLiveConnectionSessionOwner(
+            { first },
+            AndroidUsbEndpointChannelOpener {
+                AndroidUsbEndpointOpenResult.Opened(UsbReadOnlyTransactionChannel(port))
+            },
+            endpointAccess = AndroidUsbEndpointAccess { permitted },
+        )
+        assertTrue(session.connect("usb:test", 256, 500) is AndroidUsbLiveConnectResult.Connected)
+        lifecycle.markLive(identity)
+        operation.beforeReturn = { permitted = false }
+        assertEquals(AndroidUsbLiveRamWriteResult.NotConnected, session.writeCurrentDraftToRam(256, 500))
+        assertEquals(1, operation.calls)
+        assertTrue(port.closed)
+        assertTrue(!session.isConnected)
+    }
+
     private fun owner(
         identity: ValidatedRuntimeIdentity,
         lifecycle: FakeLifecycle,
@@ -152,6 +199,7 @@ class AndroidUsbLiveRamWriteSessionTest {
         var calls = 0
         var channel: UsbReadOnlyTransactionChannel? = null
         var signature: ByteArray? = null
+        var beforeReturn: (() -> Unit)? = null
 
         override fun write(
             signatureResponse: ByteArray,
@@ -162,6 +210,7 @@ class AndroidUsbLiveRamWriteSessionTest {
             calls += 1
             this.channel = channel
             signature = signatureResponse.copyOf()
+            beforeReturn?.invoke()
             return result
         }
     }
@@ -171,8 +220,12 @@ class AndroidUsbLiveRamWriteSessionTest {
     }
 
     private class FakeBulkPort : UsbReadOnlyBulkPort {
+        var closed = false
+            private set
         override fun sendRequest(request: ByteArray, timeoutMs: Int): Int = request.size
         override fun receiveResponse(buffer: ByteArray, timeoutMs: Int): Int = -1
-        override fun close() = Unit
+        override fun close() {
+            closed = true
+        }
     }
 }
