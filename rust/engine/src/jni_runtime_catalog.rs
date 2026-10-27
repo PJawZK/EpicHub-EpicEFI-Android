@@ -198,8 +198,8 @@ mod tests {
             units: "RPM".into(),
             value_type: RuntimeValueType::U16,
         };
-        assert!(encode_catalog_data(0, 800, 42, &[good.clone()]).is_none());
-        assert!(encode_catalog_data(1, 0, 42, &[good.clone()]).is_none());
+        assert!(encode_catalog_data(0, 800, 42, std::slice::from_ref(&good)).is_none());
+        assert!(encode_catalog_data(1, 0, 42, std::slice::from_ref(&good)).is_none());
         assert!(encode_catalog_data(1, 800, 42, &[]).is_none());
         assert!(encode_catalog_data(1, 800, 42, &[good.clone(), good.clone()]).is_none());
         assert!(
