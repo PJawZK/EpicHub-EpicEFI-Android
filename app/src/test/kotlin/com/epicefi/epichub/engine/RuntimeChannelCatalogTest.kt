@@ -110,6 +110,42 @@ class RuntimeChannelCatalogTest {
     }
 
     @Test
+    fun metadataOnlyAnnotatesFreshSameEpochGenerationRevisionAndFullChannelSet() {
+        val catalog = parse(wire())!!
+        val frame = LiveRuntimeFrame(
+            epoch = 44,
+            sequence = 1,
+            receivedAtMs = 100,
+            profileGeneration = 800,
+            definitionRevision = 27,
+            readings = catalog.channels.map { LiveRuntimeReading(it.id, 10.0f) },
+        )
+        val live = LiveRuntimeSampleView(
+            validity = LiveRuntimeValidity.Fresh,
+            epoch = 44,
+            frame = frame,
+            ageMs = 0,
+            reason = null,
+        )
+        assertTrue(catalog.canAnnotate(live))
+        assertFalse(catalog.canAnnotate(live.copy(validity = LiveRuntimeValidity.Stale)))
+        assertFalse(catalog.canAnnotate(live.copy(validity = LiveRuntimeValidity.Invalid)))
+        assertFalse(catalog.canAnnotate(live.copy(source = "synthetic-v1")))
+        assertFalse(catalog.canAnnotate(live.copy(epoch = 45)))
+        assertFalse(catalog.canAnnotate(live.copy(frame = frame.copy(epoch = 45))))
+        assertFalse(catalog.canAnnotate(live.copy(frame = frame.copy(profileGeneration = 801))))
+        assertFalse(catalog.canAnnotate(live.copy(frame = frame.copy(definitionRevision = 28))))
+        assertFalse(catalog.canAnnotate(live.copy(frame = frame.copy(readings = frame.readings.dropLast(1)))))
+        assertFalse(catalog.canAnnotate(
+            live.copy(frame = frame.copy(readings = listOf(
+                LiveRuntimeReading(999, 10f),
+                LiveRuntimeReading(998, 10f),
+                LiveRuntimeReading(997, 10f),
+            ))),
+        ))
+    }
+
+    @Test
     fun mockJniReaderMustMatchSelectedEpochAndValidRegistry() {
         val payload = wire()
         var calls = 0
