@@ -1,5 +1,6 @@
 package com.epicefi.epichub.platform.transport.usb
 
+import android.content.Context
 import android.hardware.usb.UsbManager
 import android.os.SystemClock
 import com.epicefi.epichub.engine.DefinitionDrivenLiveTuneConnectResult
@@ -139,6 +140,23 @@ class AndroidUsbLiveConnectionSessionOwner internal constructor(
                 }
             },
     )
+
+    /**
+     * Context-aware construction additionally subscribes to system USB detach events.
+     * The existing UsbManager-only constructor remains usable and still checks the
+     * actual endpoint grant on every read/load/write and source snapshot.
+     */
+    constructor(
+        context: Context,
+        usbManager: UsbManager,
+        connectionOwnerProvider: () -> LiveTuneConnectionOwner?,
+    ) : this(usbManager, connectionOwnerProvider) {
+        detachObserver = AndroidUsbDetachObserver(context) { endpoint ->
+            onEndpointUnavailable(endpoint)
+        }
+    }
+
+    private var detachObserver: AndroidUsbDetachObserver? = null
 
     @Volatile
     private var closed = false
@@ -475,6 +493,8 @@ class AndroidUsbLiveConnectionSessionOwner internal constructor(
             if (!closed) {
                 disconnectCurrent()
                 closed = true
+                detachObserver?.close()
+                detachObserver = null
             }
         }
     }
