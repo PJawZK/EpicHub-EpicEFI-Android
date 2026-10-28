@@ -1,5 +1,16 @@
 # EpicHub Current Handoff
 
+## ACTIVE CONTINUATION — 2026-10-28 | Gate B JNI instrumentation foundation (unqualified)
+
+**Latest Gate B code checkpoint:** `918587650c35415269b71801cd61a25f0f81ed79` on `current-work`; `main` was last verified at `8310088f974d66596d7b0a85d19a700d13e4e0b0`. Re-check refs and exact-head Foundation CI before promotion. The 2026-10-27 native EPCT catalog/coherence subgate below is qualified; Gate B is **not**.
+
+- Added Android instrumentation runner and `androidTest` dependencies to `app/build.gradle.kts`.
+- Added `NativeRuntimeJniInstrumentedTest.kt` invoking the *real packaged* `NativeProfileRegistryBridge` .so for create/alive/close and negative registry/epoch/catalog/prepare/bind authority checks. The test uses no physical ECU or USB connection.
+- Foundation workflow now runs `gradle :app:assembleDebugAndroidTest --stacktrace` and publishes `epichub-gate-b-jni-androidtest` APK for device execution. **Building the test APK is not executing it.** The instrumented tests have **not yet been run on Android**, and exact-head CI for the latest checkpoint was not confirmed green at this documentation update. The earlier EPCT qualification is not evidence of Gate B completion.
+- Next: verify build/CI at exact SHA; fix issues before progressing. Execute `gradle :app:connectedDebugAndroidTest` on an attached Android device or emulator with matching ABI; record evidence. Then add the actual loaded-JNI bind/catalog/prepare/complete cycle through the **retained fake USB owner**, reconnection, close, permission revoke, profile replacement and stale callbacks. Add multi-threaded sample/load/write/Burn-authority interleavings and verify context-aware USB detach observer production wiring and unregister. No second USB owner, no Burn UI, no live Monitor data publication; physical ECU last.
+
+---
+
 ## ACTIVE CONTINUATION — 2026-10-27 | Native runtime catalog qualified, JNI instrumentation next
 
 **Use this first.** Current implementation and exact-head CI take precedence over historical checkpoint paragraphs below (which retain earlier pending/WIP language for chronology). EpicHub remains **Connect · Monitor · Tune**; EpicScope owns the Analyzer. Keep multi-ECU support definition-driven, not board-hardcoded.
