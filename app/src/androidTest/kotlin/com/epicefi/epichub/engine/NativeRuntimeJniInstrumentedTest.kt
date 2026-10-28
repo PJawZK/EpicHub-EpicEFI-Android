@@ -69,4 +69,64 @@ class NativeRuntimeJniInstrumentedTest {
             ) < 0L,
         )
     }
+    @Test
+    fun concurrentRegistryInstancesCannotBorrowOneAnothersRuntimeAuthority() {
+        val first = NativeProfileRegistryBridge.create()
+        val second = NativeProfileRegistryBridge.create()
+        assertTrue(first > 0L)
+        assertTrue(second > 0L)
+        assertTrue(first != second)
+        try {
+            assertTrue(NativeProfileRegistryBridge.isAlive(first))
+            assertTrue(NativeProfileRegistryBridge.isAlive(second))
+            NativeProfileRegistryBridge.close(first)
+            assertFalse(NativeProfileRegistryBridge.isAlive(first))
+            assertTrue("Second registry must remain valid", NativeProfileRegistryBridge.isAlive(second))
+            assertTrue(
+                NativeProfileRegistryBridge.runtimeChannelCatalog(
+                    first, 1L, ByteBuffer.allocateDirect(131_072),
+                ) < 0,
+            )
+            assertTrue(
+                NativeProfileRegistryBridge.runtimeChannelCatalog(
+                    second, 1L, ByteBuffer.allocateDirect(131_072),
+                ) < 0,
+            )
+            assertTrue(
+                NativeProfileRegistryBridge.prepareRuntimeRead(
+                    first, 1L, 20L, 100L, ByteBuffer.allocateDirect(72),
+                ) < 0L,
+            )
+        } finally {
+            NativeProfileRegistryBridge.close(first)
+            NativeProfileRegistryBridge.close(second)
+        }
+        assertFalse(NativeProfileRegistryBridge.isAlive(second))
+    }
+
+    @Test
+    fun nativeRuntimeCompletionRejectsUnboundAndClosedSessions() {
+        val handle = NativeProfileRegistryBridge.create()
+        assertTrue(handle > 0L)
+        val response = ByteBuffer.allocateDirect(8)
+        val output = ByteBuffer.allocateDirect(12_344)
+        try {
+            assertTrue(
+                NativeProfileRegistryBridge.finishRuntimeRead(
+                    handle, 1L, 1L, 25L, response, 8, output,
+                ) < 0,
+            )
+            assertTrue(
+                NativeProfileRegistryBridge.disconnectRuntimeCandidate(handle) == 0,
+            )
+        } finally {
+            NativeProfileRegistryBridge.close(handle)
+        }
+        assertTrue(
+            NativeProfileRegistryBridge.finishRuntimeRead(
+                handle, 1L, 1L, 30L, response, 8, output,
+            ) < 0,
+        )
+    }
+
 }
