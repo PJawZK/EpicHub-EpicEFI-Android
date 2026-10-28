@@ -102,6 +102,9 @@ jobs:
       - name: Android debug build
         run: gradle :app:assembleDebug --stacktrace
 
+      - name: Android JNI instrumentation APK build (device execution remains separate)
+        run: gradle :app:assembleDebugAndroidTest --stacktrace
+
       - name: Android performance build
         run: gradle :app:assemblePerformance --stacktrace
 
@@ -181,6 +184,14 @@ jobs:
         with:
           name: epichub-foundation-debug
           path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Publish Gate B JNI instrumentation test APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: epichub-gate-b-jni-androidtest
+          path: app/build/outputs/apk/androidTest/debug/*.apk
           if-no-files-found: error
           retention-days: 14
 
